@@ -62,6 +62,18 @@ docker/         — Dockerfiles per service
 - **NL Test Authoring** — Six-stage pipeline scaffold (intent parse → page recon → locator synthesis → script assembly → static validation → confidence scoring) with runtime policy envelope and generation audit trail
 - **Dashboard Pages** — Anomalies feed with status management, executive report generator, NL authoring interface with pipeline visualization
 
+### Phase 3.5 — Concurrent Load Testing ✅
+
+- **k6 Browser Adapter** — k6 browser module integrated into the TestRunner abstraction with script generation, summary parsing, and saturation detection
+- **Load Profiles** — Reusable load configurations with stages, target VUs, ramp types, cache-state controls (cold/warm/production-replay), and UI-server scrape targets
+- **Load Orchestrator** — Queue, validate, and manage load runs with engine-specific concurrency caps, per-project quota enforcement (VU-minutes/day), and pre-run validation
+- **Server Telemetry** — Prometheus scraping scaffold, resource snapshot storage (CPU, memory, disk I/O, network, event loop lag, nginx), and per-host summary aggregation
+- **Load Correlation** — Stacked time-series alignment of VU ramp with server metrics, Pearson correlation computation, ramp-stage annotations, and saturation-point detection
+- **Tiered Load-Aware Gates** — VU-parameterized threshold tiers so gate pass criteria scale with concurrency level
+- **Cost Estimation** — VU-minute calculation from stage profiles with quota enforcement and daily usage tracking
+- **Load-Generator Self-Monitoring** — Run-level saturation warnings (HTTP p95 > 10s, low iteration rate)
+- **Dashboard** — Load testing page with profile launcher, run status feed, stage visualization, correlation detail view, server resource cards, and ramp-stage annotations
+
 ## Quick Start
 
 ### Prerequisites
@@ -101,13 +113,13 @@ npm run worker:poll
 # All packages
 npm test
 
-# API only (Jest — 359 tests)
+# API only (Jest — 399 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
 npm test --workspace=packages/shared
 
-# Worker engine + stats (Vitest — 44 tests)
+# Worker engine + stats (Vitest — 52 tests)
 npm test --workspace=packages/worker
 ```
 
@@ -192,6 +204,23 @@ All endpoints are prefixed with `/api/v1`.
 | POST | `/authoring/generate` | NL test authoring (six-stage pipeline) |
 | GET | `/authoring/logs` | List generation logs (`?project_id=`) |
 | GET | `/authoring/policy` | Get runtime policy envelope |
+| GET | `/load/profiles` | List load profiles (`?project_id=`) |
+| GET | `/load/profiles/:id` | Get load profile |
+| POST | `/load/profiles` | Create load profile |
+| PATCH | `/load/profiles/:id` | Update load profile |
+| DELETE | `/load/profiles/:id` | Delete load profile |
+| GET | `/load/runs` | List load runs (`?project_id=&status=`) |
+| GET | `/load/runs/:id` | Get load run |
+| POST | `/load/runs` | Create (queue) a load run |
+| PATCH | `/load/runs/:id/status` | Update load run status |
+| POST | `/load/runs/:id/cancel` | Cancel a load run |
+| POST | `/load/runs/:id/cost-estimate` | Estimate cost for stages |
+| GET | `/load/telemetry/:loadRunId` | Get server resource snapshots |
+| GET | `/load/telemetry/:loadRunId/summary` | Per-host telemetry summary |
+| POST | `/load/telemetry` | Record a resource snapshot |
+| POST | `/load/telemetry/batch` | Bulk record snapshots |
+| GET | `/load/correlation/:loadRunId` | Load-correlation analysis |
+| POST | `/load/gates/evaluate` | Evaluate VU-parameterized gates |
 
 ## Environment Variables
 
@@ -216,7 +245,7 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 359 tests), Vitest (shared — 135, worker — 44 tests) |
+| Testing | Jest (API — 399 tests), Vitest (shared — 135, worker — 52 tests) |
 | Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
 | Metrics DB | PostgreSQL (ClickHouse-ready schema) |
 | Object Store | Local filesystem (S3-ready abstraction) |

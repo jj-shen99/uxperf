@@ -121,6 +121,42 @@ export const api = {
     logs: (projectId: string) => request<any[]>(`/authoring/logs?project_id=${projectId}`),
     policy: (projectId: string) => request<any>(`/authoring/policy?project_id=${projectId}`),
   },
+  load: {
+    profiles: {
+      list: (projectId?: string) =>
+        request<any[]>(`/load/profiles${projectId ? `?project_id=${projectId}` : ""}`),
+      get: (id: string) => request<any>(`/load/profiles/${id}`),
+      create: (data: any) => request<any>("/load/profiles", { method: "POST", body: JSON.stringify(data) }),
+      update: (id: string, data: any) =>
+        request<any>(`/load/profiles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      delete: (id: string) => request<void>(`/load/profiles/${id}`, { method: "DELETE" }),
+    },
+    runs: {
+      list: (projectId?: string, status?: string) =>
+        request<any[]>(
+          `/load/runs?${projectId ? `project_id=${projectId}&` : ""}${status ? `status=${status}` : ""}`,
+        ),
+      get: (id: string) => request<any>(`/load/runs/${id}`),
+      create: (data: any) => request<any>("/load/runs", { method: "POST", body: JSON.stringify(data) }),
+      updateStatus: (id: string, status: string, extras?: any) =>
+        request<any>(`/load/runs/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status, ...extras }),
+        }),
+      cancel: (id: string) =>
+        request<any>(`/load/runs/${id}/cancel`, { method: "POST" }),
+      costEstimate: (data: { stages: any[]; target_vus: number }) =>
+        request<any>("/load/runs/cost-estimate", { method: "POST", body: JSON.stringify(data) }),
+    },
+    telemetry: {
+      snapshots: (loadRunId: string, host?: string) =>
+        request<any[]>(`/load/telemetry/${loadRunId}${host ? `?host=${host}` : ""}`),
+      summary: (loadRunId: string) => request<any[]>(`/load/telemetry/${loadRunId}/summary`),
+    },
+    correlation: (loadRunId: string) => request<any>(`/load/correlation/${loadRunId}`),
+    evaluateGates: (data: { load_run_id: string; actual_vus: number; metrics_summary: Record<string, number> }) =>
+      request<any[]>("/load/gates/evaluate", { method: "POST", body: JSON.stringify(data) }),
+  },
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },

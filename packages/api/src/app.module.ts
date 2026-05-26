@@ -15,6 +15,7 @@ import { PerRequestModule } from "./per-request/per-request.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { ReportsModule } from "./reports/reports.module";
 import { AuthoringModule } from "./authoring/authoring.module";
+import { LoadModule } from "./load/load.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -35,6 +36,7 @@ import { HealthController } from "./health.controller";
     AnalyticsModule,
     ReportsModule,
     AuthoringModule,
+    LoadModule,
   ],
   controllers: [HealthController],
 })

@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   ClipboardList,
   MessageSquare,
+  Zap,
 } from "lucide-react";
 
 const navItems = [
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/anomalies", label: "Anomalies", icon: AlertTriangle },
   { href: "/reports", label: "Reports", icon: ClipboardList },
   { href: "/author", label: "Author", icon: MessageSquare },
+  { href: "/load", label: "Load Test", icon: Zap },
   { href: "/schedules", label: "Schedules", icon: Settings },
 ];
 
