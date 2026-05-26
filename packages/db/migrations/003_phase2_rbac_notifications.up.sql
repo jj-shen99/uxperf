@@ -1,6 +1,17 @@
 -- Phase 2: RBAC, Script versioning, Slack notifications, ClickHouse config
 
 -- ============================================================
+-- helper function: auto-update updated_at columns
+-- ============================================================
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
 -- users & roles (RBAC)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
