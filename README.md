@@ -74,6 +74,20 @@ docker/         — Dockerfiles per service
 - **Load-Generator Self-Monitoring** — Run-level saturation warnings (HTTP p95 > 10s, low iteration rate)
 - **Dashboard** — Load testing page with profile launcher, run status feed, stage visualization, correlation detail view, server resource cards, and ramp-stage annotations
 
+### Phase 4 — GA, Scale, and Advanced Intelligence ✅
+
+- **SHAP-based Feature Attribution** — Permutation-based feature importance approximating SHAP values, ranking contributors to metric regressions with confidence scoring and human-readable explanations
+- **Prophet-style Forecasting** — Time-series decomposition into trend + weekly seasonality + residuals, linear projection with widening prediction intervals, and accuracy metrics (MAPE/RMSE/MAE)
+- **RUM Ingestion** — Real User Monitoring event pipeline with p75 summary aggregation, time-series trends, and field metric storage (LCP, FCP, INP, CLS, TTFB, navigation timing)
+- **CrUX Ingestion** — Chrome UX Report API integration scaffold with histogram parsing, p75 extraction, CWV rating assessment, and snapshot storage
+- **Multi-Geo Testing** — Multi-region WPT agents and k6 browser load generation with geo-location registry, fan-out dispatch, and cross-region metric comparison
+- **Load-aware ML Attribution** — Server-resource feature incorporation (CPU/memory/event-loop trends) into SHAP attribution for load runs
+- **Public API & SDK** — API key management with SHA-256 hashing, scope-based authorization, rate limiting (RPM/RPD), expiry, and key lifecycle (create/validate/revoke)
+- **Audit & Compliance** — Immutable audit log with user/action/resource tracking, project-scoped querying, and action summary aggregation
+- **Server-Resource Floor Gates** — CPU, memory, and event-loop lag conditions evaluated against server telemetry snapshots with per-host pattern matching
+- **Capacity-Floor Gates & Planning** — Minimum sustainable VU and max event-loop lag gates; capacity reports with saturation detection, headroom calculation, and infrastructure recommendations
+- **Dashboard** — Tabbed intelligence page with forecasting, RUM summary, CrUX snapshots, ML attribution visualization, and capacity planning reports
+
 ## Quick Start
 
 ### Prerequisites
@@ -113,7 +127,7 @@ npm run worker:poll
 # All packages
 npm test
 
-# API only (Jest — 399 tests)
+# API only (Jest — 451 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
@@ -204,6 +218,29 @@ All endpoints are prefixed with `/api/v1`.
 | POST | `/authoring/generate` | NL test authoring (six-stage pipeline) |
 | GET | `/authoring/logs` | List generation logs (`?project_id=`) |
 | GET | `/authoring/policy` | Get runtime policy envelope |
+| POST | `/intelligence/attribution` | Compute SHAP attribution |
+| GET | `/intelligence/attribution` | List ML attributions |
+| GET | `/intelligence/attribution/:id` | Get single attribution |
+| POST | `/intelligence/forecast` | Generate Prophet-style forecast |
+| GET | `/intelligence/forecast` | List forecasts |
+| POST | `/intelligence/rum/ingest` | Ingest RUM event |
+| POST | `/intelligence/rum/ingest/batch` | Batch ingest RUM events |
+| GET | `/intelligence/rum/summary` | RUM p75 summary |
+| GET | `/intelligence/rum/trend` | RUM metric time-series |
+| POST | `/intelligence/crux/fetch` | Fetch and store CrUX snapshot |
+| GET | `/intelligence/crux` | List CrUX snapshots |
+| POST | `/intelligence/capacity/report` | Generate capacity report |
+| GET | `/intelligence/capacity/reports` | List capacity reports |
+| POST | `/intelligence/capacity/resource-floor` | Evaluate resource floor |
+| POST | `/intelligence/capacity/capacity-floor` | Evaluate capacity floor |
+| GET | `/intelligence/audit` | Query audit log |
+| GET | `/intelligence/audit/summary` | Audit action summary |
+| POST | `/intelligence/api-keys` | Create API key |
+| GET | `/intelligence/api-keys` | List API keys |
+| POST | `/intelligence/api-keys/:id/revoke` | Revoke API key |
+| DELETE | `/intelligence/api-keys/:id` | Delete API key |
+| GET | `/intelligence/geo/locations` | List geo locations |
+| POST | `/intelligence/geo/dispatch` | Dispatch multi-geo run |
 | GET | `/load/profiles` | List load profiles (`?project_id=`) |
 | GET | `/load/profiles/:id` | Get load profile |
 | POST | `/load/profiles` | Create load profile |
@@ -245,7 +282,7 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 399 tests), Vitest (shared — 135, worker — 52 tests) |
+| Testing | Jest (API — 451 tests), Vitest (shared — 135, worker — 52 tests) |
 | Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
 | Metrics DB | PostgreSQL (ClickHouse-ready schema) |
 | Object Store | Local filesystem (S3-ready abstraction) |

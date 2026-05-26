@@ -157,6 +157,58 @@ export const api = {
     evaluateGates: (data: { load_run_id: string; actual_vus: number; metrics_summary: Record<string, number> }) =>
       request<any[]>("/load/gates/evaluate", { method: "POST", body: JSON.stringify(data) }),
   },
+  intelligence: {
+    attribution: {
+      compute: (data: any) => request<any>("/intelligence/attribution", { method: "POST", body: JSON.stringify(data) }),
+      list: (projectId: string) => request<any[]>(`/intelligence/attribution?project_id=${projectId}`),
+      get: (id: string) => request<any>(`/intelligence/attribution/${id}`),
+    },
+    forecast: {
+      generate: (data: any) => request<any>("/intelligence/forecast", { method: "POST", body: JSON.stringify(data) }),
+      list: (projectId: string, metric?: string) =>
+        request<any[]>(`/intelligence/forecast?project_id=${projectId}${metric ? `&metric=${metric}` : ""}`),
+    },
+    rum: {
+      ingest: (data: any) => request<any>("/intelligence/rum/ingest", { method: "POST", body: JSON.stringify(data) }),
+      ingestBatch: (events: any[]) =>
+        request<any>("/intelligence/rum/ingest/batch", { method: "POST", body: JSON.stringify({ events }) }),
+      summary: (projectId: string, days?: number, origin?: string) =>
+        request<any[]>(`/intelligence/rum/summary?project_id=${projectId}${days ? `&days=${days}` : ""}${origin ? `&origin=${origin}` : ""}`),
+      trend: (projectId: string, metric: string, days?: number) =>
+        request<any[]>(`/intelligence/rum/trend?project_id=${projectId}&metric=${metric}${days ? `&days=${days}` : ""}`),
+    },
+    crux: {
+      fetch: (data: any) => request<any>("/intelligence/crux/fetch", { method: "POST", body: JSON.stringify(data) }),
+      list: (projectId: string, origin?: string) =>
+        request<any[]>(`/intelligence/crux?project_id=${projectId}${origin ? `&origin=${origin}` : ""}`),
+    },
+    capacity: {
+      generateReport: (data: { project_id: string; horizon_days?: number }) =>
+        request<any>("/intelligence/capacity/report", { method: "POST", body: JSON.stringify(data) }),
+      listReports: (projectId: string) => request<any[]>(`/intelligence/capacity/reports?project_id=${projectId}`),
+      evaluateResourceFloor: (data: any) =>
+        request<any>("/intelligence/capacity/resource-floor", { method: "POST", body: JSON.stringify(data) }),
+    },
+    audit: {
+      query: (params: Record<string, string>) => {
+        const qs = Object.entries(params).map(([k, v]) => `${k}=${v}`).join("&");
+        return request<any[]>(`/intelligence/audit?${qs}`);
+      },
+      summary: (projectId: string) => request<any[]>(`/intelligence/audit/summary?project_id=${projectId}`),
+    },
+    apiKeys: {
+      create: (data: any) => request<any>("/intelligence/api-keys", { method: "POST", body: JSON.stringify(data) }),
+      list: (projectId: string) => request<any[]>(`/intelligence/api-keys?project_id=${projectId}`),
+      revoke: (id: string) => request<void>(`/intelligence/api-keys/${id}/revoke`, { method: "POST" }),
+      delete: (id: string) => request<void>(`/intelligence/api-keys/${id}`, { method: "DELETE" }),
+    },
+    geo: {
+      locations: (provider?: string) =>
+        request<any[]>(`/intelligence/geo/locations${provider ? `?provider=${provider}` : ""}`),
+      dispatch: (data: any) =>
+        request<any>("/intelligence/geo/dispatch", { method: "POST", body: JSON.stringify(data) }),
+    },
+  },
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },

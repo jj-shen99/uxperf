@@ -16,6 +16,7 @@ import {
   ClipboardList,
   MessageSquare,
   Zap,
+  Brain,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: ClipboardList },
   { href: "/author", label: "Author", icon: MessageSquare },
   { href: "/load", label: "Load Test", icon: Zap },
+  { href: "/intelligence", label: "Intelligence", icon: Brain },
   { href: "/schedules", label: "Schedules", icon: Settings },
 ];
 

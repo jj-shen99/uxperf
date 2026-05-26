@@ -16,6 +16,7 @@ import { AnalyticsModule } from "./analytics/analytics.module";
 import { ReportsModule } from "./reports/reports.module";
 import { AuthoringModule } from "./authoring/authoring.module";
 import { LoadModule } from "./load/load.module";
+import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -37,6 +38,7 @@ import { HealthController } from "./health.controller";
     ReportsModule,
     AuthoringModule,
     LoadModule,
+    IntelligenceModule,
   ],
   controllers: [HealthController],
 })
