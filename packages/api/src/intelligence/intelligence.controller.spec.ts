@@ -18,7 +18,7 @@ describe("IntelligenceController", () => {
   const mockCapacity = { generateReport: jest.fn().mockResolvedValue({}), listReports: jest.fn().mockResolvedValue([]), evaluateResourceFloor: jest.fn().mockResolvedValue({ overall_passed: true }), evaluateCapacityFloor: jest.fn().mockResolvedValue({ passed: true }) };
   const mockAudit = { query: jest.fn().mockResolvedValue([]), summary: jest.fn().mockResolvedValue([]) };
   const mockApiKeys = { create: jest.fn().mockResolvedValue({ key: "pfk_test" }), list: jest.fn().mockResolvedValue([]), revoke: jest.fn(), delete: jest.fn() };
-  const mockGeo = { listLocations: jest.fn().mockReturnValue([]), dispatch: jest.fn().mockResolvedValue({ locations: [] }) };
+  const mockGeo = { listLocations: jest.fn().mockReturnValue([]), dispatch: jest.fn().mockResolvedValue({ locations: [] }), getComparison: jest.fn().mockResolvedValue({ locations: [], comparison: [] }) };
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -75,5 +75,11 @@ describe("IntelligenceController", () => {
   it("lists geo locations", () => {
     controller.listGeoLocations();
     expect(mockGeo.listLocations).toHaveBeenCalled();
+  });
+
+  it("compares geo results", async () => {
+    const result = await controller.compareGeoResults("run-1");
+    expect(mockGeo.getComparison).toHaveBeenCalledWith("run-1");
+    expect(result.comparison).toEqual([]);
   });
 });

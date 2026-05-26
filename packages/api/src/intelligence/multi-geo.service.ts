@@ -93,14 +93,13 @@ export class MultiGeoService {
 
     // Record the multi-geo run
     await this.db.query(
-      `INSERT INTO runs (id, project_id, url, status, engine, device, geo_locations)
-       VALUES ($1, $2, $3, 'queued', $4, $5, $6)`,
+      `INSERT INTO runs (id, project_id, config, status, engine, geo_locations)
+       VALUES ($1, $2, $3, 'queued', $4, $5)`,
       [
         runId,
         request.project_id,
-        request.url,
-        request.engine,
-        request.device ?? "desktop",
+        JSON.stringify({ url: request.url, device: request.device ?? "desktop", n_runs: request.n_runs ?? 1 }),
+        request.engine === "wpt" ? "wpt" : "k6_browser",
         locations.map((l) => l.id),
       ],
     );
@@ -160,5 +159,38 @@ export class MultiGeoService {
     }
 
     return comparisons;
+  }
+
+  /**
+   * Fetch geo run results for a run and compute cross-region comparison.
+   */
+  async getComparison(runId: string): Promise<{ locations: GeoRunResult[]; comparison: GeoComparison[] }> {
+    const result = await this.db.query<{
+      geo_locations: string[];
+      metrics: Record<string, number> | null;
+      status: string;
+    }>(
+      "SELECT geo_locations, metrics, status FROM runs WHERE id = $1",
+      [runId],
+    );
+
+    const run = result.rows[0];
+    if (!run || !run.geo_locations) {
+      return { locations: [], comparison: [] };
+    }
+
+    // Build stub results from stored geo_locations; in production these
+    // would be fetched from per-region child run rows.
+    const geoResults: GeoRunResult[] = run.geo_locations.map((loc) => ({
+      location: loc,
+      region: loc,
+      status: (run.status === "completed" ? "completed" : "skipped") as GeoRunResult["status"],
+      metrics: run.metrics ?? {},
+    }));
+
+    return {
+      locations: geoResults,
+      comparison: this.compareResults(geoResults),
+    };
   }
 }

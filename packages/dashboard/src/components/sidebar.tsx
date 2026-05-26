@@ -65,7 +65,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="border-t border-gray-800 p-3 text-xs text-gray-500">
-        Phase 3 — Intelligence
+        Phase 4 — GA & Intelligence
       </div>
     </aside>
   );

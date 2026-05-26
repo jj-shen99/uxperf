@@ -127,7 +127,7 @@ npm run worker:poll
 # All packages
 npm test
 
-# API only (Jest — 470 tests)
+# API only (Jest — 473 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
@@ -241,6 +241,7 @@ All endpoints are prefixed with `/api/v1`.
 | DELETE | `/intelligence/api-keys/:id` | Delete API key |
 | GET | `/intelligence/geo/locations` | List geo locations |
 | POST | `/intelligence/geo/dispatch` | Dispatch multi-geo run |
+| GET | `/intelligence/geo/compare/:runId` | Compare cross-region results |
 | GET | `/load/profiles` | List load profiles (`?project_id=`) |
 | GET | `/load/profiles/:id` | Get load profile |
 | POST | `/load/profiles` | Create load profile |
@@ -283,7 +284,7 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 470 tests), Vitest (shared — 135, worker — 52 tests) |
+| Testing | Jest (API — 473 tests), Vitest (shared — 135, worker — 52 tests) |
 | Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
 | Metrics DB | PostgreSQL (ClickHouse-ready schema) |
 | Object Store | Local filesystem (S3-ready abstraction) |

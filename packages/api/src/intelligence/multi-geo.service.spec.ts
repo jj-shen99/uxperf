@@ -80,4 +80,25 @@ describe("MultiGeoService", () => {
       ])).toHaveLength(0);
     });
   });
+
+  describe("getComparison", () => {
+    it("returns comparison for a geo run", async () => {
+      mockDb.query.mockResolvedValueOnce({
+        rows: [{
+          geo_locations: ["us-east-1", "eu-west-1"],
+          metrics: { lcp_ms: 1200, fcp_ms: 800 },
+          status: "completed",
+        }],
+      });
+      const result = await service.getComparison("run-1");
+      expect(result.locations).toHaveLength(2);
+    });
+
+    it("returns empty for non-geo run", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ geo_locations: null, metrics: null, status: "completed" }] });
+      const result = await service.getComparison("run-2");
+      expect(result.locations).toHaveLength(0);
+      expect(result.comparison).toHaveLength(0);
+    });
+  });
 });

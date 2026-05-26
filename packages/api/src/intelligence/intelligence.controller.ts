@@ -180,4 +180,9 @@ export class IntelligenceController {
   dispatchMultiGeo(@Body() body: any) {
     return this.multiGeo.dispatch(body);
   }
+
+  @Get("geo/compare/:runId")
+  compareGeoResults(@Param("runId") runId: string) {
+    return this.multiGeo.getComparison(runId);
+  }
 }
