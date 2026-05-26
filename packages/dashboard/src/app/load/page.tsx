@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
+import { useProjects } from "@/hooks/use-projects";
 
 const statusColors: Record<string, string> = {
   queued: "bg-gray-100 text-gray-700",
@@ -17,6 +18,7 @@ const statusColors: Record<string, string> = {
 export default function LoadTestingPage() {
   const queryClient = useQueryClient();
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const { projectId } = useProjects();
 
   const { data: loadRuns = [] } = useQuery({
     queryKey: ["load-runs"],
@@ -43,7 +45,7 @@ export default function LoadTestingPage() {
 
   const createRun = useMutation({
     mutationFn: (profileId: string) =>
-      api.load.runs.create({ project_id: "default", load_profile_id: profileId }),
+      api.load.runs.create({ project_id: projectId, load_profile_id: profileId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
   });
 

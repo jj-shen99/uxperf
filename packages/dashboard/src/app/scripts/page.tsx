@@ -3,11 +3,16 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useProjects } from "@/hooks/use-projects";
 
 export default function ScriptsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
+  const { projects, projectId: defaultProjectId } = useProjects();
   const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}" });
+
+  // Pre-fill project_id when projects load
+  const formProjectId = form.project_id || defaultProjectId;
 
   const { data: scripts, isLoading } = useQuery({
     queryKey: ["scripts"],
@@ -49,12 +54,16 @@ export default function ScriptsPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
           />
-          <input
-            placeholder="Project ID"
-            value={form.project_id}
+          <select
+            value={formProjectId}
             onChange={(e) => setForm({ ...form, project_id: e.target.value })}
             className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-          />
+          >
+            <option value="">Select a project</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <textarea
             placeholder='Canonical JSON (e.g. {"steps":[]})'
             value={form.canonical_json}
@@ -67,13 +76,14 @@ export default function ScriptsPage() {
               try {
                 createMut.mutate({
                   ...form,
+                  project_id: formProjectId,
                   canonical_json: JSON.parse(form.canonical_json),
                 });
               } catch {
                 alert("Invalid JSON");
               }
             }}
-            disabled={!form.name || !form.project_id}
+            disabled={!form.name || !formProjectId}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             Create

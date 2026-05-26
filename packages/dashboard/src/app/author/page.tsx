@@ -1,20 +1,18 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
+import { useProjects } from "@/hooks/use-projects";
 
 export default function AuthorPage() {
   const [prompt, setPrompt] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [device, setDevice] = useState("desktop");
-  const [projectId, setProjectId] = useState("");
   const [result, setResult] = useState<any>(null);
-
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => api.projects.list(),
-  });
+  const [saved, setSaved] = useState(false);
+  const queryClient = useQueryClient();
+  const { projects, projectId, setProjectId } = useProjects();
 
   const generate = useMutation({
     mutationFn: () =>
@@ -24,7 +22,22 @@ export default function AuthorPage() {
         target_url: targetUrl || undefined,
         device,
       }),
-    onSuccess: (data) => setResult(data),
+    onSuccess: (data) => { setResult(data); setSaved(false); },
+  });
+
+  const saveScript = useMutation({
+    mutationFn: () =>
+      api.scripts.create({
+        project_id: projectId,
+        name: result?.generated_script?.id ?? `NL Script ${new Date().toLocaleString()}`,
+        canonical_json: result?.generated_script ?? {},
+        source_prompt: prompt,
+        authoring_mode: "nl_authored",
+      }),
+    onSuccess: () => {
+      setSaved(true);
+      queryClient.invalidateQueries({ queryKey: ["scripts"] });
+    },
   });
 
   const { data: logs = [] } = useQuery({
@@ -138,7 +151,20 @@ export default function AuthorPage() {
           {/* Generated script */}
           {result.generated_script && (
             <div className="rounded-lg border bg-card p-4">
-              <h3 className="text-sm font-semibold mb-3">Generated Script</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Generated Script</h3>
+                <button
+                  onClick={() => saveScript.mutate()}
+                  disabled={saved || saveScript.isPending}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                    saved
+                      ? "bg-green-600 text-white cursor-default"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                  }`}
+                >
+                  {saved ? "Saved" : saveScript.isPending ? "Saving..." : "Save as Script"}
+                </button>
+              </div>
               <pre className="overflow-auto rounded-md bg-muted p-4 text-xs">
                 {JSON.stringify(result.generated_script, null, 2)}
               </pre>

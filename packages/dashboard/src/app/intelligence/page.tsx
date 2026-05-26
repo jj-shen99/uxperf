@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
+import { useProjects } from "@/hooks/use-projects";
 
 const ratingColors: Record<string, string> = {
   good: "text-green-600 bg-green-50",
@@ -14,39 +15,40 @@ export default function IntelligencePage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"forecast" | "rum" | "crux" | "attribution" | "capacity">("forecast");
   const [forecastMetric, setForecastMetric] = useState("lcp_ms");
+  const { projects, projectId, setProjectId } = useProjects();
 
   const { data: forecasts = [] } = useQuery({
-    queryKey: ["forecasts", forecastMetric],
-    queryFn: () => api.intelligence.forecast.list("default", forecastMetric),
-    enabled: tab === "forecast",
+    queryKey: ["forecasts", projectId, forecastMetric],
+    queryFn: () => api.intelligence.forecast.list(projectId, forecastMetric),
+    enabled: tab === "forecast" && !!projectId,
   });
 
   const { data: rumSummary = [] } = useQuery({
-    queryKey: ["rum-summary"],
-    queryFn: () => api.intelligence.rum.summary("default"),
-    enabled: tab === "rum",
+    queryKey: ["rum-summary", projectId],
+    queryFn: () => api.intelligence.rum.summary(projectId),
+    enabled: tab === "rum" && !!projectId,
   });
 
   const { data: cruxSnapshots = [] } = useQuery({
-    queryKey: ["crux-snapshots"],
-    queryFn: () => api.intelligence.crux.list("default"),
-    enabled: tab === "crux",
+    queryKey: ["crux-snapshots", projectId],
+    queryFn: () => api.intelligence.crux.list(projectId),
+    enabled: tab === "crux" && !!projectId,
   });
 
   const { data: attributions = [] } = useQuery({
-    queryKey: ["attributions"],
-    queryFn: () => api.intelligence.attribution.list("default"),
-    enabled: tab === "attribution",
+    queryKey: ["attributions", projectId],
+    queryFn: () => api.intelligence.attribution.list(projectId),
+    enabled: tab === "attribution" && !!projectId,
   });
 
   const { data: capacityReports = [] } = useQuery({
-    queryKey: ["capacity-reports"],
-    queryFn: () => api.intelligence.capacity.listReports("default"),
-    enabled: tab === "capacity",
+    queryKey: ["capacity-reports", projectId],
+    queryFn: () => api.intelligence.capacity.listReports(projectId),
+    enabled: tab === "capacity" && !!projectId,
   });
 
   const generateForecast = useMutation({
-    mutationFn: () => api.intelligence.forecast.generate({ project_id: "default", metric: forecastMetric, horizon_days: 30 }),
+    mutationFn: () => api.intelligence.forecast.generate({ project_id: projectId, metric: forecastMetric, horizon_days: 30 }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["forecasts"] }),
   });
 

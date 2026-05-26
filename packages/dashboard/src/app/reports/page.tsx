@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
+import { useProjects } from "@/hooks/use-projects";
 
 const metricLabels: Record<string, string> = {
   lcp_ms: "LCP",
@@ -27,15 +28,17 @@ export default function ReportsPage() {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
   const [report, setReport] = useState<any>(null);
+  const { projects, projectId, setProjectId } = useProjects();
 
   const generate = useMutation({
-    mutationFn: () => api.reports.generate({ project_id: "default", days }),
+    mutationFn: () => api.reports.generate({ project_id: projectId, days }),
     onSuccess: (data) => setReport(data),
   });
 
   const { data: savedReports = [] } = useQuery({
-    queryKey: ["reports"],
-    queryFn: () => api.reports.list("default"),
+    queryKey: ["reports", projectId],
+    queryFn: () => api.reports.list(projectId),
+    enabled: !!projectId,
   });
 
   return (
@@ -49,6 +52,16 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center gap-3">
           <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border bg-background px-3 py-1.5 text-sm"
+          >
+            <option value="">Select project</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
             className="rounded-md border bg-background px-3 py-1.5 text-sm"
@@ -59,7 +72,7 @@ export default function ReportsPage() {
           </select>
           <button
             onClick={() => generate.mutate()}
-            disabled={generate.isPending}
+            disabled={!projectId || generate.isPending}
             className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             {generate.isPending ? "Generating..." : "Generate Report"}
