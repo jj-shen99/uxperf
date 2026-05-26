@@ -1,8 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject, Optional, Logger } from "@nestjs/common";
 import { RunsService, RunRow } from "./runs.service";
 import { GatesService, GateEvaluationOutcome } from "../gates/gates.service";
 import { ArtifactsService } from "../artifacts/artifacts.service";
 import { GitHubCheckService } from "../github/github-check.service";
+import { BaselinesService } from "../baselines/baselines.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { DatabaseService } from "../database/database.service";
 
 export interface RunCompletionPayload {
@@ -44,7 +46,9 @@ export class RunOrchestratorService {
     private readonly gatesService: GatesService,
     private readonly artifactsService: ArtifactsService,
     private readonly githubCheckService: GitHubCheckService,
+    private readonly baselinesService: BaselinesService,
     private readonly db: DatabaseService,
+    @Optional() @Inject(NotificationsService) private readonly notificationsService?: NotificationsService,
   ) {}
 
   /**
@@ -139,6 +143,19 @@ export class RunOrchestratorService {
       }
     }
 
+    // Refresh baselines with new data
+    if (success && metrics) {
+      try {
+        await this.baselinesService.refreshBaselines(
+          run.project_id,
+          run.environment,
+          run.script_id ?? undefined,
+        );
+      } catch (e) {
+        this.logger.error(`Baseline refresh failed for run ${run_id}: ${e}`);
+      }
+    }
+
     // Post gate results to GitHub if git metadata is available
     if (git?.sha && git?.token && gateResults.length > 0) {
       try {
@@ -150,6 +167,33 @@ export class RunOrchestratorService {
       } catch (e) {
         this.logger.error(`GitHub check posting failed for run ${run_id}: ${e}`);
       }
+    }
+
+    // Dispatch notifications
+    try {
+      if (this.notificationsService) {
+        const failed = gateResults.filter((g) => g.status === "failed");
+        if (failed.length > 0) {
+          await this.notificationsService.dispatch({
+            event: "gate_failed",
+            project_id: run.project_id,
+            title: `Gate failures on run ${run_id}`,
+            message: `${failed.length} gate(s) failed: ${failed.map((g) => g.gate_name).join(", ")}`,
+            details: { run_id, status: run.status, failed_gates: failed.length },
+          });
+        }
+        await this.notificationsService.dispatch({
+          event: success ? "run_completed" : "run_failed",
+          project_id: run.project_id,
+          title: `Run ${success ? "completed" : "failed"}: ${run_id}`,
+          message: success
+            ? `Run completed with ${gateResults.length} gate(s) evaluated`
+            : `Run failed: ${error ?? "unknown error"}`,
+          details: { run_id, status: run.status },
+        });
+      }
+    } catch (e) {
+      this.logger.error(`Notification dispatch failed for run ${run_id}: ${e}`);
     }
 
     return { run, gateResults };

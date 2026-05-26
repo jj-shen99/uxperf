@@ -22,10 +22,10 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     ports:
-      - "3001:3001"
+      - "4000:4000"
     environment:
       DATABASE_URL: postgresql://perf:perf@postgres:5432/perf_framework
-      PORT: "3001"
+      PORT: "4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,9 +35,9 @@ services:
       context: .
       dockerfile: docker/dashboard.Dockerfile
     ports:
-      - "3000:3000"
+      - "4200:4200"
     environment:
-      API_URL: http://api:3001
+      NEXT_PUBLIC_API_URL: http://api:4000/api/v1
     depends_on:
       - api
 
@@ -46,7 +46,7 @@ services:
       context: .
       dockerfile: docker/worker.Dockerfile
     environment:
-      API_URL: http://api:3001
+      API_URL: http://api:4000/api/v1
     depends_on:
       - api
     profiles:

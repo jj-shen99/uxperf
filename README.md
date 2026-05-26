@@ -7,7 +7,7 @@ An end-to-end platform for authoring, executing, analyzing, and acting on fronte
 ```
 packages/
   api/          — NestJS API (port 4000): orchestrator, gates, scripts, schedules, REST
-  dashboard/    — Next.js web dashboard (port 3000)
+  dashboard/    — Next.js web dashboard (port 4200)
   worker/       — Playwright + Lighthouse engine (containerized)
   db/           — Postgres migrations and schema
   shared/       — Shared TypeScript types and validators
@@ -34,6 +34,23 @@ docker/         — Dockerfiles per service
 - **GitHub Integration** — Gate results posted as GitHub Check Runs and commit statuses
 - **Dashboard Pages** — Runs list + detail, trends chart, scripts CRUD, gates CRUD, schedules CRUD, manual run launcher
 
+### Phase 2 — Depth ✅
+
+- **Baselines Service** — Automatic statistical baseline computation (p50, p75, p95, p99, mean, stddev) from last N completed runs; auto-refresh after each run completion
+- **Baseline-relative Gates** — Gate type that compares metrics against baseline percentiles (e.g., fail if LCP exceeds p75 by >10%)
+- **Statistical Gates** — Gate type using mean ± N×stddev thresholds from baseline data
+- **Schedule Dispatcher** — Background service that polls for due schedules and auto-creates runs (configurable interval)
+- **Worker Poll Loop** — Worker auto-claims queued runs from the API and executes them end-to-end
+- **Trends API** — Time-series metrics endpoint for charting with environment filtering and project summary stats
+- **Projects Update** — PATCH endpoint for updating project metadata
+- **WPT Integration** — WebPageTest private-instance adapter (opt-in, rate-limited) behind multi-engine TestRunner abstraction
+- **Multi-engine TestRunner** — Pluggable engine registry: Playwright+Lighthouse (built-in), WPT, sitespeed.io (placeholder)
+- **Compare View** — Dashboard page for side-by-side run comparison with bar charts, diff table, and waterfall/filmstrip placeholders
+- **RBAC** — Users, global roles (admin/editor/viewer), project membership with role-based access control
+- **Script Versioning** — Version history for scripts with commit SHA tracking and diff support
+- **Slack Notifications** — Notification channels (Slack webhooks, generic webhooks, email placeholder) dispatched on gate failures and run completions
+- **Per-request Data** — ClickHouse-ready per-request metrics storage with cardinality-controlled aggregation (PG-backed, migration-ready)
+
 ## Quick Start
 
 ### Prerequisites
@@ -57,11 +74,14 @@ npm run db:migrate
 # Start the API server (port 4000)
 npm run dev:api
 
-# Start the dashboard (port 3000)
+# Start the dashboard (port 4200)
 npm run dev:dashboard
 
 # Run a performance test (Engine PoC)
 npm run worker:run -- --url https://example.com
+
+# Start the worker poll loop (auto-executes queued runs)
+npm run worker:poll
 ```
 
 ### Run Tests
@@ -70,13 +90,13 @@ npm run worker:run -- --url https://example.com
 # All packages
 npm test
 
-# API only (Jest — 178 tests)
+# API only (Jest — 304 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
 npm test --workspace=packages/shared
 
-# Worker stats (Vitest — 33 tests)
+# Worker engine + stats (Vitest — 44 tests)
 npm test --workspace=packages/worker
 ```
 
@@ -120,6 +140,34 @@ All endpoints are prefixed with `/api/v1`.
 | GET | `/schedules/:id` | Get schedule |
 | PATCH | `/schedules/:id` | Update schedule |
 | DELETE | `/schedules/:id` | Delete schedule |
+| GET | `/baselines` | List baselines (filter: `?project_id=`) |
+| GET | `/baselines/active` | Get active baseline (`?project_id=&metric=`) |
+| GET | `/baselines/:id` | Get baseline |
+| POST | `/baselines/compute` | Compute baseline for a metric |
+| POST | `/baselines/refresh` | Recompute all baselines for project |
+| DELETE | `/baselines/:id` | Delete baseline |
+| GET | `/trends` | Metric time-series (`?project_id=&metric=&limit=`) |
+| GET | `/trends/summary` | Project summary stats (`?project_id=`) |
+| PATCH | `/projects/:id` | Update project |
+| GET | `/scripts/:id/versions` | List script versions |
+| GET | `/scripts/:id/versions/:ver` | Get specific version |
+| POST | `/scripts/:id/versions` | Create script version |
+| GET | `/rbac/users` | List users |
+| POST | `/rbac/users` | Create user |
+| GET | `/rbac/users/:id` | Get user |
+| PATCH | `/rbac/users/:id` | Update user |
+| DELETE | `/rbac/users/:id` | Delete user |
+| GET | `/rbac/projects/:id/members` | List project members |
+| POST | `/rbac/projects/:id/members` | Add project member |
+| DELETE | `/rbac/projects/:id/members/:uid` | Remove member |
+| GET | `/notifications/channels` | List notification channels |
+| POST | `/notifications/channels` | Create channel |
+| PATCH | `/notifications/channels/:id` | Update channel |
+| DELETE | `/notifications/channels/:id` | Delete channel |
+| POST | `/notifications/test` | Send test notification |
+| POST | `/per-request/ingest` | Bulk ingest per-request data |
+| GET | `/per-request/:runId` | Get per-request data |
+| GET | `/per-request/:runId/summary` | Aggregated per-request summary |
 
 ## Environment Variables
 
@@ -129,6 +177,12 @@ All endpoints are prefixed with `/api/v1`.
 | `DATABASE_URL` | `postgresql://perf:perf@localhost:5432/perf_framework` | Postgres connection string |
 | `ARTIFACTS_DIR` | `./artifacts` | Local directory for artifact storage |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:4000/api/v1` | API URL for dashboard |
+| `SCHEDULE_POLL_INTERVAL_MS` | `30000` | Schedule dispatcher poll interval |
+| `API_URL` | `http://localhost:4000/api/v1` | Worker API URL |
+| `POLL_INTERVAL_MS` | `5000` | Worker poll interval |
+| `WPT_SERVER` | | WebPageTest server URL (opt-in) |
+| `WPT_API_KEY` | | WebPageTest API key |
+| `SITESPEED_ENABLED` | `false` | Enable sitespeed.io engine |
 
 ## Tech Stack
 
@@ -138,9 +192,10 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 178 tests), Vitest (shared/worker — 168 tests) |
-| Metrics DB | ClickHouse (planned Phase 2) |
-| Object Store | S3-compatible (planned Phase 2) |
+| Testing | Jest (API — 304 tests), Vitest (shared — 135, worker — 44 tests) |
+| Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
+| Metrics DB | PostgreSQL (ClickHouse-ready schema) |
+| Object Store | Local filesystem (S3-ready abstraction) |
 
 ## License
 

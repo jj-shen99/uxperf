@@ -13,6 +13,7 @@
     "dev:api": "npm run dev --workspace=packages/api",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "worker:run": "npm run run --workspace=packages/worker",
+    "worker:poll": "npm run poll --workspace=packages/worker",
     "db:migrate": "npm run migrate --workspace=packages/db"
   },
   "engines": {

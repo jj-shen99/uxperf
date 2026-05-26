@@ -342,7 +342,7 @@ describe("GatesService", () => {
       expect(outcomes[0].actual_value).toBe(2000);
     });
 
-    it("skips non-threshold gates", async () => {
+    it("evaluates baseline_relative gates (passes when no baseline service)", async () => {
       const gate = {
         id: "g-2",
         project_id: "p-1",
@@ -353,8 +353,14 @@ describe("GatesService", () => {
       };
 
       mockDb.query.mockResolvedValueOnce({ rows: [gate] });
+      // checkQuorum
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      // INSERT gate_results
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+
       const outcomes = await service.evaluateGatesForRun("p-1", "run-1", { lcp_ms: 5000 });
-      expect(outcomes).toHaveLength(0);
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].status).toBe("passed");
     });
 
     it("marks gate as skipped when metric is missing", async () => {

@@ -4,6 +4,7 @@ import { RunsService } from "./runs.service";
 import { GatesService } from "../gates/gates.service";
 import { ArtifactsService } from "../artifacts/artifacts.service";
 import { GitHubCheckService } from "../github/github-check.service";
+import { BaselinesService } from "../baselines/baselines.service";
 import { DatabaseService } from "../database/database.service";
 
 // ============================================================
@@ -53,6 +54,7 @@ describe("RunOrchestratorService", () => {
         { provide: GatesService, useValue: mockGates },
         { provide: ArtifactsService, useValue: mockArtifacts },
         { provide: GitHubCheckService, useValue: mockGithub },
+        { provide: BaselinesService, useValue: { refreshBaselines: jest.fn().mockResolvedValue([]) } },
         { provide: DatabaseService, useValue: mockDb },
       ],
     }).compile();

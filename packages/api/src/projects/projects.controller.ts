@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Delete, Body, Param } from "@nestjs/common";
-import { ProjectsService, CreateProjectDto } from "./projects.service";
+import { Controller, Get, Post, Patch, Delete, Body, Param } from "@nestjs/common";
+import { ProjectsService, CreateProjectDto, UpdateProjectDto } from "./projects.service";
 
 @Controller("projects")
 export class ProjectsController {
@@ -18,6 +18,11 @@ export class ProjectsController {
   @Post()
   create(@Body() dto: CreateProjectDto) {
     return this.projectsService.create(dto);
+  }
+
+  @Patch(":id")
+  update(@Param("id") id: string, @Body() dto: UpdateProjectDto) {
+    return this.projectsService.update(id, dto);
   }
 
   @Delete(":id")

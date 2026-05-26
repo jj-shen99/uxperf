@@ -2,11 +2,29 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test API (Jest)
+        run: npm test --workspace=packages/api
+      - name: Test Shared (Vitest)
+        run: npm test --workspace=packages/shared
+      - name: Test Worker (Vitest)
+        run: npm test --workspace=packages/worker
+
   lint-and-build:
     runs-on: ubuntu-latest
     strategy:

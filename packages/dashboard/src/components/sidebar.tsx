@@ -11,6 +11,7 @@ import {
   Shield,
   Settings,
   Activity,
+  GitCompare,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/scripts", label: "Scripts", icon: PenTool },
   { href: "/trends", label: "Trends", icon: BarChart3 },
   { href: "/gates", label: "Gates", icon: Shield },
+  { href: "/compare", label: "Compare", icon: GitCompare },
   { href: "/schedules", label: "Schedules", icon: Settings },
 ];
 
@@ -53,7 +55,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="border-t border-gray-800 p-3 text-xs text-gray-500">
-        Phase 1 — MVP
+        Phase 2 — Depth
       </div>
     </aside>
   );

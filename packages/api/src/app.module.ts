@@ -6,7 +6,12 @@ import { ScriptsModule } from "./scripts/scripts.module";
 import { GatesModule } from "./gates/gates.module";
 import { SchedulesModule } from "./schedules/schedules.module";
 import { ArtifactsModule } from "./artifacts/artifacts.module";
+import { BaselinesModule } from "./baselines/baselines.module";
+import { TrendsModule } from "./trends/trends.module";
 import { GitHubCheckModule } from "./github/github-check.module";
+import { RbacModule } from "./rbac/rbac.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { PerRequestModule } from "./per-request/per-request.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -18,7 +23,12 @@ import { HealthController } from "./health.controller";
     RunsModule,
     GatesModule,
     SchedulesModule,
+    BaselinesModule,
+    TrendsModule,
     GitHubCheckModule,
+    RbacModule,
+    NotificationsModule,
+    PerRequestModule,
   ],
   controllers: [HealthController],
 })

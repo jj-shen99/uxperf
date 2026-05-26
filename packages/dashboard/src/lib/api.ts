@@ -48,6 +48,39 @@ export const api = {
     update: (id: string, data: any) => request<any>(`/schedules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/schedules/${id}`, { method: "DELETE" }),
   },
+  baselines: {
+    list: (projectId?: string) => request<any[]>(`/baselines${projectId ? `?project_id=${projectId}` : ""}`),
+    active: (projectId: string, metric: string) =>
+      request<any>(`/baselines/active?project_id=${projectId}&metric=${metric}`),
+    compute: (data: { project_id: string; metric: string }) =>
+      request<any>("/baselines/compute", { method: "POST", body: JSON.stringify(data) }),
+    refresh: (data: { project_id: string }) =>
+      request<any>("/baselines/refresh", { method: "POST", body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/baselines/${id}`, { method: "DELETE" }),
+  },
+  trends: {
+    metrics: (projectId: string, metric?: string, limit?: number) =>
+      request<any[]>(
+        `/trends?project_id=${projectId}${metric ? `&metric=${metric}` : ""}${limit ? `&limit=${limit}` : ""}`,
+      ),
+    summary: (projectId: string) => request<any>(`/trends/summary?project_id=${projectId}`),
+  },
+  notifications: {
+    listChannels: (projectId?: string) =>
+      request<any[]>(`/notifications/channels${projectId ? `?project_id=${projectId}` : ""}`),
+    createChannel: (data: any) =>
+      request<any>("/notifications/channels", { method: "POST", body: JSON.stringify(data) }),
+    updateChannel: (id: string, data: any) =>
+      request<any>(`/notifications/channels/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    deleteChannel: (id: string) =>
+      request<void>(`/notifications/channels/${id}`, { method: "DELETE" }),
+    test: (channelId: string) =>
+      request<any>("/notifications/test", { method: "POST", body: JSON.stringify({ channel_id: channelId }) }),
+  },
+  perRequest: {
+    byRun: (runId: string) => request<any[]>(`/per-request/${runId}`),
+    summary: (runId: string) => request<any[]>(`/per-request/${runId}/summary`),
+  },
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },

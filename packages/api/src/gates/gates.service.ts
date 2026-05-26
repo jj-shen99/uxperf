@@ -1,11 +1,18 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Inject, NotFoundException, Optional, Logger } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
+import { BaselinesService, BaselineRow } from "../baselines/baselines.service";
 
 export interface GateDefinition {
-  type: "threshold";
+  type: "threshold" | "baseline_relative" | "statistical";
   metric: string;
-  operator: "lte" | "gte" | "lt" | "gt";
-  threshold: number;
+  // threshold gate fields
+  operator?: "lte" | "gte" | "lt" | "gt";
+  threshold?: number;
+  // baseline_relative gate fields
+  regression_pct?: number;   // e.g. 10 → fail if metric exceeds baseline p75 by 10%
+  baseline_stat?: "p50" | "p75" | "p95" | "mean"; // which stat to compare (default p75)
+  // statistical gate fields
+  stddev_multiplier?: number; // e.g. 2 → fail if metric exceeds mean + 2*stddev
 }
 
 export interface CreateGateDto {
@@ -50,8 +57,10 @@ export interface GateEvaluationOutcome {
   status: "passed" | "failed" | "skipped";
   metric: string;
   actual_value?: number;
-  threshold: number;
-  operator: string;
+  threshold?: number;
+  computed_threshold?: number; // for baseline/statistical gates
+  operator?: string;
+  baseline_value?: number;
   quorum_detail?: {
     recent_failures: number;
     required_failures: number;
@@ -61,7 +70,12 @@ export interface GateEvaluationOutcome {
 
 @Injectable()
 export class GatesService {
-  constructor(private db: DatabaseService) {}
+  private readonly logger = new Logger(GatesService.name);
+
+  constructor(
+    private db: DatabaseService,
+    @Optional() @Inject(BaselinesService) private baselinesService?: BaselinesService,
+  ) {}
 
   // -- CRUD --
 
@@ -175,6 +189,7 @@ export class GatesService {
   ): boolean {
     if (metricValue === undefined || metricValue === null) return true; // skip if no data
     const { operator, threshold } = definition;
+    if (threshold === undefined) return true;
     switch (operator) {
       case "lte": return metricValue <= threshold;
       case "gte": return metricValue >= threshold;
@@ -260,10 +275,41 @@ export class GatesService {
 
     for (const gate of gates.rows) {
       const def = gate.definition;
-      if (def.type !== "threshold") continue; // Phase 1: only threshold gates
-
       const actualValue = this.extractMetricValue(metrics, def.metric);
-      const passed = this.evaluateThreshold(def, actualValue);
+
+      let passed: boolean;
+      let computedThreshold: number | undefined;
+      let baselineValue: number | undefined;
+
+      switch (def.type) {
+        case "threshold":
+          passed = this.evaluateThreshold(def, actualValue);
+          break;
+
+        case "baseline_relative": {
+          const result = await this.evaluateBaselineRelative(
+            def, actualValue, projectId
+          );
+          passed = result.passed;
+          computedThreshold = result.computedThreshold;
+          baselineValue = result.baselineValue;
+          break;
+        }
+
+        case "statistical": {
+          const result = await this.evaluateStatistical(
+            def, actualValue, projectId
+          );
+          passed = result.passed;
+          computedThreshold = result.computedThreshold;
+          baselineValue = result.baselineValue;
+          break;
+        }
+
+        default:
+          this.logger.warn(`Unknown gate type: ${(def as any).type}, skipping`);
+          continue;
+      }
 
       // Apply 3-of-5 quorum
       const quorum = await this.checkQuorum(gate.id, projectId, !passed);
@@ -284,9 +330,13 @@ export class GatesService {
           runId,
           finalStatus,
           JSON.stringify({
+            gate_type: def.type,
             actual_value: actualValue,
             threshold: def.threshold,
+            computed_threshold: computedThreshold,
+            baseline_value: baselineValue,
             operator: def.operator,
+            regression_pct: def.regression_pct,
             single_run_passed: passed,
             quorum_failures: quorum.recentFailures,
             quorum_required: 3,
@@ -303,6 +353,8 @@ export class GatesService {
         metric: def.metric,
         actual_value: actualValue,
         threshold: def.threshold,
+        computed_threshold: computedThreshold,
+        baseline_value: baselineValue,
         operator: def.operator,
         quorum_detail: {
           recent_failures: quorum.recentFailures,
@@ -313,5 +365,72 @@ export class GatesService {
     }
 
     return outcomes;
+  }
+
+  /**
+   * Evaluate a metric against a baseline-relative gate.
+   * Fails if actual > baseline_stat * (1 + regression_pct/100).
+   * Example: if p75=2000 and regression_pct=10, fails if actual > 2200.
+   */
+  async evaluateBaselineRelative(
+    def: GateDefinition,
+    actualValue: number | undefined,
+    projectId: string,
+  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number }> {
+    if (actualValue === undefined) return { passed: true };
+    if (!this.baselinesService) {
+      this.logger.warn("BaselinesService not available; skipping baseline gate");
+      return { passed: true };
+    }
+
+    const baseline = await this.baselinesService.findActive(
+      projectId, def.metric, "staging"
+    );
+    if (!baseline) {
+      this.logger.warn(`No active baseline for ${def.metric}; passing gate by default`);
+      return { passed: true };
+    }
+
+    const stat = def.baseline_stat ?? "p75";
+    const baselineValue = baseline[stat] as number | null;
+    if (baselineValue === null || baselineValue === undefined) {
+      return { passed: true };
+    }
+
+    const regressionPct = def.regression_pct ?? 10;
+    const computedThreshold = baselineValue * (1 + regressionPct / 100);
+    const passed = actualValue <= computedThreshold;
+
+    return { passed, computedThreshold, baselineValue };
+  }
+
+  /**
+   * Evaluate a metric against a statistical gate.
+   * Fails if actual > mean + stddev_multiplier * stddev.
+   * Default multiplier is 2 (≈95% confidence interval).
+   */
+  async evaluateStatistical(
+    def: GateDefinition,
+    actualValue: number | undefined,
+    projectId: string,
+  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number }> {
+    if (actualValue === undefined) return { passed: true };
+    if (!this.baselinesService) {
+      this.logger.warn("BaselinesService not available; skipping statistical gate");
+      return { passed: true };
+    }
+
+    const baseline = await this.baselinesService.findActive(
+      projectId, def.metric, "staging"
+    );
+    if (!baseline || baseline.mean === null || baseline.stddev === null) {
+      return { passed: true };
+    }
+
+    const multiplier = def.stddev_multiplier ?? 2;
+    const computedThreshold = baseline.mean! + multiplier * baseline.stddev!;
+    const passed = actualValue <= computedThreshold;
+
+    return { passed, computedThreshold, baselineValue: baseline.mean! };
   }
 }
