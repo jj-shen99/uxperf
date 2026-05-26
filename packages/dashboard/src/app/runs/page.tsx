@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Play, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { useProjects } from "@/hooks/use-projects";
 
 interface Run {
   id: string;
@@ -37,11 +38,20 @@ const statusColors: Record<string, string> = {
 export default function RunsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ project_id: "", url: "", n_runs: "5" });
+  const { projects, projectId: defaultProjectId } = useProjects();
+  const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5" });
+
+  const formProjectId = form.project_id || defaultProjectId;
 
   const { data: runs, isLoading } = useQuery<Run[]>({
     queryKey: ["runs"],
     queryFn: () => api.runs.list(),
+  });
+
+  const { data: scripts = [] } = useQuery({
+    queryKey: ["scripts-for-run", formProjectId],
+    queryFn: () => api.scripts.list(formProjectId),
+    enabled: !!formProjectId,
   });
 
   const createMut = useMutation({
@@ -49,7 +59,7 @@ export default function RunsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["runs"] });
       setShowCreate(false);
-      setForm({ project_id: "", url: "", n_runs: "5" });
+      setForm({ project_id: "", script_id: "", url: "", n_runs: "5" });
     },
   });
 
@@ -72,34 +82,71 @@ export default function RunsPage() {
       </div>
 
       {showCreate && (
-        <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-800 bg-gray-900/50 p-4 sm:grid-cols-4">
-          <input
-            placeholder="Project ID"
-            value={form.project_id}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, project_id: e.target.value })}
-            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-          />
-          <input
-            placeholder="URL to test"
-            value={form.url}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, url: e.target.value })}
-            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-          />
-          <input
-            type="number"
-            placeholder="N runs (default 5)"
-            value={form.n_runs}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, n_runs: e.target.value })}
-            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-          />
+        <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Project</label>
+              <select
+                value={formProjectId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, project_id: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="">Select project</option>
+                {projects.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Test Script</label>
+              <select
+                value={form.script_id}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const script = scripts.find((s: any) => s.id === e.target.value);
+                  setForm({
+                    ...form,
+                    script_id: e.target.value,
+                    url: script?.canonical_json?.target_url ?? form.url,
+                  });
+                }}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="">(no script — manual URL)</option>
+                {scripts.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">URL to test</label>
+              <input
+                placeholder="https://example.com"
+                value={form.url}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, url: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Repeat count</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="5"
+                value={form.n_runs}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, n_runs: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              />
+            </div>
+          </div>
           <button
             onClick={() =>
               createMut.mutate({
-                project_id: form.project_id,
+                project_id: formProjectId,
+                script_id: form.script_id || undefined,
                 config: { url: form.url, n_runs: parseInt(form.n_runs) || 5 },
               })
             }
-            disabled={!form.project_id || !form.url}
+            disabled={!formProjectId || !form.url}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             Launch

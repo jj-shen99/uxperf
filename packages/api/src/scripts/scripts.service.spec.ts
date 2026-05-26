@@ -110,6 +110,25 @@ describe("ScriptsService", () => {
       expect(args[4]).toBe("abc123");
       expect(args[5]).toBe("describe");
     });
+
+    // Regression: "nl_authored" is NOT a valid Postgres enum value.
+    // Valid values are: record, template, describe, manual.
+    // NL-authored scripts should use "describe" mode.
+    it.each(["record", "template", "describe", "manual"])(
+      "accepts valid authoring_mode '%s' (regression: enum validation)",
+      async (mode) => {
+        mockDb.query.mockResolvedValueOnce({ rows: [{ ...mockScript, authoring_mode: mode }] });
+        const result = await service.create({
+          project_id: "p-1",
+          name: "Test",
+          canonical_json: {},
+          authoring_mode: mode,
+        });
+        expect(result.authoring_mode).toBe(mode);
+        const args = mockDb.query.mock.calls[0][1];
+        expect(args[5]).toBe(mode);
+      }
+    );
   });
 
   // -- update --

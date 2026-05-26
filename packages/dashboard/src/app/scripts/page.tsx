@@ -114,7 +114,7 @@ export default function ScriptsPage() {
               {scripts.map((s: any) => (
                 <tr key={s.id} className="hover:bg-gray-800/30">
                   <td className="px-4 py-2 text-gray-200">{s.name}</td>
-                  <td className="px-4 py-2 text-gray-400 font-mono text-xs">{s.project_id?.slice(0, 8)}</td>
+                  <td className="px-4 py-2 text-gray-400 text-xs">{projects.find((p: any) => p.id === s.project_id)?.name ?? s.project_id?.slice(0, 8)}</td>
                   <td className="px-4 py-2 text-gray-400">{s.authoring_mode}</td>
                   <td className="px-4 py-2 text-gray-400">{new Date(s.updated_at).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-right">

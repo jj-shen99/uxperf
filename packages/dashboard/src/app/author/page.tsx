@@ -32,7 +32,7 @@ export default function AuthorPage() {
         name: result?.generated_script?.id ?? `NL Script ${new Date().toLocaleString()}`,
         canonical_json: result?.generated_script ?? {},
         source_prompt: prompt,
-        authoring_mode: "nl_authored",
+        authoring_mode: "describe",
       }),
     onSuccess: () => {
       setSaved(true);

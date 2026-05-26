@@ -132,6 +132,35 @@ describe("RunsService", () => {
       expect(args[4]).toBe("k6_browser");
       expect(args[5]).toBe("production");
     });
+
+    // Regression: Launch from /runs with script selector should pass script_id
+    it("passes script_id to DB when launching from script selector", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        script_id: "script-abc",
+        config: { url: "https://example.com", n_runs: 5 },
+      };
+      mockDb.query.mockResolvedValue({ rows: [{ ...sampleRun, script_id: "script-abc" }] });
+      const result = await service.create(dto);
+      expect(result.script_id).toBe("script-abc");
+
+      const args = mockDb.query.mock.calls[0][1];
+      expect(args[0]).toBe("proj-1");   // project_id
+      expect(args[1]).toBe("script-abc"); // script_id
+    });
+
+    it("stores n_runs in config JSON", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        config: { url: "https://example.com", n_runs: 10 },
+      };
+      mockDb.query.mockResolvedValue({ rows: [{ ...sampleRun, config: dto.config }] });
+      await service.create(dto);
+
+      const args = mockDb.query.mock.calls[0][1];
+      const configJson = JSON.parse(args[6]);
+      expect(configJson.n_runs).toBe(10);
+    });
   });
 
   // ==========================================================
