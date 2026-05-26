@@ -127,7 +127,7 @@ npm run worker:poll
 # All packages
 npm test
 
-# API only (Jest — 451 tests)
+# API only (Jest — 470 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
@@ -273,6 +273,7 @@ All endpoints are prefixed with `/api/v1`.
 | `WPT_SERVER` | | WebPageTest server URL (opt-in) |
 | `WPT_API_KEY` | | WebPageTest API key |
 | `SITESPEED_ENABLED` | `false` | Enable sitespeed.io engine |
+| `CRUX_API_KEY` | | Chrome UX Report API key (Phase 4 CrUX ingestion) |
 
 ## Tech Stack
 
@@ -282,7 +283,7 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 451 tests), Vitest (shared — 135, worker — 52 tests) |
+| Testing | Jest (API — 470 tests), Vitest (shared — 135, worker — 52 tests) |
 | Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
 | Metrics DB | PostgreSQL (ClickHouse-ready schema) |
 | Object Store | Local filesystem (S3-ready abstraction) |

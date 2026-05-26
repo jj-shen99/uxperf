@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from "@nestjs/common";
+import { Injectable, Logger, BadRequestException, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { LoadProfilesService, LoadProfileRow, LoadStage } from "./load-profiles.service";
 
@@ -147,7 +147,7 @@ export class LoadOrchestratorService {
       [id],
     );
     if (result.rows.length === 0) {
-      throw new BadRequestException(`Load run ${id} not found`);
+      throw new NotFoundException(`Load run ${id} not found`);
     }
     return result.rows[0];
   }
@@ -212,6 +212,9 @@ export class LoadOrchestratorService {
       `UPDATE load_runs SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,
       params,
     );
+    if (result.rows.length === 0) {
+      throw new NotFoundException(`Load run ${id} not found`);
+    }
     return result.rows[0];
   }
 
@@ -315,11 +318,12 @@ export class LoadOrchestratorService {
    */
   estimateCost(stages: LoadStage[], targetVus: number): CostEstimate {
     let vuMinutes = 0;
+    let prevVus = targetVus;
     for (const stage of stages) {
       // Average VUs during stage × duration in minutes
-      const avgVus = (stage.target_vus + targetVus) / 2;
+      const avgVus = (stage.target_vus + prevVus) / 2;
       vuMinutes += avgVus * (stage.duration_s / 60);
-      targetVus = stage.target_vus;
+      prevVus = stage.target_vus;
     }
 
     const unitCost = 0.001; // $0.001 per VU-minute (configurable)

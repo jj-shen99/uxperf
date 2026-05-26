@@ -134,7 +134,6 @@ export class ShapAttributionService {
       [projectId, windowSize],
     );
 
-    const metricKey = targetMetric.replace(/_ms$/, "").replace(/_score$/, "");
     return result.rows
       .filter((r) => r.metrics && r.metrics[targetMetric] != null)
       .map((r) => {
