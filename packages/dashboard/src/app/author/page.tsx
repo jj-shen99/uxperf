@@ -8,12 +8,18 @@ export default function AuthorPage() {
   const [prompt, setPrompt] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [device, setDevice] = useState("desktop");
+  const [projectId, setProjectId] = useState("");
   const [result, setResult] = useState<any>(null);
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => api.projects.list(),
+  });
 
   const generate = useMutation({
     mutationFn: () =>
       api.authoring.generate({
-        project_id: "default",
+        project_id: projectId,
         prompt,
         target_url: targetUrl || undefined,
         device,
@@ -22,8 +28,9 @@ export default function AuthorPage() {
   });
 
   const { data: logs = [] } = useQuery({
-    queryKey: ["authoring-logs"],
-    queryFn: () => api.authoring.logs("default"),
+    queryKey: ["authoring-logs", projectId],
+    queryFn: () => api.authoring.logs(projectId),
+    enabled: !!projectId,
   });
 
   return (
@@ -47,7 +54,20 @@ export default function AuthorPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Project</label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            >
+              <option value="">Select a project</option>
+              {projects.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium mb-1">Target URL</label>
             <input
@@ -73,7 +93,7 @@ export default function AuthorPage() {
 
         <button
           onClick={() => generate.mutate()}
-          disabled={!prompt || generate.isPending}
+          disabled={!prompt || !projectId || generate.isPending}
           className="rounded-md bg-primary px-6 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           {generate.isPending ? "Generating..." : "Generate Script"}
