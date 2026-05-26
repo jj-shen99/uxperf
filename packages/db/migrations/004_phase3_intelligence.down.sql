@@ -1,0 +1,10 @@
+DROP TRIGGER IF EXISTS set_updated_at_digest_schedules ON digest_schedules;
+DROP TRIGGER IF EXISTS set_updated_at_anomalies ON anomalies;
+DROP TABLE IF EXISTS digest_schedules;
+DROP TABLE IF EXISTS nl_generation_logs;
+DROP TABLE IF EXISTS report_snapshots;
+DROP TABLE IF EXISTS anomalies;
+ALTER TABLE baselines DROP COLUMN IF EXISTS day_of_week;
+ALTER TABLE baselines DROP COLUMN IF EXISTS hour_bucket;
+ALTER TABLE baselines DROP COLUMN IF EXISTS seasonality_bucket;
+DROP INDEX IF EXISTS idx_baselines_seasonality;

@@ -16,6 +16,9 @@ export interface BaselineRow {
   sample_size: number;
   confidence: number;
   seasonality_profile: Record<string, unknown>;
+  day_of_week: number | null;
+  hour_bucket: number | null;
+  seasonality_bucket: string | null;
   computed_at: Date;
   valid_from: Date;
   valid_to: Date | null;
@@ -28,6 +31,9 @@ export interface ComputeBaselineOptions {
   metric: string;
   environment?: string;
   window_size?: number; // number of recent runs to consider (default 20)
+  day_of_week?: number; // 0=Sunday..6=Saturday, null=all
+  hour_bucket?: number; // 0-23, null=all
+  seasonality_bucket?: string; // custom label
 }
 
 /**
@@ -74,16 +80,23 @@ export class BaselinesService {
     projectId: string,
     metric: string,
     environment: string = "staging",
-    scriptId?: string
+    scriptId?: string,
+    dayOfWeek?: number,
+    hourBucket?: number,
   ): Promise<BaselineRow | null> {
     const result = await this.db.query<BaselineRow>(
       `SELECT * FROM baselines
        WHERE project_id = $1 AND metric = $2 AND environment = $3
          AND ($4::uuid IS NULL OR script_id = $4)
+         AND ($5::smallint IS NULL OR day_of_week = $5 OR day_of_week IS NULL)
+         AND ($6::smallint IS NULL OR hour_bucket = $6 OR hour_bucket IS NULL)
          AND is_active = true
-       ORDER BY computed_at DESC
+       ORDER BY
+         day_of_week IS NOT NULL DESC,
+         hour_bucket IS NOT NULL DESC,
+         computed_at DESC
        LIMIT 1`,
-      [projectId, metric, environment, scriptId ?? null]
+      [projectId, metric, environment, scriptId ?? null, dayOfWeek ?? null, hourBucket ?? null]
     );
     return result.rows[0] ?? null;
   }
@@ -179,8 +192,8 @@ export class BaselinesService {
     const insertResult = await this.db.query<BaselineRow>(
       `INSERT INTO baselines
          (project_id, script_id, metric, environment, p50, p75, p95, p99, mean, stddev,
-          sample_size, confidence, seasonality_profile, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true)
+          sample_size, confidence, seasonality_profile, day_of_week, hour_bucket, seasonality_bucket, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true)
        RETURNING *`,
       [
         project_id,
@@ -196,6 +209,9 @@ export class BaselinesService {
         n,
         confidence,
         JSON.stringify({}),
+        opts.day_of_week ?? null,
+        opts.hour_bucket ?? null,
+        opts.seasonality_bucket ?? null,
       ]
     );
 

@@ -81,6 +81,46 @@ export const api = {
     byRun: (runId: string) => request<any[]>(`/per-request/${runId}`),
     summary: (runId: string) => request<any[]>(`/per-request/${runId}/summary`),
   },
+  analytics: {
+    anomalies: (projectId?: string, status?: string) =>
+      request<any[]>(
+        `/analytics/anomalies?${projectId ? `project_id=${projectId}&` : ""}${status ? `status=${status}` : ""}`,
+      ),
+    getAnomaly: (id: string) => request<any>(`/analytics/anomalies/${id}`),
+    updateAnomalyStatus: (id: string, status: string) =>
+      request<any>(`/analytics/anomalies/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    feedback: (id: string, feedback: string) =>
+      request<any>(`/analytics/anomalies/${id}/feedback`, {
+        method: "PATCH",
+        body: JSON.stringify({ feedback }),
+      }),
+    detect: (data: { project_id: string; environment?: string }) =>
+      request<any[]>("/analytics/detect", { method: "POST", body: JSON.stringify(data) }),
+    changePoints: (data: { project_id: string; environment?: string }) =>
+      request<any[]>("/analytics/detect/change-points", { method: "POST", body: JSON.stringify(data) }),
+    attribution: (baselineRunId: string, regressionRunId: string, metric: string) =>
+      request<any>(
+        `/analytics/attribution?baseline_run_id=${baselineRunId}&regression_run_id=${regressionRunId}&metric=${metric}`,
+      ),
+  },
+  reports: {
+    generate: (data: { project_id: string; days?: number; environment?: string }) =>
+      request<any>("/reports/executive", { method: "POST", body: JSON.stringify(data) }),
+    list: (projectId: string, reportType?: string) =>
+      request<any[]>(
+        `/reports?project_id=${projectId}${reportType ? `&report_type=${reportType}` : ""}`,
+      ),
+    get: (id: string) => request<any>(`/reports/${id}`),
+  },
+  authoring: {
+    generate: (data: { project_id: string; prompt: string; target_url?: string; device?: string }) =>
+      request<any>("/authoring/generate", { method: "POST", body: JSON.stringify(data) }),
+    logs: (projectId: string) => request<any[]>(`/authoring/logs?project_id=${projectId}`),
+    policy: (projectId: string) => request<any>(`/authoring/policy?project_id=${projectId}`),
+  },
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },

@@ -51,6 +51,17 @@ docker/         — Dockerfiles per service
 - **Slack Notifications** — Notification channels (Slack webhooks, generic webhooks, email placeholder) dispatched on gate failures and run completions
 - **Per-request Data** — ClickHouse-ready per-request metrics storage with cardinality-controlled aggregation (PG-backed, migration-ready)
 
+### Phase 3 — Intelligence ✅
+
+- **Statistical Baselines with Seasonality** — Per-environment, per-day-of-week, per-hour-bucket baseline computation with sample-based stabilization
+- **Change-Point Detection** — CUSUM and EWMA detectors run on metric time series to identify sustained shifts and drift
+- **Anomaly Feed** — Anomalies table with severity (info/warning/critical), status workflow (open → acknowledged → resolved), and user feedback for attribution tuning
+- **Heuristic Root-Cause Attribution** — Phase-level and request-level attribution comparing per-request timing distributions between baseline and regression runs; human-readable explanations
+- **Executive Reports** — Rolling 7/30/90-day performance summaries with Core Web Vitals (p75), run/gate pass rates, anomaly counts, and trend direction analysis
+- **Scheduled Digests** — Cron-based digest schedules (daily/weekly/monthly) dispatched via Slack/webhook notification channels
+- **NL Test Authoring** — Six-stage pipeline scaffold (intent parse → page recon → locator synthesis → script assembly → static validation → confidence scoring) with runtime policy envelope and generation audit trail
+- **Dashboard Pages** — Anomalies feed with status management, executive report generator, NL authoring interface with pipeline visualization
+
 ## Quick Start
 
 ### Prerequisites
@@ -90,7 +101,7 @@ npm run worker:poll
 # All packages
 npm test
 
-# API only (Jest — 304 tests)
+# API only (Jest — 359 tests)
 npm test --workspace=packages/api
 
 # Shared validators (Vitest — 135 tests)
@@ -168,6 +179,19 @@ All endpoints are prefixed with `/api/v1`.
 | POST | `/per-request/ingest` | Bulk ingest per-request data |
 | GET | `/per-request/:runId` | Get per-request data |
 | GET | `/per-request/:runId/summary` | Aggregated per-request summary |
+| GET | `/analytics/anomalies` | List anomalies (`?project_id=&status=`) |
+| GET | `/analytics/anomalies/:id` | Get anomaly detail |
+| PATCH | `/analytics/anomalies/:id/status` | Update anomaly status |
+| PATCH | `/analytics/anomalies/:id/feedback` | Provide attribution feedback |
+| POST | `/analytics/detect` | Run change-point detection for project |
+| POST | `/analytics/detect/change-points` | Get raw change-point results |
+| GET | `/analytics/attribution` | Root-cause attribution between two runs |
+| POST | `/reports/executive` | Generate executive report |
+| GET | `/reports` | List saved reports (`?project_id=`) |
+| GET | `/reports/:id` | Get saved report |
+| POST | `/authoring/generate` | NL test authoring (six-stage pipeline) |
+| GET | `/authoring/logs` | List generation logs (`?project_id=`) |
+| GET | `/authoring/policy` | Get runtime policy envelope |
 
 ## Environment Variables
 
@@ -192,7 +216,7 @@ All endpoints are prefixed with `/api/v1`.
 | Backend | Node.js (NestJS 10), TypeScript 5 |
 | Engine | Playwright + Lighthouse |
 | Database | PostgreSQL 16 |
-| Testing | Jest (API — 304 tests), Vitest (shared — 135, worker — 44 tests) |
+| Testing | Jest (API — 359 tests), Vitest (shared — 135, worker — 44 tests) |
 | Engines | Playwright + Lighthouse, WebPageTest (opt-in), sitespeed.io (placeholder) |
 | Metrics DB | PostgreSQL (ClickHouse-ready schema) |
 | Object Store | Local filesystem (S3-ready abstraction) |

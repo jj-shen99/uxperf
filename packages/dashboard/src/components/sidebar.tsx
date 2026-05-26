@@ -12,6 +12,9 @@ import {
   Settings,
   Activity,
   GitCompare,
+  AlertTriangle,
+  ClipboardList,
+  MessageSquare,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +24,9 @@ const navItems = [
   { href: "/trends", label: "Trends", icon: BarChart3 },
   { href: "/gates", label: "Gates", icon: Shield },
   { href: "/compare", label: "Compare", icon: GitCompare },
+  { href: "/anomalies", label: "Anomalies", icon: AlertTriangle },
+  { href: "/reports", label: "Reports", icon: ClipboardList },
+  { href: "/author", label: "Author", icon: MessageSquare },
   { href: "/schedules", label: "Schedules", icon: Settings },
 ];
 
@@ -55,7 +61,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="border-t border-gray-800 p-3 text-xs text-gray-500">
-        Phase 2 — Depth
+        Phase 3 — Intelligence
       </div>
     </aside>
   );

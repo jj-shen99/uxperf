@@ -12,6 +12,9 @@ import { GitHubCheckModule } from "./github/github-check.module";
 import { RbacModule } from "./rbac/rbac.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PerRequestModule } from "./per-request/per-request.module";
+import { AnalyticsModule } from "./analytics/analytics.module";
+import { ReportsModule } from "./reports/reports.module";
+import { AuthoringModule } from "./authoring/authoring.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -29,6 +32,9 @@ import { HealthController } from "./health.controller";
     RbacModule,
     NotificationsModule,
     PerRequestModule,
+    AnalyticsModule,
+    ReportsModule,
+    AuthoringModule,
   ],
   controllers: [HealthController],
 })
