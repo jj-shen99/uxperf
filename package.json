@@ -1,0 +1,21 @@
+{
+  "name": "perf-framework",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend Performance Testing Framework",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "dev:dashboard": "npm run dev --workspace=packages/dashboard",
+    "worker:run": "npm run run --workspace=packages/worker",
+    "db:migrate": "npm run migrate --workspace=packages/db"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint shared types
+        run: npm run lint --workspace=packages/shared
+
+      - name: Lint API
+        run: npm run lint --workspace=packages/api
+
+      - name: Build API
+        run: npm run build --workspace=packages/api
+
+      - name: Lint Dashboard
+        run: npm run lint --workspace=packages/dashboard
+
+      - name: Build Dashboard
+        run: npm run build --workspace=packages/dashboard
+
+  db-migration-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: perf
+          POSTGRES_PASSWORD: perf
+          POSTGRES_DB: perf_framework
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U perf -d perf_framework"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations up
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://perf:perf@localhost:5432/perf_framework
+
+      - name: Run migrations down
+        run: npm run db:migrate -- down
+        env:
+          DATABASE_URL: postgresql://perf:perf@localhost:5432/perf_framework

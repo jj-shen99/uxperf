@@ -1,0 +1,267 @@
+import { Test, TestingModule } from "@nestjs/testing";
+import { NotFoundException } from "@nestjs/common";
+import { RunsService, CreateRunDto, UpdateRunDto, RunRow } from "./runs.service";
+import { DatabaseService } from "../database/database.service";
+
+const mockDb = { query: jest.fn() };
+
+const sampleRun: RunRow = {
+  id: "00000000-0000-0000-0000-000000000010",
+  script_id: null,
+  project_id: "00000000-0000-0000-0000-000000000001",
+  mode: "stability",
+  engine: "playwright_lighthouse",
+  environment: "staging",
+  status: "queued",
+  config: { url: "https://example.com" },
+  metrics: null,
+  lighthouse_report_path: null,
+  trace_path: null,
+  har_path: null,
+  cost_estimate: null,
+  cost_actual: null,
+  started_at: null,
+  finished_at: null,
+  created_at: new Date("2024-01-01"),
+  error: null,
+};
+
+describe("RunsService", () => {
+  let service: RunsService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RunsService,
+        { provide: DatabaseService, useValue: mockDb },
+      ],
+    }).compile();
+    service = module.get<RunsService>(RunsService);
+  });
+
+  // ==========================================================
+  // findAll — Decision Tree
+  //   projectId provided → filter by project
+  //   projectId absent → return all
+  // ==========================================================
+
+  describe("findAll — Decision Tree", () => {
+    it("filters by projectId when provided", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll("proj-1");
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE project_id = $1"),
+        ["proj-1"]
+      );
+    });
+
+    it("returns all when no projectId", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll();
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("ORDER BY created_at DESC"),
+      );
+    });
+
+    it("returns empty array when no runs exist", async () => {
+      mockDb.query.mockResolvedValue({ rows: [] });
+      const result = await service.findAll();
+      expect(result).toEqual([]);
+    });
+  });
+
+  // ==========================================================
+  // findById — Boundary (found vs not-found)
+  // ==========================================================
+
+  describe("findById", () => {
+    it("returns run when found", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      const result = await service.findById(sampleRun.id);
+      expect(result.id).toBe(sampleRun.id);
+    });
+
+    it("throws NotFoundException when not found", async () => {
+      mockDb.query.mockResolvedValue({ rows: [] });
+      await expect(service.findById("missing")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ==========================================================
+  // create — Equivalence Partitions
+  //   Valid: minimal required fields
+  //   Valid: all optional fields provided
+  //   Default values: mode, engine, environment fallback
+  // ==========================================================
+
+  describe("create — Equivalence Partitions", () => {
+    it("creates with minimal required fields (valid partition)", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        config: { url: "https://example.com" },
+      };
+      mockDb.query.mockResolvedValue({ rows: [{ ...sampleRun, ...dto }] });
+      const result = await service.create(dto);
+      expect(result.project_id).toBe("proj-1");
+
+      const args = mockDb.query.mock.calls[0][1];
+      expect(args[1]).toBeNull();        // script_id defaults to null
+      expect(args[2]).toBeNull();        // schedule_id defaults to null
+      expect(args[3]).toBe("stability"); // mode default
+      expect(args[4]).toBe("playwright_lighthouse"); // engine default
+      expect(args[5]).toBe("staging");   // environment default
+    });
+
+    it("creates with all optional fields", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        script_id: "script-1",
+        mode: "load",
+        engine: "k6_browser",
+        environment: "production",
+        config: { url: "https://prod.example.com", n_runs: 5 },
+      };
+      mockDb.query.mockResolvedValue({ rows: [{ ...sampleRun, ...dto }] });
+      const result = await service.create(dto);
+
+      const args = mockDb.query.mock.calls[0][1];
+      expect(args[1]).toBe("script-1");
+      expect(args[2]).toBeNull();         // schedule_id
+      expect(args[3]).toBe("load");
+      expect(args[4]).toBe("k6_browser");
+      expect(args[5]).toBe("production");
+    });
+  });
+
+  // ==========================================================
+  // update — Decision Tree + Structural Coverage
+  // Each field in UpdateRunDto is an independent decision:
+  //   present → include in SET clause
+  //   absent → skip
+  // Full structural coverage: test each field individually and combined
+  // ==========================================================
+
+  describe("update — Decision Tree (field presence)", () => {
+    it("updates only status when only status provided", async () => {
+      mockDb.query.mockResolvedValue({
+        rows: [{ ...sampleRun, status: "running" }],
+      });
+      const result = await service.update(sampleRun.id, { status: "running" });
+      expect(result.status).toBe("running");
+
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).toContain("status = $1");
+      expect(sql).not.toContain("metrics");
+    });
+
+    it("updates only metrics when only metrics provided", async () => {
+      const metrics = { lcp_ms: 2000 };
+      mockDb.query.mockResolvedValue({
+        rows: [{ ...sampleRun, metrics }],
+      });
+      await service.update(sampleRun.id, { metrics });
+
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).toContain("metrics = $1");
+      expect(sql).not.toContain("status");
+    });
+
+    it("updates multiple fields simultaneously", async () => {
+      const dto: UpdateRunDto = {
+        status: "completed",
+        metrics: { lcp_ms: 1500 },
+        started_at: "2024-01-01T00:00:00Z",
+        finished_at: "2024-01-01T00:05:00Z",
+      };
+      mockDb.query.mockResolvedValue({
+        rows: [{ ...sampleRun, ...dto }],
+      });
+      await service.update(sampleRun.id, dto);
+
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).toContain("status = $1");
+      expect(sql).toContain("metrics = $2");
+      expect(sql).toContain("started_at = $3");
+      expect(sql).toContain("finished_at = $4");
+    });
+
+    it("returns existing run when no fields provided (empty update)", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      const result = await service.update(sampleRun.id, {});
+      expect(result).toEqual(sampleRun);
+      // Should call findById, not UPDATE
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("SELECT"),
+        [sampleRun.id]
+      );
+    });
+
+    it("throws NotFoundException when update targets non-existent run", async () => {
+      mockDb.query.mockResolvedValue({ rows: [] });
+      await expect(
+        service.update("missing", { status: "running" })
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ==========================================================
+  // update — Structural Coverage: each UpdateRunDto field
+  // Ensure every optional field path is exercised
+  // ==========================================================
+
+  describe("update — Structural Coverage (every field)", () => {
+    const fields: Array<{ field: keyof UpdateRunDto; value: unknown; sqlSnippet: string }> = [
+      { field: "status", value: "running", sqlSnippet: "status = $1" },
+      { field: "metrics", value: { lcp_ms: 100 }, sqlSnippet: "metrics = $1" },
+      { field: "lighthouse_report_path", value: "/reports/r.json", sqlSnippet: "lighthouse_report_path = $1" },
+      { field: "trace_path", value: "/traces/t.zip", sqlSnippet: "trace_path = $1" },
+      { field: "har_path", value: "/har/h.har", sqlSnippet: "har_path = $1" },
+      { field: "cost_actual", value: 1.5, sqlSnippet: "cost_actual = $1" },
+      { field: "started_at", value: "2024-01-01T00:00:00Z", sqlSnippet: "started_at = $1" },
+      { field: "finished_at", value: "2024-01-01T00:01:00Z", sqlSnippet: "finished_at = $1" },
+      { field: "error", value: "timeout", sqlSnippet: "error = $1" },
+    ];
+
+    it.each(fields)(
+      "handles $field field in UPDATE SET clause",
+      async ({ field, value, sqlSnippet }) => {
+        mockDb.query.mockResolvedValue({
+          rows: [{ ...sampleRun, [field]: value }],
+        });
+
+        await service.update(sampleRun.id, { [field]: value } as UpdateRunDto);
+
+        const sql = mockDb.query.mock.calls[0][0] as string;
+        expect(sql).toContain(sqlSnippet);
+      }
+    );
+  });
+
+  // ==========================================================
+  // State transition tests — Regression
+  // Common valid transitions: queued→running→completed
+  //                           queued→running→failed
+  //                           queued→cancelled
+  // ==========================================================
+
+  describe("State transitions — Regression", () => {
+    const transitions = [
+      { from: "queued", to: "running" },
+      { from: "running", to: "completed" },
+      { from: "running", to: "failed" },
+      { from: "queued", to: "cancelled" },
+    ];
+
+    it.each(transitions)(
+      "allows $from → $to transition",
+      async ({ from, to }) => {
+        mockDb.query.mockResolvedValue({
+          rows: [{ ...sampleRun, status: to }],
+        });
+        const result = await service.update(sampleRun.id, { status: to });
+        expect(result.status).toBe(to);
+      }
+    );
+  });
+});
