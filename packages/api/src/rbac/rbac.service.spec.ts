@@ -125,5 +125,110 @@ describe("RbacService", () => {
         .mockResolvedValueOnce({ rows: [] });
       await expect(service.checkProjectAccess("u-1", "p-1", "viewer")).rejects.toThrow(ForbiddenException);
     });
+
+    it("allows admin full access without project membership", async () => {
+      // Admin should bypass membership check entirely — only 1 DB call
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-admin", role: "admin" }] });
+      await service.checkProjectAccess("u-admin", "p-any", "owner");
+      expect(mockDb.query).toHaveBeenCalledTimes(1);
+    });
+
+    it("requires membership lookup for non-admin users", async () => {
+      mockDb.query
+        .mockResolvedValueOnce({ rows: [{ id: "u-1", role: "editor" }] })
+        .mockResolvedValueOnce({ rows: [{ role: "viewer" }] });
+      await expect(service.checkProjectAccess("u-1", "p-1", "viewer")).resolves.toBeUndefined();
+      expect(mockDb.query).toHaveBeenCalledTimes(2);
+    });
+
+    it("denies editor-level access to viewer member", async () => {
+      mockDb.query
+        .mockResolvedValueOnce({ rows: [{ id: "u-1", role: "viewer" }] })
+        .mockResolvedValueOnce({ rows: [{ role: "viewer" }] });
+      await expect(service.checkProjectAccess("u-1", "p-1", "editor")).rejects.toThrow(ForbiddenException);
+    });
+
+    it("allows owner-level access to owner member", async () => {
+      mockDb.query
+        .mockResolvedValueOnce({ rows: [{ id: "u-1", role: "viewer" }] })
+        .mockResolvedValueOnce({ rows: [{ role: "owner" }] });
+      await expect(service.checkProjectAccess("u-1", "p-1", "owner")).resolves.toBeUndefined();
+    });
+  });
+
+  // -- Role transitions --
+  describe("role transitions", () => {
+    it("promotes viewer to admin", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", role: "admin", display_name: "Alice" }] });
+      const user = await service.updateUser("u-1", { role: "admin" });
+      expect(user.role).toBe("admin");
+      expect(mockDb.query.mock.calls[0][1]).toContain("admin");
+    });
+
+    it("demotes admin to viewer", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", role: "viewer" }] });
+      const user = await service.updateUser("u-1", { role: "viewer" });
+      expect(user.role).toBe("viewer");
+    });
+
+    it("deactivates a user", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", is_active: false }] });
+      const user = await service.updateUser("u-1", { is_active: false });
+      expect(user.is_active).toBe(false);
+    });
+
+    it("reactivates a user", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", is_active: true }] });
+      const user = await service.updateUser("u-1", { is_active: true });
+      expect(user.is_active).toBe(true);
+    });
+
+    it("updates multiple fields at once", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", display_name: "Bob", role: "editor", is_active: true }] });
+      const user = await service.updateUser("u-1", { display_name: "Bob", role: "editor", is_active: true });
+      expect(user.display_name).toBe("Bob");
+      expect(user.role).toBe("editor");
+      // Should have 4 params: 3 fields + id
+      expect(mockDb.query.mock.calls[0][1]).toHaveLength(4);
+    });
+
+    it("throws NotFoundException when updating non-existent user", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      await expect(service.updateUser("u-missing", { role: "admin" })).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // -- findUserByEmail --
+  describe("findUserByEmail", () => {
+    it("returns user when email matches", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", email: "alice@test.com" }] });
+      const user = await service.findUserByEmail("alice@test.com");
+      expect(user?.id).toBe("u-1");
+    });
+
+    it("returns null when email not found", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      const user = await service.findUserByEmail("nobody@test.com");
+      expect(user).toBeNull();
+    });
+  });
+
+  // -- Project member role override --
+  describe("addProjectMember with role override", () => {
+    it("upserts member role on conflict", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ user_id: "u-1", role: "editor" }] });
+      const member = await service.addProjectMember({ project_id: "p-1", user_id: "u-1", role: "editor" });
+      expect(member.role).toBe("editor");
+      expect(mockDb.query.mock.calls[0][0]).toContain("ON CONFLICT");
+    });
+  });
+
+  // -- removeProjectMember --
+  describe("removeProjectMember", () => {
+    it("removes a member", async () => {
+      mockDb.query.mockResolvedValueOnce({ rowCount: 1 });
+      await expect(service.removeProjectMember("p-1", "u-1")).resolves.toBeUndefined();
+      expect(mockDb.query.mock.calls[0][1]).toEqual(["p-1", "u-1"]);
+    });
   });
 });

@@ -68,6 +68,63 @@ describe("CapacityPlanningService", () => {
     });
   });
 
+  // Regression: evaluateCondition must return true for unknown operators (fail-open)
+  describe("evaluateCondition via evaluateResourceFloor — operator handling", () => {
+    it.each([
+      { operator: "lt", value: 45, threshold: 80, expected: true },
+      { operator: "lt", value: 85, threshold: 80, expected: false },
+      { operator: "lte", value: 80, threshold: 80, expected: true },
+      { operator: "lte", value: 81, threshold: 80, expected: false },
+      { operator: "gt", value: 85, threshold: 80, expected: true },
+      { operator: "gt", value: 75, threshold: 80, expected: false },
+      { operator: "gte", value: 80, threshold: 80, expected: true },
+      { operator: "gte", value: 79, threshold: 80, expected: false },
+    ])(
+      "$operator: $value vs $threshold => $expected",
+      async ({ operator, value, threshold, expected }) => {
+        mockDb.query.mockResolvedValueOnce({
+          rows: [{ host: "app-01", value }],
+        });
+        const result = await service.evaluateResourceFloor("lr-1", [
+          { metric: "cpu_percent", operator: operator as any, threshold, host_pattern: "*" },
+        ]);
+        expect(result.results[0].passed).toBe(expected);
+      },
+    );
+
+    it("returns true (pass) for unknown operator (regression: was false)", async () => {
+      mockDb.query.mockResolvedValueOnce({
+        rows: [{ host: "app-01", value: 50 }],
+      });
+      const result = await service.evaluateResourceFloor("lr-1", [
+        { metric: "cpu_percent", operator: "invalid_op" as any, threshold: 80, host_pattern: "*" },
+      ]);
+      expect(result.results[0].passed).toBe(true);
+      expect(result.overall_passed).toBe(true);
+    });
+  });
+
+  // Regression: analyzeResources must use ANY($1::uuid[]) cast
+  describe("analyzeResources SQL — uuid array cast", () => {
+    it("passes loadRunIds array and uses ::uuid[] cast in query", async () => {
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [
+            { id: "lr-1", target_vus: 20, actual_peak_vus: 20, metrics_summary: null, saturation_warnings: [] },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ peak_cpu: 60, peak_memory: 50, peak_lag: 30 }] }) // analyzeResources
+        .mockResolvedValueOnce({ rows: [{ id: "cap-1" }] }); // saveReport
+
+      await service.generateReport("p-1");
+
+      // The second DB call is analyzeResources — verify it uses uuid[] cast
+      const analyzeCall = mockDb.query.mock.calls[1];
+      expect(analyzeCall[0]).toContain("ANY($1::uuid[])");
+      expect(analyzeCall[1]).toEqual([["lr-1"]]);
+    });
+  });
+
   describe("evaluateCapacityFloor", () => {
     it("passes when VUs and lag are within limits", async () => {
       mockDb.query

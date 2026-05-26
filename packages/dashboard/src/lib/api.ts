@@ -33,6 +33,8 @@ export const api = {
     create: (data: any) => request<any>("/runs", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/runs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     getGateResults: (id: string) => request<any[]>(`/runs/${id}/gates`),
+    claim: () => request<any>("/runs/claim", { method: "POST" }),
+    complete: (id: string, payload: any) => request<any>(`/runs/${id}/complete`, { method: "POST", body: JSON.stringify(payload) }),
   },
   gates: {
     list: (projectId?: string) => request<any[]>(`/gates${projectId ? `?project_id=${projectId}` : ""}`),
@@ -207,6 +209,24 @@ export const api = {
         request<any[]>(`/intelligence/geo/locations${provider ? `?provider=${provider}` : ""}`),
       dispatch: (data: any) =>
         request<any>("/intelligence/geo/dispatch", { method: "POST", body: JSON.stringify(data) }),
+    },
+  },
+  rbac: {
+    users: {
+      list: () => request<any[]>("/rbac/users"),
+      get: (id: string) => request<any>(`/rbac/users/${id}`),
+      create: (data: { email: string; display_name: string; role?: string }) =>
+        request<any>("/rbac/users", { method: "POST", body: JSON.stringify(data) }),
+      update: (id: string, data: { display_name?: string; role?: string; is_active?: boolean }) =>
+        request<any>(`/rbac/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      delete: (id: string) => request<void>(`/rbac/users/${id}`, { method: "DELETE" }),
+    },
+    projectMembers: {
+      list: (projectId: string) => request<any[]>(`/rbac/projects/${projectId}/members`),
+      add: (projectId: string, data: { user_id: string; role?: string }) =>
+        request<any>(`/rbac/projects/${projectId}/members`, { method: "POST", body: JSON.stringify(data) }),
+      remove: (projectId: string, userId: string) =>
+        request<void>(`/rbac/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
     },
   },
   health: {

@@ -1,29 +1,8 @@
-import { Activity, Gauge, Zap, Eye } from "lucide-react";
+"use client";
 
-function MetricCard({
-  label,
-  value,
-  unit,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Icon className="h-4 w-4" />
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-semibold text-gray-100">
-        {value}
-        <span className="ml-1 text-sm font-normal text-gray-500">{unit}</span>
-      </div>
-    </div>
-  );
-}
+import Link from "next/link";
+import { MetricTooltip, METRIC_GLOSSARY } from "@/components/metric-tooltip";
+import { MetricRelationshipDiagram } from "@/components/metric-relationship-diagram";
 
 export default function DashboardPage() {
   return (
@@ -31,55 +10,84 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-400">
-          Frontend Performance Testing Framework — Phase 0
+          Frontend Performance Testing Framework
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="LCP" value="—" unit="ms" icon={Eye} />
-        <MetricCard label="FCP" value="—" unit="ms" icon={Zap} />
-        <MetricCard label="CLS" value="—" unit="" icon={Activity} />
-        <MetricCard label="Lighthouse" value="—" unit="/100" icon={Gauge} />
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+          <MetricTooltip metricKey="LCP" className="text-sm text-gray-400" />
+          <div className="mt-2 text-2xl font-semibold text-gray-100">—<span className="ml-1 text-sm font-normal text-gray-500">ms</span></div>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+          <MetricTooltip metricKey="FCP" className="text-sm text-gray-400" />
+          <div className="mt-2 text-2xl font-semibold text-gray-100">—<span className="ml-1 text-sm font-normal text-gray-500">ms</span></div>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+          <MetricTooltip metricKey="CLS" className="text-sm text-gray-400" />
+          <div className="mt-2 text-2xl font-semibold text-gray-100">—</div>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+          <MetricTooltip metricKey="Lighthouse Score" className="text-sm text-gray-400" />
+          <div className="mt-2 text-2xl font-semibold text-gray-100">—<span className="ml-1 text-sm font-normal text-gray-500">/100</span></div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+        <h2 className="text-sm font-medium text-gray-400">Quick Actions</h2>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/runs" className="rounded-md border border-gray-700 bg-gray-800 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700 transition-colors">
+            Launch a Test Run
+          </Link>
+          <Link href="/scripts" className="rounded-md border border-gray-700 bg-gray-800 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700 transition-colors">
+            Manage Scripts
+          </Link>
+          <Link href="/results" className="rounded-md border border-gray-700 bg-gray-800 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700 transition-colors">
+            View Results
+          </Link>
+          <Link href="/trends" className="rounded-md border border-gray-700 bg-gray-800 px-4 py-3 text-sm text-gray-200 hover:bg-gray-700 transition-colors">
+            View Trends
+          </Link>
+        </div>
+      </div>
+
+      {/* Metric Relationships Diagram */}
+      <MetricRelationshipDiagram />
+
+      {/* Metric Glossary */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+        <h2 className="text-sm font-medium text-gray-400 mb-4">Performance Metrics Glossary</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Object.entries(METRIC_GLOSSARY).map(([key, info]) => (
+            <div key={key} className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-semibold text-indigo-400">{info.name}</span>
+                <span className="text-xs text-gray-500">{info.full}</span>
+              </div>
+              <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">{info.description}</p>
+              <p className="mt-1 text-[10px] text-gray-600">Good: {info.good}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
         <h2 className="text-sm font-medium text-gray-400">Getting Started</h2>
         <div className="mt-4 space-y-3 text-sm text-gray-300">
           <p>
-            Run your first performance test with the Engine PoC:
+            Create a project, author or upload a test script, then launch a run to measure
+            <MetricTooltip metricKey="LCP" className="mx-1 text-indigo-300" />,
+            <MetricTooltip metricKey="FCP" className="mx-1 text-indigo-300" />,
+            <MetricTooltip metricKey="INP" className="mx-1 text-indigo-300" />,
+            <MetricTooltip metricKey="CLS" className="mx-1 text-indigo-300" />,
+            <MetricTooltip metricKey="TTFB" className="mx-1 text-indigo-300" />,
+            and <MetricTooltip metricKey="Lighthouse Score" className="mx-1 text-indigo-300" />.
           </p>
-          <pre className="rounded-md bg-gray-800 p-3 text-xs text-green-400 overflow-x-auto">
-            npm run worker:run -- --url https://example.com --runs 3
-          </pre>
           <p className="text-gray-500">
-            The engine runs Playwright + Lighthouse N times and reports median
-            Core Web Vitals (LCP, FCP, INP, CLS, TTFB) and Lighthouse scores.
+            Results are tracked over time with statistical baselines and quality gates
+            for CI/CD integration.
           </p>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-        <h2 className="text-sm font-medium text-gray-400">
-          Phase 0 Deliverables
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm text-gray-300">
-          <li className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            Repo scaffolding &amp; CI setup
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            Data-model draft (Postgres schema)
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            Engine PoC: Playwright + Lighthouse
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            Architecture spike
-          </li>
-        </ul>
       </div>
     </div>
   );

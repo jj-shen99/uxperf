@@ -4,29 +4,105 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
 import { useProjects } from "@/hooks/use-projects";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
-const statusColors: Record<string, string> = {
-  queued: "bg-gray-100 text-gray-700",
-  warming: "bg-yellow-100 text-yellow-800",
-  running: "bg-blue-100 text-blue-800",
-  cooling: "bg-indigo-100 text-indigo-800",
-  completed: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
-  cancelled: "bg-gray-200 text-gray-500",
+const STATUS_STYLES: Record<string, string> = {
+  queued:    "bg-gray-700/40 text-gray-300",
+  warming:   "bg-yellow-900/40 text-yellow-300",
+  running:   "bg-blue-900/40 text-blue-300",
+  cooling:   "bg-indigo-900/40 text-indigo-300",
+  completed: "bg-green-900/40 text-green-300",
+  failed:    "bg-red-900/40 text-red-300",
+  cancelled: "bg-gray-800/40 text-gray-500",
 };
+
+const CACHE_OPTIONS = ["warm", "cold", "production_replay"] as const;
+const ENGINE_OPTIONS = ["k6_browser", "playwright_lighthouse", "sitespeed"] as const;
+
+interface Stage {
+  duration_s: number;
+  target_vus: number;
+  ramp_type?: "linear" | "step";
+}
+
+function StagePreview({ stages }: { stages: Stage[] }) {
+  if (stages.length === 0) return null;
+  const maxVus = Math.max(...stages.map((s) => s.target_vus), 1);
+  const totalDur = stages.reduce((s, st) => s + st.duration_s, 0);
+  if (totalDur === 0) return null;
+
+  // Build a time-series of VU counts for area chart
+  const points: { time: number; vus: number }[] = [];
+  let elapsed = 0;
+  let prevVus = 0;
+  for (const stage of stages) {
+    points.push({ time: elapsed, vus: prevVus });
+    elapsed += stage.duration_s;
+    points.push({ time: elapsed, vus: stage.target_vus });
+    prevVus = stage.target_vus;
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={100}>
+      <AreaChart data={points} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+        <defs>
+          <linearGradient id="vuGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#818cf8" stopOpacity={0.5} />
+            <stop offset="100%" stopColor="#818cf8" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <XAxis dataKey="time" tick={{ fill: "#6b7280", fontSize: 9 }} tickFormatter={(v) => `${v}s`} />
+        <YAxis tick={{ fill: "#6b7280", fontSize: 9 }} domain={[0, Math.ceil(maxVus * 1.1)]} />
+        <Area type="stepAfter" dataKey="vus" stroke="#818cf8" fill="url(#vuGrad)" strokeWidth={1.5} />
+        <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [`${v} VUs`, "Virtual Users"]} labelFormatter={(v) => `${v}s`} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
 
 export default function LoadTestingPage() {
   const queryClient = useQueryClient();
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const { projectId } = useProjects();
+  const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const [showCreateProfile, setShowCreateProfile] = useState(false);
+  const [showQuickRun, setShowQuickRun] = useState(false);
 
-  const { data: loadRuns = [] } = useQuery({
+  // Profile form state
+  const [pName, setPName] = useState("");
+  const [pDesc, setPDesc] = useState("");
+  const [pVUs, setPVUs] = useState(10);
+  const [pCache, setPCache] = useState<string>("warm");
+  const [pEngine, setPEngine] = useState<string>("k6_browser");
+  const [pStages, setPStages] = useState<Stage[]>([
+    { duration_s: 30, target_vus: 5, ramp_type: "linear" },
+    { duration_s: 60, target_vus: 10, ramp_type: "linear" },
+    { duration_s: 30, target_vus: 0, ramp_type: "linear" },
+  ]);
+
+  // Quick run state
+  const [qVUs, setQVUs] = useState(5);
+  const [qDuration, setQDuration] = useState(60);
+  const [qCache, setQCache] = useState<string>("warm");
+
+  // Queries
+  const { data: loadRuns = [], isLoading: runsLoading } = useQuery({
     queryKey: ["load-runs"],
     queryFn: () => api.load.runs.list(),
     refetchInterval: 5000,
   });
 
-  const { data: profiles = [] } = useQuery({
+  const { data: profiles = [], isLoading: profilesLoading } = useQuery({
     queryKey: ["load-profiles"],
     queryFn: () => api.load.profiles.list(),
   });
@@ -43,9 +119,23 @@ export default function LoadTestingPage() {
     enabled: !!selectedRun,
   });
 
+  // Mutations
+  const createProfile = useMutation({
+    mutationFn: (data: any) => api.load.profiles.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["load-profiles"] });
+      setShowCreateProfile(false);
+      setPName(""); setPDesc("");
+    },
+  });
+
+  const deleteProfile = useMutation({
+    mutationFn: (id: string) => api.load.profiles.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-profiles"] }),
+  });
+
   const createRun = useMutation({
-    mutationFn: (profileId: string) =>
-      api.load.runs.create({ project_id: projectId, load_profile_id: profileId }),
+    mutationFn: (data: any) => api.load.runs.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
   });
 
@@ -54,203 +144,363 @@ export default function LoadTestingPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
   });
 
+  const addStage = () => setPStages([...pStages, { duration_s: 30, target_vus: pVUs, ramp_type: "linear" }]);
+  const removeStage = (i: number) => setPStages(pStages.filter((_, idx) => idx !== i));
+  const updateStage = (i: number, field: keyof Stage, value: number | string) =>
+    setPStages(pStages.map((s, idx) => idx === i ? { ...s, [field]: field === "ramp_type" ? value : Number(value) } : s));
+
+  const handleCreateProfile = () => {
+    if (!pName.trim() || !projectId) return;
+    createProfile.mutate({
+      project_id: projectId,
+      name: pName,
+      description: pDesc || undefined,
+      stages: pStages,
+      target_vus: pVUs,
+      cache_state: pCache,
+    });
+  };
+
+  const handleQuickRun = () => {
+    if (!projectId) return;
+    createRun.mutate({
+      project_id: projectId,
+      target_vus: qVUs,
+      stages: [
+        { duration_s: Math.round(qDuration * 0.2), target_vus: qVUs, ramp_type: "linear" },
+        { duration_s: Math.round(qDuration * 0.6), target_vus: qVUs },
+        { duration_s: Math.round(qDuration * 0.2), target_vus: 0, ramp_type: "linear" },
+      ],
+      cache_state: qCache,
+    });
+    setShowQuickRun(false);
+  };
+
+  // Correlation chart data
+  const correlationBarData = correlation?.correlations?.map((c: any) => ({
+    name: c.server_metric,
+    r: Math.round(c.pearson_r * 100) / 100,
+    fill: c.direction === "positive" ? "#f87171" : c.direction === "negative" ? "#34d399" : "#6b7280",
+  })) ?? [];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Load Testing</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-semibold text-white">Load Testing</h1>
+          <p className="mt-1 text-sm text-gray-400">
             Concurrent browser load tests with k6, server telemetry correlation, and VU-parameterized gates
           </p>
         </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowQuickRun(!showQuickRun)}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+          >
+            Quick Run
+          </button>
+          <button
+            onClick={() => setShowCreateProfile(!showCreateProfile)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+          >
+            New Profile
+          </button>
+        </div>
       </div>
 
-      {/* Profiles & Quick Launch */}
-      {profiles.length > 0 && (
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-semibold mb-3">Load Profiles</h3>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {profiles.map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between rounded border bg-background px-4 py-3">
-                <div>
-                  <div className="font-medium text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {p.target_vus} VUs · {p.stages?.length ?? 0} stages · {p.cache_state}
-                  </div>
-                </div>
-                <button
-                  onClick={() => createRun.mutate(p.id)}
-                  disabled={createRun.isPending}
-                  className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                >
-                  Launch
-                </button>
-              </div>
-            ))}
+      {/* Quick Run Form */}
+      {showQuickRun && (
+        <div className="rounded-lg border border-indigo-800/50 bg-indigo-900/20 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-indigo-300">Quick Run (Ramp Up → Steady → Ramp Down)</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Virtual Users</label>
+              <input type="number" min={1} max={500} value={qVUs} onChange={(e) => setQVUs(Number(e.target.value))}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Total Duration (s)</label>
+              <input type="number" min={10} max={3600} value={qDuration} onChange={(e) => setQDuration(Number(e.target.value))}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cache State</label>
+              <select value={qCache} onChange={(e) => setQCache(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <StagePreview stages={[
+            { duration_s: Math.round(qDuration * 0.2), target_vus: qVUs },
+            { duration_s: Math.round(qDuration * 0.6), target_vus: qVUs },
+            { duration_s: Math.round(qDuration * 0.2), target_vus: 0 },
+          ]} />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowQuickRun(false)} className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-800">Cancel</button>
+            <button onClick={handleQuickRun} disabled={createRun.isPending} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+              {createRun.isPending ? "Launching..." : "Launch"}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Load Runs */}
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground mb-2">Load Runs</h3>
-        <div className="space-y-2">
-          {loadRuns.map((run: any) => (
-            <div
-              key={run.id}
-              className={`rounded-lg border bg-card p-4 cursor-pointer transition-colors ${
-                selectedRun === run.id ? "ring-2 ring-primary" : "hover:bg-muted/50"
-              }`}
-              onClick={() => setSelectedRun(run.id)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[run.status] ?? ""}`}>
-                    {run.status}
-                  </span>
-                  <span className="text-sm font-medium">{run.engine}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {run.target_vus} VUs · {run.cache_state}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {run.vu_minutes && (
-                    <span className="text-xs text-muted-foreground">
-                      {Number(run.vu_minutes).toFixed(1)} VU-min
-                    </span>
-                  )}
-                  {run.cost_estimate && (
-                    <span className="text-xs font-mono">
-                      ${run.cost_estimate.total_cost?.toFixed(2)}
-                    </span>
-                  )}
-                  {["queued", "warming", "running"].includes(run.status) && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); cancelRun.mutate(run.id); }}
-                      className="rounded border px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(run.created_at).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Saturation warnings */}
-              {run.saturation_warnings?.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {run.saturation_warnings.map((w: any, i: number) => (
-                    <div key={i} className="text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-1">
-                      ⚠ {w.message}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Stages visualization */}
-              {run.stages?.length > 0 && (
-                <div className="mt-2 flex gap-0.5 h-4">
-                  {run.stages.map((stage: any, i: number) => {
-                    const totalDur = run.stages.reduce((s: number, st: any) => s + st.duration_s, 0);
-                    const pct = (stage.duration_s / totalDur) * 100;
-                    const maxVus = Math.max(...run.stages.map((st: any) => st.target_vus), 1);
-                    const intensity = Math.round((stage.target_vus / maxVus) * 100);
-                    return (
-                      <div
-                        key={i}
-                        className="rounded-sm"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: `rgba(79, 70, 229, ${intensity / 100})`,
-                        }}
-                        title={`Stage ${i + 1}: ${stage.target_vus} VUs for ${stage.duration_s}s`}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+      {/* Create Profile Form */}
+      {showCreateProfile && (
+        <div className="rounded-lg border border-gray-700 bg-gray-900/80 p-5 space-y-4">
+          <h3 className="text-sm font-medium text-gray-200">Create Load Profile</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Profile Name</label>
+              <input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="e.g. Baseline 50VU"
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
-          ))}
-
-          {loadRuns.length === 0 && (
-            <div className="text-sm text-muted-foreground text-center py-8">
-              No load runs yet. Create a load profile and launch a run.
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <input value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="Optional"
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Correlation Detail */}
-      {selectedRun && correlation && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold">Load Correlation — {selectedRun.slice(0, 8)}</h3>
-
-          {/* Summary Cards */}
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <div className="rounded border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Peak VUs</div>
-              <div className="text-xl font-bold">{correlation.summary.peak_vus}</div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Target VUs</label>
+              <input type="number" min={1} max={500} value={pVUs} onChange={(e) => setPVUs(Number(e.target.value))}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
-            <div className="rounded border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Duration</div>
-              <div className="text-xl font-bold">{correlation.summary.total_duration_s?.toFixed(0)}s</div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cache State</label>
+              <select value={pCache} onChange={(e) => setPCache(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
-            <div className="rounded border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Peak CPU</div>
-              <div className="text-xl font-bold">{correlation.summary.peak_cpu_percent?.toFixed(1) ?? "—"}%</div>
-            </div>
-            <div className="rounded border bg-card p-3">
-              <div className="text-xs text-muted-foreground">Saturation</div>
-              <div className="text-xl font-bold">
-                {correlation.summary.saturation_point_vus
-                  ? `${correlation.summary.saturation_point_vus} VUs`
-                  : "None"}
-              </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Engine</label>
+              <select value={pEngine} onChange={(e) => setPEngine(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                {ENGINE_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
             </div>
           </div>
 
-          {/* Correlations */}
-          {correlation.correlations?.length > 0 && (
-            <div className="rounded-lg border bg-card p-4">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                VU ↔ Server Metric Correlations
-              </h4>
-              <div className="space-y-2">
-                {correlation.correlations.map((c: any, i: number) => (
-                  <div key={i} className="flex items-center gap-3 text-sm">
-                    <span className="w-40 font-mono text-xs">{c.server_metric}</span>
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          c.direction === "positive" ? "bg-red-400" : c.direction === "negative" ? "bg-green-400" : "bg-gray-400"
-                        }`}
-                        style={{ width: `${Math.abs(c.pearson_r) * 100}%` }}
-                      />
-                    </div>
-                    <span className="font-mono text-xs w-16 text-right">
-                      r={c.pearson_r.toFixed(2)}
+          {/* Stages Editor */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-gray-400">Ramp Stages</label>
+              <button onClick={addStage} className="rounded border border-gray-700 px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-800">+ Add Stage</button>
+            </div>
+            <div className="space-y-2">
+              {pStages.map((stage, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="w-8 text-xs text-gray-600">#{i + 1}</span>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <input type="number" min={1} value={stage.duration_s} onChange={(e) => updateStage(i, "duration_s", e.target.value)}
+                      placeholder="Duration (s)" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                    <input type="number" min={0} value={stage.target_vus} onChange={(e) => updateStage(i, "target_vus", e.target.value)}
+                      placeholder="VUs" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                    <select value={stage.ramp_type ?? "linear"} onChange={(e) => updateStage(i, "ramp_type", e.target.value)}
+                      className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200">
+                      <option value="linear">Linear</option>
+                      <option value="step">Step</option>
+                    </select>
+                  </div>
+                  <button onClick={() => removeStage(i)} className="text-xs text-red-500 hover:text-red-400">Remove</button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3">
+              <StagePreview stages={pStages} />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowCreateProfile(false)} className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-800">Cancel</button>
+            <button onClick={handleCreateProfile} disabled={!pName.trim() || createProfile.isPending}
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+              {createProfile.isPending ? "Creating..." : "Create Profile"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Saved Profiles */}
+      <div>
+        <h2 className="text-sm font-medium text-gray-300 mb-3">Load Profiles</h2>
+        {profiles.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {profiles.map((p: any) => (
+              <div key={p.id} className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-200">{p.name}</p>
+                    {p.description && <p className="text-xs text-gray-500">{p.description}</p>}
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => createRun.mutate({ project_id: projectId, load_profile_id: p.id })}
+                      disabled={createRun.isPending}
+                      className="rounded bg-indigo-600 px-2.5 py-1 text-xs text-white hover:bg-indigo-500 disabled:opacity-50">
+                      Launch
+                    </button>
+                    <button onClick={() => deleteProfile.mutate(p.id)}
+                      className="rounded border border-gray-700 px-2 py-1 text-xs text-red-400 hover:bg-red-900/30">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-3 text-xs text-gray-500">
+                  <span>{p.target_vus} VUs</span>
+                  <span>{p.stages?.length ?? 0} stages</span>
+                  <span>{p.cache_state}</span>
+                  <span>{p.device ?? "desktop"}</span>
+                </div>
+                {p.stages && <StagePreview stages={p.stages} />}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-8 text-center text-gray-500 text-sm">
+            {profilesLoading ? "Loading profiles..." : "No load profiles yet. Create one to define reusable VU ramp configurations."}
+          </div>
+        )}
+      </div>
+
+      {/* Load Runs */}
+      <div>
+        <h2 className="text-sm font-medium text-gray-300 mb-3">Load Runs</h2>
+        {loadRuns.length > 0 ? (
+          <div className="space-y-2">
+            {loadRuns.map((run: any) => (
+              <div
+                key={run.id}
+                onClick={() => setSelectedRun(selectedRun === run.id ? null : run.id)}
+                className={`rounded-lg border p-4 cursor-pointer transition-all ${
+                  selectedRun === run.id
+                    ? "border-indigo-600 bg-indigo-900/10"
+                    : "border-gray-800 bg-gray-900/50 hover:border-gray-700"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${STATUS_STYLES[run.status] ?? "bg-gray-800 text-gray-400"}`}>
+                      {run.status}
+                    </span>
+                    <span className="text-sm font-medium text-gray-200">{run.engine}</span>
+                    <span className="text-xs text-gray-500">
+                      {run.target_vus} VUs · {run.cache_state}
                     </span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-3">
+                    {run.vu_minutes != null && (
+                      <span className="text-xs text-gray-500">{Number(run.vu_minutes).toFixed(1)} VU-min</span>
+                    )}
+                    {run.cost_estimate?.total_cost != null && (
+                      <span className="text-xs font-mono text-gray-400">${run.cost_estimate.total_cost.toFixed(2)}</span>
+                    )}
+                    {["queued", "warming", "running"].includes(run.status) && (
+                      <button
+                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); cancelRun.mutate(run.id); }}
+                        className="rounded border border-red-800/50 px-2 py-0.5 text-xs text-red-400 hover:bg-red-900/30"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <span className="text-xs text-gray-600">{new Date(run.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {run.saturation_warnings?.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {run.saturation_warnings.map((w: any, i: number) => (
+                      <div key={i} className="rounded bg-yellow-900/30 px-2 py-1 text-xs text-yellow-300">
+                        Warning: {w.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {run.stages?.length > 0 && (
+                  <div className="mt-2">
+                    <StagePreview stages={run.stages} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-12 text-center text-gray-500">
+            <p className="text-lg">{runsLoading ? "Loading..." : "No load runs yet"}</p>
+            <p className="mt-2 text-sm">Use Quick Run or launch from a saved profile to start load testing</p>
+          </div>
+        )}
+      </div>
+
+      {/* Correlation Detail Panel */}
+      {selectedRun && correlation && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium text-gray-300">
+            Correlation Analysis — <span className="font-mono text-indigo-400">{selectedRun.slice(0, 8)}</span>
+          </h2>
+
+          {/* Summary cards */}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[
+              { label: "Peak VUs", value: correlation.summary.peak_vus ?? "—" },
+              { label: "Duration", value: correlation.summary.total_duration_s ? `${Math.round(correlation.summary.total_duration_s)}s` : "—" },
+              { label: "Peak CPU", value: correlation.summary.peak_cpu_percent != null ? `${correlation.summary.peak_cpu_percent.toFixed(1)}%` : "—" },
+              { label: "Saturation", value: correlation.summary.saturation_point_vus ? `${correlation.summary.saturation_point_vus} VUs` : "None detected" },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                <p className="text-xs text-gray-500">{label}</p>
+                <p className="mt-1 text-xl font-bold text-gray-100">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Correlation bar chart */}
+          {correlationBarData.length > 0 && (
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500">VU ↔ Server Metric Correlations</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={correlationBarData} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis type="number" domain={[-1, 1]} tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} width={90} />
+                  <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
+                    formatter={(v: number) => [v.toFixed(2), "Pearson r"]} />
+                  <Bar dataKey="r" radius={[0, 4, 4, 0]}>
+                    {correlationBarData.map((entry: any, i: number) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-2 flex gap-4 text-[10px] text-gray-600">
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-400" /> Positive (degrades with load)</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-green-400" /> Negative (improves with load)</span>
               </div>
             </div>
           )}
 
           {/* Server Telemetry Summary */}
           {telemetrySummary && telemetrySummary.length > 0 && (
-            <div className="rounded-lg border bg-card p-4">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Server Resources</h4>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Server Resources</h3>
               <div className="space-y-3">
                 {telemetrySummary.map((host: any) => (
-                  <div key={host.host} className="rounded border bg-background p-3">
-                    <div className="text-sm font-medium">{host.host}</div>
-                    <div className="mt-1 grid grid-cols-4 gap-2 text-xs text-muted-foreground">
-                      <div>CPU peak: {Number(host.peak_cpu_percent).toFixed(1)}%</div>
-                      <div>Memory peak: {Number(host.peak_memory_percent).toFixed(1)}%</div>
-                      <div>Connections: {host.peak_connections}</div>
-                      <div>Event loop: {Number(host.avg_event_loop_lag_ms).toFixed(1)}ms</div>
+                  <div key={host.host} className="rounded-lg border border-gray-800 bg-gray-800/30 p-3">
+                    <p className="text-sm font-medium text-gray-200">{host.host}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {[
+                        { label: "CPU peak", value: `${Number(host.peak_cpu_percent).toFixed(1)}%`, warn: Number(host.peak_cpu_percent) > 80 },
+                        { label: "Memory peak", value: `${Number(host.peak_memory_percent).toFixed(1)}%`, warn: Number(host.peak_memory_percent) > 85 },
+                        { label: "Connections", value: host.peak_connections },
+                        { label: "Event loop", value: `${Number(host.avg_event_loop_lag_ms).toFixed(1)}ms`, warn: Number(host.avg_event_loop_lag_ms) > 100 },
+                      ].map(({ label, value, warn }) => (
+                        <div key={label} className="text-xs">
+                          <span className="text-gray-500">{label}: </span>
+                          <span className={warn ? "text-yellow-400 font-medium" : "text-gray-300"}>{value}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -260,15 +510,15 @@ export default function LoadTestingPage() {
 
           {/* Stage Annotations */}
           {correlation.stages?.length > 0 && (
-            <div className="rounded-lg border bg-card p-4">
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Ramp Stages</h4>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Ramp Stages</h3>
               <div className="space-y-1">
                 {correlation.stages.map((s: any) => (
                   <div key={s.index} className="flex items-center gap-3 text-sm">
-                    <span className="w-8 text-xs text-muted-foreground">#{s.index + 1}</span>
-                    <span className="flex-1">{s.label}</span>
-                    <span className="text-xs text-muted-foreground">{s.duration_s}s</span>
-                    <span className="text-xs font-mono">{s.ramp_type}</span>
+                    <span className="w-8 text-xs text-gray-600 font-mono">#{s.index + 1}</span>
+                    <span className="flex-1 text-gray-300">{s.label}</span>
+                    <span className="text-xs text-gray-500">{s.duration_s}s</span>
+                    <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] font-mono text-gray-400">{s.ramp_type}</span>
                   </div>
                 ))}
               </div>

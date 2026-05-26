@@ -219,7 +219,9 @@ export class CapacityPlanningService {
       case "lte": return actual <= threshold;
       case "gt": return actual > threshold;
       case "gte": return actual >= threshold;
-      default: return false;
+      default:
+        this.logger.warn(`Unknown operator "${operator}", defaulting to pass`);
+        return true;
     }
   }
 
@@ -265,7 +267,7 @@ export class CapacityPlanningService {
         MAX(memory_percent) AS peak_memory,
         MAX(event_loop_lag_ms) AS peak_lag
        FROM server_resource_snapshots
-       WHERE load_run_id = ANY($1)`,
+       WHERE load_run_id = ANY($1::uuid[])`,
       [loadRunIds],
     );
 

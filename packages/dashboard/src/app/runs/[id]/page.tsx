@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { MetricTooltip } from "@/components/metric-tooltip";
 
 const METRIC_LABELS: Record<string, { label: string; unit: string; good: number; poor: number }> = {
   lcp_ms: { label: "LCP", unit: "ms", good: 2500, poor: 4000 },
@@ -105,7 +106,9 @@ export default function RunDetailPage() {
       {/* Lighthouse scores */}
       {run.status === "completed" && (
         <div>
-          <h2 className="mb-3 text-sm font-medium text-gray-300">Lighthouse Scores</h2>
+          <h2 className="mb-3 text-sm font-medium text-gray-300">
+            <MetricTooltip metricKey="Lighthouse Score" className="text-gray-300">Lighthouse Scores</MetricTooltip>
+          </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {Object.entries(SCORE_LABELS).map(([key, label]) => {
               const score = metrics[key] as number | undefined;
@@ -126,12 +129,13 @@ export default function RunDetailPage() {
       {run.status === "completed" && (
         <div>
           <h2 className="mb-3 text-sm font-medium text-gray-300">Web Vitals & Timings</h2>
+          <p className="mb-3 text-xs text-gray-500">Hover over any metric name below for a detailed explanation.</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {Object.entries(METRIC_LABELS).map(([key, meta]) => {
               const value = metrics[key] as number | undefined;
               return (
                 <div key={key} className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-                  <p className="text-xs text-gray-500">{meta.label}</p>
+                  <MetricTooltip metricKey={meta.label} className="text-xs text-gray-500" />
                   <p className={`mt-1 text-lg font-bold ${value != null ? metricColor(value, meta.good, meta.poor) : "text-gray-600"}`}>
                     {value != null ? `${meta.unit === "ms" ? Math.round(value) : value.toFixed(3)}${meta.unit ? ` ${meta.unit}` : ""}` : "—"}
                   </p>
