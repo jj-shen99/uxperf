@@ -110,7 +110,7 @@ export default function ScriptsPage() {
   const { projects, projectId: defaultProjectId } = useProjects();
   const { isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
-  const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}" });
+  const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}", template_id: "" });
   const [showTemplates, setShowTemplates] = useState(false);
 
   // Pre-fill project_id when projects load
@@ -132,7 +132,7 @@ export default function ScriptsPage() {
       qc.invalidateQueries({ queryKey: ["scripts"] });
       setShowCreate(false);
       setShowTemplates(false);
-      setForm({ name: "", project_id: "", canonical_json: "{}" });
+      setForm({ name: "", project_id: "", canonical_json: "{}", template_id: "" });
     },
   });
 
@@ -146,6 +146,7 @@ export default function ScriptsPage() {
       ...form,
       name: tpl.name,
       canonical_json: JSON.stringify(tpl.canonical_json, null, 2),
+      template_id: tpl.name,
     });
     setShowTemplates(false);
     setShowCreate(true);
@@ -210,6 +211,17 @@ export default function ScriptsPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          {form.template_id && (
+            <div className="flex items-center gap-2 rounded-md border border-indigo-800 bg-indigo-900/20 px-3 py-1.5 text-xs text-indigo-300">
+              <span>Template: <strong>{form.template_id}</strong></span>
+              <button
+                onClick={() => setForm({ ...form, template_id: "" })}
+                className="ml-auto text-indigo-400 hover:text-indigo-300"
+              >
+                ✕ Clear
+              </button>
+            </div>
+          )}
           <textarea
             placeholder='Canonical JSON (e.g. {"steps":[]})'
             value={form.canonical_json}
@@ -227,11 +239,13 @@ export default function ScriptsPage() {
             <button
               onClick={() => {
                 try {
-                  createMut.mutate({
-                    ...form,
+                  const payload: any = {
+                    name: form.name,
                     project_id: formProjectId,
                     canonical_json: JSON.parse(form.canonical_json),
-                  });
+                  };
+                  if (form.template_id) payload.template_id = form.template_id;
+                  createMut.mutate(payload);
                 } catch {
                   alert("Invalid JSON");
                 }

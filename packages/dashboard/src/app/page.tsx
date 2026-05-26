@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MetricTooltip, METRIC_GLOSSARY } from "@/components/metric-tooltip";
+import { MetricTooltip } from "@/components/metric-tooltip";
 import { MetricRelationshipDiagram } from "@/components/metric-relationship-diagram";
 
 export default function DashboardPage() {
@@ -54,20 +54,18 @@ export default function DashboardPage() {
       {/* Metric Relationships Diagram */}
       <MetricRelationshipDiagram />
 
-      {/* Metric Glossary */}
+      {/* Knowledge Base Link */}
       <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-        <h2 className="text-sm font-medium text-gray-400 mb-4">Performance Metrics Glossary</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(METRIC_GLOSSARY).map(([key, info]) => (
-            <div key={key} className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm font-semibold text-indigo-400">{info.name}</span>
-                <span className="text-xs text-gray-500">{info.full}</span>
-              </div>
-              <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">{info.description}</p>
-              <p className="mt-1 text-[10px] text-gray-600">Good: {info.good}</p>
-            </div>
-          ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium text-gray-400">Performance Metrics Glossary</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Full glossary, optimization tips, testing methodology, and threshold reference
+            </p>
+          </div>
+          <Link href="/knowledge" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
+            Knowledge Base →
+          </Link>
         </div>
       </div>
 

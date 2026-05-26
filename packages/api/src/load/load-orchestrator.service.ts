@@ -50,14 +50,51 @@ export interface CreateLoadRunDto {
   engine?: string;
 }
 
+/** Maximum time (seconds) a load run may stay in an active state before being auto-failed. */
+const MAX_RUN_DURATION_S = 30 * 60; // 30 minutes
+
 @Injectable()
 export class LoadOrchestratorService {
   private readonly logger = new Logger(LoadOrchestratorService.name);
+  private timeoutTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly loadProfilesService: LoadProfilesService,
   ) {}
+
+  onModuleInit() {
+    // Check for stale runs every 60 seconds
+    this.timeoutTimer = setInterval(() => this.timeoutStaleRuns(), 60_000);
+    this.logger.log(`Run timeout enforcer started (max ${MAX_RUN_DURATION_S}s)`);
+  }
+
+  onModuleDestroy() {
+    if (this.timeoutTimer) clearInterval(this.timeoutTimer);
+  }
+
+  /**
+   * Find load runs that have been in an active state longer than
+   * MAX_RUN_DURATION_S and transition them to "failed".
+   */
+  async timeoutStaleRuns(): Promise<number> {
+    const result = await this.db.query<LoadRunRow>(
+      `UPDATE load_runs
+       SET status = 'failed',
+           finished_at = now(),
+           error = 'Timed out after ' || $1 || ' seconds'
+       WHERE status IN ('queued', 'warming', 'running')
+         AND created_at < now() - ($1 || ' seconds')::interval
+       RETURNING id, status`,
+      [MAX_RUN_DURATION_S],
+    );
+    if (result.rows.length > 0) {
+      this.logger.warn(
+        `Timed out ${result.rows.length} stale load run(s): ${result.rows.map((r) => r.id).join(", ")}`,
+      );
+    }
+    return result.rows.length;
+  }
 
   /**
    * Create and queue a new load run.

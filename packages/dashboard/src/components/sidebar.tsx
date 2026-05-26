@@ -20,6 +20,7 @@ import {
   Users,
   Sliders,
   BarChart2,
+  BookOpen,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -36,6 +37,7 @@ const navGroups: NavGroup[] = [
       { href: "/results", label: "Results", icon: BarChart2 },
       { href: "/trends", label: "Trends", icon: BarChart3 },
       { href: "/reports", label: "Reports", icon: ClipboardList },
+      { href: "/knowledge", label: "Knowledge", icon: BookOpen },
     ],
   },
   {

@@ -8,6 +8,7 @@ export interface CreateScriptDto {
   source_prompt?: string;
   version_ref?: string;
   authoring_mode?: string;
+  template_id?: string;
 }
 
 export interface UpdateScriptDto {
@@ -67,9 +68,9 @@ export class ScriptsService {
         dto.project_id,
         dto.name,
         JSON.stringify(dto.canonical_json),
-        dto.source_prompt ?? null,
+        dto.template_id ? `template:${dto.template_id}` : (dto.source_prompt ?? null),
         dto.version_ref ?? null,
-        dto.authoring_mode ?? "manual",
+        dto.template_id ? "template" : (dto.authoring_mode ?? "manual"),
       ]
     );
     return result.rows[0];

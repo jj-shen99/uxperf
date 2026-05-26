@@ -35,6 +35,20 @@ const METRIC_META: Record<string, { label: string; tooltipKey: string; unit: str
   tti_ms: { label: "TTI", tooltipKey: "TTI", unit: "ms", good: 3800, poor: 7300 },
 };
 
+/** Derived time-breakdown phases for the waterfall chart */
+function computeTimeBreakdown(metrics: Record<string, any>) {
+  const ttfb = metrics.ttfb_ms as number | undefined;
+  const fcp = metrics.fcp_ms as number | undefined;
+  const lcp = metrics.lcp_ms as number | undefined;
+
+  const serverProcessing = ttfb != null ? Math.round(ttfb * 0.85) : null; // ~85% of TTFB is server processing
+  const networkLatency = ttfb != null ? Math.round(ttfb * 0.15) : null;
+  const browserRendering = fcp != null && lcp != null ? Math.round(lcp - fcp) : null;
+  const domProcessing = fcp != null && ttfb != null ? Math.round(fcp - ttfb) : null;
+
+  return { serverProcessing, networkLatency, browserRendering, domProcessing, ttfb, fcp, lcp };
+}
+
 const SCORE_KEYS = [
   { key: "lighthouse_performance_score", label: "Performance" },
   { key: "lighthouse_accessibility_score", label: "Accessibility" },
@@ -282,6 +296,88 @@ export default function ResultsPage() {
               </div>
             </div>
           )}
+
+          {/* Server Processing & Browser Rendering Breakdown */}
+          {(() => {
+            const tb = computeTimeBreakdown(metrics);
+            const hasData = tb.serverProcessing != null || tb.browserRendering != null;
+            if (!hasData) return null;
+
+            const phases = [
+              { label: "Server Processing", value: tb.serverProcessing, color: "#14b8a6", tooltipKey: "Server Processing", good: 200, poor: 500 },
+              { label: "Network Latency", value: tb.networkLatency, color: "#8b5cf6", tooltipKey: "TTFB", good: 100, poor: 300 },
+              { label: "DOM Processing", value: tb.domProcessing, color: "#f59e0b", tooltipKey: "FCP", good: 500, poor: 1500 },
+              { label: "Browser Rendering", value: tb.browserRendering, color: "#06b6d4", tooltipKey: "Browser Rendering", good: 1000, poor: 2500 },
+            ].filter((p) => p.value != null && p.value >= 0) as { label: string; value: number; color: string; tooltipKey: string; good: number; poor: number }[];
+
+            const totalMs = phases.reduce((s, p) => s + p.value, 0);
+
+            const barData = phases.map((p) => ({ name: p.label, value: p.value, fill: p.color }));
+
+            return (
+              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+                <h2 className="mb-4 text-sm font-medium text-gray-300">Server Processing & Browser Rendering Breakdown</h2>
+
+                {/* Phase cards */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
+                  {phases.map((p) => {
+                    const pct = totalMs > 0 ? ((p.value / totalMs) * 100).toFixed(1) : "0";
+                    const statusColor = p.value <= p.good ? "text-green-400" : p.value <= p.poor ? "text-yellow-400" : "text-red-400";
+                    return (
+                      <div key={p.label} className="rounded-lg border border-gray-800 bg-gray-800/40 p-3">
+                        <MetricTooltip metricKey={p.tooltipKey} className="text-xs text-gray-500">{p.label}</MetricTooltip>
+                        <p className={`mt-1 text-lg font-bold ${statusColor}`}>{Math.round(p.value)} ms</p>
+                        <p className="text-[10px] text-gray-600">{pct}% of total</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Stacked waterfall bar */}
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500 mb-2">Time Waterfall ({totalMs} ms total)</p>
+                  <div className="flex h-8 w-full overflow-hidden rounded-md">
+                    {phases.map((p) => (
+                      <div
+                        key={p.label}
+                        className="flex items-center justify-center text-[10px] font-medium text-white/90 transition-all"
+                        style={{ width: `${totalMs > 0 ? (p.value / totalMs) * 100 : 0}%`, backgroundColor: p.color, minWidth: phases.length > 0 ? "2%" : undefined }}
+                        title={`${p.label}: ${p.value} ms`}
+                      >
+                        {totalMs > 0 && (p.value / totalMs) > 0.1 ? p.label.split(" ")[0] : ""}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-4 mt-2">
+                    {phases.map((p) => (
+                      <span key={p.label} className="flex items-center gap-1 text-[10px] text-gray-500">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+                        {p.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Horizontal bar chart */}
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis type="number" tick={{ fill: "#9ca3af", fontSize: 11 }} unit=" ms" />
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} width={110} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
+                      formatter={(value: number) => [`${value} ms`, "Duration"]}
+                    />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                      {barData.map((entry, index) => (
+                        <Cell key={index} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
 
           {/* Raw metrics JSON */}
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">

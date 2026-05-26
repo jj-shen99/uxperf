@@ -95,6 +95,12 @@ export class LoadController {
     return this.orchestrator.estimateCost(body.stages, body.target_vus);
   }
 
+  @Post("runs/timeout-stale")
+  async timeoutStaleRuns() {
+    const count = await this.orchestrator.timeoutStaleRuns();
+    return { timed_out: count };
+  }
+
   // -- Server Telemetry --
 
   @Get("telemetry/:loadRunId")
