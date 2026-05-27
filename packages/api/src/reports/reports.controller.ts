@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body } from "@nestjs/common";
+import { Controller, Get, Post, Delete, Param, Query, Body } from "@nestjs/common";
 import { ReportsService } from "./reports.service";
 
 @Controller("reports")
@@ -32,5 +32,10 @@ export class ReportsController {
   @Get(":id")
   getReport(@Param("id") id: string) {
     return this.reportsService.getReport(id);
+  }
+
+  @Delete(":id")
+  deleteReport(@Param("id") id: string) {
+    return this.reportsService.deleteReport(id);
   }
 }

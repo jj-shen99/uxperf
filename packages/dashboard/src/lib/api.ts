@@ -140,6 +140,7 @@ export const api = {
         `/reports?project_id=${encodeURIComponent(projectId)}${reportType ? `&report_type=${encodeURIComponent(reportType)}` : ""}`,
       ),
     get: (id: string) => request<any>(`/reports/${id}`),
+    delete: (id: string) => request<any>(`/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   authoring: {
     generate: (data: { project_id: string; prompt: string; target_url?: string; device?: string }) =>

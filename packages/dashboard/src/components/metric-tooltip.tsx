@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export const METRIC_GLOSSARY: Record<string, { name: string; full: string; description: string; good: string; unit: string }> = {
   LCP: {
@@ -90,40 +91,72 @@ interface MetricTooltipProps {
 
 export function MetricTooltip({ metricKey, children, className = "" }: MetricTooltipProps) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<"above" | "below">("above");
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
   const info = METRIC_GLOSSARY[metricKey];
   if (!info) return <span className={className}>{children ?? metricKey}</span>;
 
+  const TOOLTIP_W = 320; // w-80
+  const GAP = 8;
+
   const handleEnter = () => {
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPos(rect.top < 200 ? "below" : "above");
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      // Horizontal: try to center, clamp to viewport edges
+      let left = rect.left + rect.width / 2 - TOOLTIP_W / 2;
+      left = Math.max(8, Math.min(left, vw - TOOLTIP_W - 8));
+
+      // Vertical: prefer above; fall below if not enough room
+      let top: number;
+      if (rect.top > 200) {
+        top = rect.top - GAP; // position above — bottom edge of tooltip here (using transform)
+      } else {
+        top = rect.bottom + GAP;
+      }
+
+      setCoords({ top, left });
     }
     setOpen(true);
   };
+
+  const handleLeave = () => {
+    setOpen(false);
+    setCoords(null);
+  };
+
+  // Determine if tooltip renders above or below
+  const above = coords != null && ref.current != null && coords.top <= ref.current.getBoundingClientRect().top;
 
   return (
     <span
       ref={ref}
       className={`relative inline-flex items-center gap-1 ${className}`}
       onMouseEnter={handleEnter}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={handleLeave}
     >
       {children ?? info.name}
       <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-gray-600 text-[9px] text-gray-500 cursor-help">?</span>
-      {open && (
-        <span
-          className={`absolute left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-2xl text-left ${
-            pos === "above" ? "bottom-full mb-2" : "top-full mt-2"
-          }`}
-          style={{ pointerEvents: "none" }}
-        >
-          <span className="block text-xs font-semibold text-indigo-400">{info.full}</span>
-          <span className="mt-1 block text-xs text-gray-300 leading-relaxed whitespace-normal break-words">{info.description}</span>
-          <span className="mt-2 block text-[10px] text-gray-500">Good threshold: {info.good}</span>
-        </span>
-      )}
+      {open && coords && typeof document !== "undefined" &&
+        createPortal(
+          <span
+            className="fixed z-[9999] w-80 rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-2xl text-left"
+            style={{
+              top: coords.top,
+              left: coords.left,
+              transform: above ? "translateY(-100%)" : undefined,
+              pointerEvents: "none",
+            }}
+          >
+            <span className="block text-xs font-semibold text-indigo-400">{info.full}</span>
+            <span className="mt-1 block text-xs text-gray-300 leading-relaxed whitespace-normal break-words">{info.description}</span>
+            <span className="mt-2 block text-[10px] text-gray-500">Good threshold: {info.good}</span>
+          </span>,
+          document.body,
+        )
+      }
     </span>
   );
 }

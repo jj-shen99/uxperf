@@ -215,6 +215,16 @@ export class ReportsService {
     return result.rows[0];
   }
 
+  async deleteReport(id: string): Promise<void> {
+    const result = await this.db.query(
+      "DELETE FROM report_snapshots WHERE id = $1 RETURNING id",
+      [id],
+    );
+    if (result.rows.length === 0) {
+      throw new NotFoundException(`Report ${id} not found`);
+    }
+  }
+
   /**
    * Compute simple trend direction by comparing first-half vs second-half means.
    */

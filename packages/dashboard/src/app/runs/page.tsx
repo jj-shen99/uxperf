@@ -38,6 +38,9 @@ const statusColors: Record<string, string> = {
   failed: "text-red-400",
 };
 
+type SortKey = "status" | "url" | "engine" | "mode" | "lcp" | "lh_score" | "environment" | "created_at";
+type SortDir = "asc" | "desc";
+
 export default function RunsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -45,6 +48,8 @@ export default function RunsPage() {
   const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
   const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging" });
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const formProjectId = form.project_id || defaultProjectId;
 
@@ -59,9 +64,36 @@ export default function RunsPage() {
   });
 
   // Filter runs: admins see all, regular users see only their projects
-  const runs = allRuns?.filter(
+  const filteredRuns = allRuns?.filter(
     (r) => isAdmin || accessibleProjectIds.has(r.project_id)
   );
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "created_at" ? "desc" : "asc");
+    }
+  };
+
+  const sortIndicator = (key: SortKey) =>
+    sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
+  const runs = filteredRuns?.slice().sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortKey) {
+      case "status": return dir * a.status.localeCompare(b.status);
+      case "url": return dir * (a.config?.url ?? "").localeCompare(b.config?.url ?? "");
+      case "engine": return dir * a.engine.localeCompare(b.engine);
+      case "mode": return dir * a.mode.localeCompare(b.mode);
+      case "lcp": return dir * ((a.metrics?.lcp_ms ?? Infinity) - (b.metrics?.lcp_ms ?? Infinity));
+      case "lh_score": return dir * ((a.metrics?.lighthouse_performance_score ?? -1) - (b.metrics?.lighthouse_performance_score ?? -1));
+      case "environment": return dir * a.environment.localeCompare(b.environment);
+      case "created_at": return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      default: return 0;
+    }
+  });
 
   const { data: scripts = [] } = useQuery({
     queryKey: ["scripts-for-run", formProjectId],
@@ -209,14 +241,14 @@ export default function RunsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">URL</th>
-                <th className="px-4 py-3 font-medium">Engine</th>
-                <th className="px-4 py-3 font-medium">Mode</th>
-                <th className="px-4 py-3 font-medium"><MetricTooltip metricKey="LCP" className="text-xs text-gray-500" /></th>
-                <th className="px-4 py-3 font-medium"><MetricTooltip metricKey="Lighthouse Score" className="text-xs text-gray-500"><span>LH Score</span></MetricTooltip></th>
-                <th className="px-4 py-3 font-medium">Env</th>
-                <th className="px-4 py-3 font-medium">Created</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("url")}>URL{sortIndicator("url")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("engine")}>Engine{sortIndicator("engine")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("mode")}>Mode{sortIndicator("mode")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("lcp")}><MetricTooltip metricKey="LCP" className="text-xs text-gray-500" />{sortIndicator("lcp")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("lh_score")}><MetricTooltip metricKey="Lighthouse Score" className="text-xs text-gray-500"><span>LH Score</span></MetricTooltip>{sortIndicator("lh_score")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("environment")}>Env{sortIndicator("environment")}</th>
+                <th className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-300" onClick={() => toggleSort("created_at")}>Created{sortIndicator("created_at")}</th>
                 {isAdmin && <th className="px-4 py-3 font-medium text-right">Actions</th>}
               </tr>
             </thead>

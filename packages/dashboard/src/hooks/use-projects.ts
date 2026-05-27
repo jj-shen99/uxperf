@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api";
 
 /**
@@ -14,13 +14,6 @@ export function useProjects() {
     queryKey: ["projects"],
     queryFn: () => api.projects.list(),
   });
-
-  // Auto-select first project when the list arrives
-  useEffect(() => {
-    if (projects.length > 0 && !projectId) {
-      setProjectId(projects[0].id);
-    }
-  }, [projects, projectId]);
 
   return { projects, projectId, setProjectId, isLoading };
 }

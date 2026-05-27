@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/use-projects";
@@ -14,6 +14,15 @@ const METRICS: Record<string, { label: string; unit: string; good: number; poor:
   tbt_ms: { label: "TBT", unit: "ms", good: 200, poor: 600 },
   lighthouse_performance_score: { label: "Perf Score", unit: "", good: 0.9, poor: 0.5 },
 };
+
+const FORECAST_METRICS = [
+  { value: "lcp_ms", label: "LCP" },
+  { value: "fcp_ms", label: "FCP" },
+  { value: "cls", label: "CLS" },
+  { value: "ttfb_ms", label: "TTFB" },
+  { value: "tbt_ms", label: "TBT" },
+  { value: "lighthouse_performance_score", label: "Perf Score" },
+];
 
 function fmt(v: number, key: string) {
   if (key === "cls") return v.toFixed(3);
@@ -34,9 +43,13 @@ const ratingStyle: Record<string, string> = {
   poor: "bg-red-900/30 text-red-400",
 };
 
+type TabKey = "overview" | "trends" | "pages" | "environments" | "scores" | "recommendations" | "attribution" | "forecast" | "rum" | "crux" | "capacity";
+
 export default function IntelligencePage() {
+  const queryClient = useQueryClient();
   const { projects, projectId, setProjectId } = useProjects();
-  const [tab, setTab] = useState<"overview" | "trends" | "pages" | "environments" | "scores" | "recommendations">("overview");
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [forecastMetric, setForecastMetric] = useState("lcp_ms");
 
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["runs"],
@@ -228,6 +241,48 @@ export default function IntelligencePage() {
     return recs.sort((a, b) => order[a.priority] - order[b.priority]);
   }, [completed, runs, projectId, trendData]);
 
+  // ── API-backed intelligence data (only fetched when project selected) ──
+
+  const { data: attributions = [] } = useQuery({
+    queryKey: ["intelligence-attribution", projectId],
+    queryFn: () => api.intelligence.attribution.list(projectId),
+    enabled: !!projectId,
+  });
+
+  const { data: forecasts = [] } = useQuery({
+    queryKey: ["intelligence-forecast", projectId],
+    queryFn: () => api.intelligence.forecast.list(projectId),
+    enabled: !!projectId,
+  });
+
+  const forecastMut = useMutation({
+    mutationFn: (data: any) => api.intelligence.forecast.generate(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-forecast", projectId] }),
+  });
+
+  const { data: rumSummary = [] } = useQuery({
+    queryKey: ["intelligence-rum", projectId],
+    queryFn: () => api.intelligence.rum.summary(projectId),
+    enabled: !!projectId,
+  });
+
+  const { data: cruxSnapshots = [] } = useQuery({
+    queryKey: ["intelligence-crux", projectId],
+    queryFn: () => api.intelligence.crux.list(projectId),
+    enabled: !!projectId,
+  });
+
+  const { data: capacityReports = [] } = useQuery({
+    queryKey: ["intelligence-capacity", projectId],
+    queryFn: () => api.intelligence.capacity.listReports(projectId),
+    enabled: !!projectId,
+  });
+
+  const capacityMut = useMutation({
+    mutationFn: () => api.intelligence.capacity.generateReport({ project_id: projectId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-capacity", projectId] }),
+  });
+
   const tabs = [
     { key: "overview", label: "Health Overview" },
     { key: "trends", label: "Trends" },
@@ -235,6 +290,11 @@ export default function IntelligencePage() {
     { key: "environments", label: "Environments" },
     { key: "scores", label: "Score Distribution" },
     { key: "recommendations", label: "Recommendations" },
+    { key: "attribution", label: "SHAP Attribution" },
+    { key: "forecast", label: "Forecast" },
+    { key: "rum", label: "RUM" },
+    { key: "crux", label: "CrUX" },
+    { key: "capacity", label: "Capacity" },
   ] as const;
 
   return (
@@ -532,6 +592,277 @@ export default function IntelligencePage() {
                         <span className="text-sm font-medium text-gray-200">{rec.title}</span>
                       </div>
                       <p className="text-xs text-gray-400 leading-relaxed">{rec.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SHAP Attribution Tab */}
+          {tab === "attribution" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-gray-400">SHAP Feature Attribution</h2>
+              </div>
+              {!projectId ? (
+                <p className="text-sm text-gray-500">Select a project to view attribution data.</p>
+              ) : attributions.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+                  <p className="text-sm">No attribution analyses found for this project.</p>
+                  <p className="mt-1 text-xs">Run a SHAP attribution analysis via the API to see feature importance.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {attributions.slice(0, 10).map((a: any, idx: number) => (
+                    <div key={a.id ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-gray-200">
+                          {a.metric ?? a.target_metric ?? "Attribution"} — {a.method ?? "permutation"}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {a.created_at ? new Date(a.created_at).toLocaleString() : ""}
+                        </span>
+                      </div>
+                      {a.features && Array.isArray(a.features) && (
+                        <div className="space-y-1.5">
+                          {(a.features as any[]).slice(0, 8).map((f: any, fi: number) => {
+                            const maxImp = Math.max(...(a.features as any[]).map((ff: any) => Math.abs(ff.importance ?? ff.value ?? 0)));
+                            const imp = Math.abs(f.importance ?? f.value ?? 0);
+                            const pct = maxImp > 0 ? (imp / maxImp) * 100 : 0;
+                            return (
+                              <div key={fi} className="flex items-center gap-3">
+                                <span className="w-32 text-xs text-gray-400 truncate">{f.name ?? f.feature}</span>
+                                <div className="flex-1 h-4 rounded bg-gray-800 overflow-hidden">
+                                  <div className="h-full rounded bg-indigo-500" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="w-16 text-xs text-right font-mono text-gray-300">{imp.toFixed(3)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Forecast Tab */}
+          {tab === "forecast" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-gray-400">Performance Forecast</h2>
+                {projectId && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={forecastMetric}
+                      onChange={(e) => setForecastMetric(e.target.value)}
+                      className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200"
+                    >
+                      {FORECAST_METRICS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => forecastMut.mutate({ project_id: projectId, metric: forecastMetric, horizon_days: 14 })}
+                      disabled={forecastMut.isPending}
+                      className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    >
+                      {forecastMut.isPending ? "Generating…" : "Generate Forecast"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {!projectId ? (
+                <p className="text-sm text-gray-500">Select a project to view forecasts.</p>
+              ) : forecasts.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+                  <p className="text-sm">No forecasts generated yet.</p>
+                  <p className="mt-1 text-xs">Select a metric and click &quot;Generate Forecast&quot; to create a prediction.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {forecasts.slice(0, 10).map((f: any, idx: number) => (
+                    <div key={f.id ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-200">{f.metric ?? "Metric"}</span>
+                        <span className="text-xs text-gray-500">{f.created_at ? new Date(f.created_at).toLocaleString() : ""}</span>
+                      </div>
+                      {f.predictions && Array.isArray(f.predictions) && (
+                        <div className="overflow-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-800">
+                                <th className="text-left py-1 px-2">Date</th>
+                                <th className="text-right py-1 px-2">Predicted</th>
+                                <th className="text-right py-1 px-2">Lower</th>
+                                <th className="text-right py-1 px-2">Upper</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-gray-400">
+                              {(f.predictions as any[]).slice(0, 14).map((p: any, pi: number) => (
+                                <tr key={pi} className="border-b border-gray-800/30">
+                                  <td className="py-1 px-2 text-gray-300">{p.date ?? `Day ${pi + 1}`}</td>
+                                  <td className="py-1 px-2 text-right font-mono">{(p.yhat ?? p.predicted)?.toFixed(1)}</td>
+                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{(p.yhat_lower ?? p.lower)?.toFixed(1)}</td>
+                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{(p.yhat_upper ?? p.upper)?.toFixed(1)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {f.trend && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          Trend: <span className={`font-medium ${f.trend === "improving" ? "text-green-400" : f.trend === "degrading" ? "text-red-400" : "text-gray-400"}`}>{f.trend}</span>
+                          {f.seasonality_strength != null && <> • Seasonality: <span className="text-gray-300">{(f.seasonality_strength * 100).toFixed(0)}%</span></>}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* RUM Tab */}
+          {tab === "rum" && (
+            <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Real-User Monitoring (RUM) Summary</h2>
+              {!projectId ? (
+                <p className="text-sm text-gray-500">Select a project to view RUM data.</p>
+              ) : rumSummary.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+                  <p className="text-sm">No RUM data collected for this project.</p>
+                  <p className="mt-1 text-xs">Integrate the RUM snippet to start collecting real-user metrics.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {rumSummary.map((r: any, idx: number) => (
+                    <div key={r.metric ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <p className="text-xs text-gray-500">{r.metric ?? "Metric"} (p75)</p>
+                      <p className="mt-1 text-2xl font-bold text-white">
+                        {r.p75 != null ? (typeof r.p75 === "number" ? r.p75.toFixed(r.metric === "cls" ? 3 : 0) : r.p75) : "—"}
+                        <span className="ml-1 text-xs font-normal text-gray-500">{r.unit ?? ""}</span>
+                      </p>
+                      <div className="mt-2 flex gap-3 text-[10px] text-gray-500">
+                        {r.p50 != null && <span>p50: {typeof r.p50 === "number" ? r.p50.toFixed(0) : r.p50}</span>}
+                        {r.p95 != null && <span>p95: {typeof r.p95 === "number" ? r.p95.toFixed(0) : r.p95}</span>}
+                        {r.sample_count != null && <span>{r.sample_count} samples</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CrUX Tab */}
+          {tab === "crux" && (
+            <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Chrome UX Report (CrUX) Snapshots</h2>
+              {!projectId ? (
+                <p className="text-sm text-gray-500">Select a project to view CrUX data.</p>
+              ) : cruxSnapshots.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+                  <p className="text-sm">No CrUX snapshots available for this project.</p>
+                  <p className="mt-1 text-xs">Fetch CrUX data via the API to see real-world field metrics.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {cruxSnapshots.slice(0, 10).map((s: any, idx: number) => (
+                    <div key={s.id ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-gray-200 truncate max-w-[400px]">{s.origin ?? s.url ?? "Origin"}</span>
+                        <span className="text-xs text-gray-500">{s.collected_at ? new Date(s.collected_at).toLocaleDateString() : ""}</span>
+                      </div>
+                      {s.metrics && typeof s.metrics === "object" && (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {Object.entries(s.metrics as Record<string, any>).map(([mk, mv]: [string, any]) => (
+                            <div key={mk} className="rounded-md border border-gray-800 bg-gray-800/30 p-2">
+                              <p className="text-[10px] text-gray-500 uppercase">{mk}</p>
+                              <p className="text-sm font-mono font-bold text-gray-200">{typeof mv === "number" ? mv.toFixed(mk === "cls" ? 3 : 0) : JSON.stringify(mv)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Capacity Tab */}
+          {tab === "capacity" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-gray-400">Capacity Planning</h2>
+                {projectId && (
+                  <button
+                    onClick={() => capacityMut.mutate()}
+                    disabled={capacityMut.isPending}
+                    className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {capacityMut.isPending ? "Generating…" : "Generate Report"}
+                  </button>
+                )}
+              </div>
+              {!projectId ? (
+                <p className="text-sm text-gray-500">Select a project to view capacity reports.</p>
+              ) : capacityReports.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+                  <p className="text-sm">No capacity reports generated yet.</p>
+                  <p className="mt-1 text-xs">Click &quot;Generate Report&quot; to create a capacity analysis.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {capacityReports.slice(0, 5).map((c: any, idx: number) => (
+                    <div key={c.id ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-gray-200">Capacity Report</span>
+                        <span className="text-xs text-gray-500">{c.created_at ? new Date(c.created_at).toLocaleString() : ""}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                        {c.max_sustainable_vus != null && (
+                          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                            <p className="text-[10px] text-gray-500">Max Sustainable VUs</p>
+                            <p className="text-lg font-bold text-white">{c.max_sustainable_vus}</p>
+                          </div>
+                        )}
+                        {c.saturation_point != null && (
+                          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                            <p className="text-[10px] text-gray-500">Saturation Point</p>
+                            <p className="text-lg font-bold text-yellow-400">{c.saturation_point} VUs</p>
+                          </div>
+                        )}
+                        {c.headroom_pct != null && (
+                          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                            <p className="text-[10px] text-gray-500">Headroom</p>
+                            <p className={`text-lg font-bold ${c.headroom_pct > 20 ? "text-green-400" : c.headroom_pct > 5 ? "text-yellow-400" : "text-red-400"}`}>
+                              {c.headroom_pct.toFixed(0)}%
+                            </p>
+                          </div>
+                        )}
+                        {c.horizon_days != null && (
+                          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                            <p className="text-[10px] text-gray-500">Horizon</p>
+                            <p className="text-lg font-bold text-gray-200">{c.horizon_days} days</p>
+                          </div>
+                        )}
+                      </div>
+                      {c.recommendations && Array.isArray(c.recommendations) && c.recommendations.length > 0 && (
+                        <div className="mt-3 rounded-md border border-gray-700 bg-gray-800/30 p-3">
+                          <p className="text-[10px] text-gray-500 mb-1">Recommendations</p>
+                          <ul className="space-y-0.5 text-xs text-gray-400">
+                            {(c.recommendations as string[]).map((r, ri) => (
+                              <li key={ri}>• {r}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

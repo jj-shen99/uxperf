@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { MetricRelationshipDiagram } from "@/components/metric-relationship-diagram";
@@ -69,56 +68,6 @@ export default function DashboardPage() {
           <p className="mt-1 text-2xl font-bold text-white">{passRate != null ? `${passRate}%` : "—"}</p>
         </div>
       </div>
-
-      {/* Recent runs table */}
-      {completedRuns.length > 0 && (
-        <div className="rounded-lg border border-gray-800 overflow-hidden">
-          <div className="bg-gray-900 px-4 py-3 border-b border-gray-800">
-            <h2 className="text-sm font-medium text-gray-400">Recent Completed Runs</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800/50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">URL</th>
-                <th className="px-4 py-2 text-right text-xs text-gray-400">LCP</th>
-                <th className="px-4 py-2 text-right text-xs text-gray-400">FCP</th>
-                <th className="px-4 py-2 text-right text-xs text-gray-400">CLS</th>
-                <th className="px-4 py-2 text-right text-xs text-gray-400">TTFB</th>
-                <th className="px-4 py-2 text-right text-xs text-gray-400">Completed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {completedRuns.slice(0, 8).map((r: any) => {
-                const rm = r.metrics ?? {};
-                return (
-                  <tr key={r.id} className="hover:bg-gray-800/30">
-                    <td className="px-4 py-2 text-gray-300 truncate max-w-[200px]">
-                      <Link href={`/results`} className="text-indigo-400 hover:text-indigo-300 hover:underline">
-                        {r.config?.url || r.id.slice(0, 12)}
-                      </Link>
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono text-xs ${rm.lcp_ms != null ? metricColor(rm.lcp_ms, 2500, 4000) : "text-gray-600"}`}>
-                      {rm.lcp_ms != null ? `${Math.round(rm.lcp_ms)} ms` : "—"}
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono text-xs ${rm.fcp_ms != null ? metricColor(rm.fcp_ms, 1800, 3000) : "text-gray-600"}`}>
-                      {rm.fcp_ms != null ? `${Math.round(rm.fcp_ms)} ms` : "—"}
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono text-xs ${rm.cls != null ? metricColor(rm.cls, 0.1, 0.25) : "text-gray-600"}`}>
-                      {rm.cls != null ? (rm.cls as number).toFixed(3) : "—"}
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono text-xs ${rm.ttfb_ms != null ? metricColor(rm.ttfb_ms, 800, 1800) : "text-gray-600"}`}>
-                      {rm.ttfb_ms != null ? `${Math.round(rm.ttfb_ms)} ms` : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs text-gray-500">
-                      {r.finished_at ? new Date(r.finished_at).toLocaleString() : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* KPI Averages (all completed runs) */}
       {completedRuns.length > 0 && (
