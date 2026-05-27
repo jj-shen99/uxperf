@@ -58,23 +58,23 @@ export const api = {
     complete: (id: string, payload: any) => request<any>(`/runs/${id}/complete`, { method: "POST", body: JSON.stringify(payload) }),
   },
   gates: {
-    list: (projectId?: string) => request<any[]>(`/gates${projectId ? `?project_id=${projectId}` : ""}`),
+    list: (projectId?: string) => request<any[]>(`/gates${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
     get: (id: string) => request<any>(`/gates/${id}`),
     create: (data: any) => request<any>("/gates", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/gates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/gates/${id}`, { method: "DELETE" }),
   },
   schedules: {
-    list: (projectId?: string) => request<any[]>(`/schedules${projectId ? `?project_id=${projectId}` : ""}`),
+    list: (projectId?: string) => request<any[]>(`/schedules${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
     get: (id: string) => request<any>(`/schedules/${id}`),
     create: (data: any) => request<any>("/schedules", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/schedules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/schedules/${id}`, { method: "DELETE" }),
   },
   baselines: {
-    list: (projectId?: string) => request<any[]>(`/baselines${projectId ? `?project_id=${projectId}` : ""}`),
+    list: (projectId?: string) => request<any[]>(`/baselines${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
     active: (projectId: string, metric: string) =>
-      request<any>(`/baselines/active?project_id=${projectId}&metric=${metric}`),
+      request<any>(`/baselines/active?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}`),
     compute: (data: { project_id: string; metric: string }) =>
       request<any>("/baselines/compute", { method: "POST", body: JSON.stringify(data) }),
     refresh: (data: { project_id: string }) =>
@@ -84,13 +84,13 @@ export const api = {
   trends: {
     metrics: (projectId: string, metric?: string, limit?: number) =>
       request<any[]>(
-        `/trends?project_id=${projectId}${metric ? `&metric=${metric}` : ""}${limit ? `&limit=${limit}` : ""}`,
+        `/trends?project_id=${encodeURIComponent(projectId)}${metric ? `&metric=${encodeURIComponent(metric)}` : ""}${limit ? `&limit=${limit}` : ""}`,
       ),
-    summary: (projectId: string) => request<any>(`/trends/summary?project_id=${projectId}`),
+    summary: (projectId: string) => request<any>(`/trends/summary?project_id=${encodeURIComponent(projectId)}`),
   },
   notifications: {
     listChannels: (projectId?: string) =>
-      request<any[]>(`/notifications/channels${projectId ? `?project_id=${projectId}` : ""}`),
+      request<any[]>(`/notifications/channels${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
     createChannel: (data: any) =>
       request<any>("/notifications/channels", { method: "POST", body: JSON.stringify(data) }),
     updateChannel: (id: string, data: any) =>
@@ -105,10 +105,13 @@ export const api = {
     summary: (runId: string) => request<any[]>(`/per-request/${runId}/summary`),
   },
   analytics: {
-    anomalies: (projectId?: string, status?: string) =>
-      request<any[]>(
-        `/analytics/anomalies?${projectId ? `project_id=${projectId}&` : ""}${status ? `status=${status}` : ""}`,
-      ),
+    anomalies: (projectId?: string, status?: string) => {
+      const params = new URLSearchParams();
+      if (projectId) params.set("project_id", projectId);
+      if (status) params.set("status", status);
+      const qs = params.toString();
+      return request<any[]>(`/analytics/anomalies${qs ? `?${qs}` : ""}`);
+    },
     getAnomaly: (id: string) => request<any>(`/analytics/anomalies/${id}`),
     updateAnomalyStatus: (id: string, status: string) =>
       request<any>(`/analytics/anomalies/${id}/status`, {
@@ -126,7 +129,7 @@ export const api = {
       request<any[]>("/analytics/detect/change-points", { method: "POST", body: JSON.stringify(data) }),
     attribution: (baselineRunId: string, regressionRunId: string, metric: string) =>
       request<any>(
-        `/analytics/attribution?baseline_run_id=${baselineRunId}&regression_run_id=${regressionRunId}&metric=${metric}`,
+        `/analytics/attribution?baseline_run_id=${encodeURIComponent(baselineRunId)}&regression_run_id=${encodeURIComponent(regressionRunId)}&metric=${encodeURIComponent(metric)}`,
       ),
   },
   reports: {
@@ -134,20 +137,20 @@ export const api = {
       request<any>("/reports/executive", { method: "POST", body: JSON.stringify(data) }),
     list: (projectId: string, reportType?: string) =>
       request<any[]>(
-        `/reports?project_id=${projectId}${reportType ? `&report_type=${reportType}` : ""}`,
+        `/reports?project_id=${encodeURIComponent(projectId)}${reportType ? `&report_type=${encodeURIComponent(reportType)}` : ""}`,
       ),
     get: (id: string) => request<any>(`/reports/${id}`),
   },
   authoring: {
     generate: (data: { project_id: string; prompt: string; target_url?: string; device?: string }) =>
       request<any>("/authoring/generate", { method: "POST", body: JSON.stringify(data) }),
-    logs: (projectId: string) => request<any[]>(`/authoring/logs?project_id=${projectId}`),
-    policy: (projectId: string) => request<any>(`/authoring/policy?project_id=${projectId}`),
+    logs: (projectId: string) => request<any[]>(`/authoring/logs?project_id=${encodeURIComponent(projectId)}`),
+    policy: (projectId: string) => request<any>(`/authoring/policy?project_id=${encodeURIComponent(projectId)}`),
   },
   load: {
     profiles: {
       list: (projectId?: string) =>
-        request<any[]>(`/load/profiles${projectId ? `?project_id=${projectId}` : ""}`),
+        request<any[]>(`/load/profiles${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
       get: (id: string) => request<any>(`/load/profiles/${id}`),
       create: (data: any) => request<any>("/load/profiles", { method: "POST", body: JSON.stringify(data) }),
       update: (id: string, data: any) =>
@@ -155,10 +158,13 @@ export const api = {
       delete: (id: string) => request<void>(`/load/profiles/${id}`, { method: "DELETE" }),
     },
     runs: {
-      list: (projectId?: string, status?: string) =>
-        request<any[]>(
-          `/load/runs?${projectId ? `project_id=${projectId}&` : ""}${status ? `status=${status}` : ""}`,
-        ),
+      list: (projectId?: string, status?: string) => {
+        const params = new URLSearchParams();
+        if (projectId) params.set("project_id", projectId);
+        if (status) params.set("status", status);
+        const qs = params.toString();
+        return request<any[]>(`/load/runs${qs ? `?${qs}` : ""}`);
+      },
       get: (id: string) => request<any>(`/load/runs/${id}`),
       create: (data: any) => request<any>("/load/runs", { method: "POST", body: JSON.stringify(data) }),
       updateStatus: (id: string, status: string, extras?: any) =>
@@ -173,7 +179,7 @@ export const api = {
     },
     telemetry: {
       snapshots: (loadRunId: string, host?: string) =>
-        request<any[]>(`/load/telemetry/${loadRunId}${host ? `?host=${host}` : ""}`),
+        request<any[]>(`/load/telemetry/${encodeURIComponent(loadRunId)}${host ? `?host=${encodeURIComponent(host)}` : ""}`),
       summary: (loadRunId: string) => request<any[]>(`/load/telemetry/${loadRunId}/summary`),
     },
     correlation: (loadRunId: string) => request<any>(`/load/correlation/${loadRunId}`),
@@ -183,51 +189,51 @@ export const api = {
   intelligence: {
     attribution: {
       compute: (data: any) => request<any>("/intelligence/attribution", { method: "POST", body: JSON.stringify(data) }),
-      list: (projectId: string) => request<any[]>(`/intelligence/attribution?project_id=${projectId}`),
+      list: (projectId: string) => request<any[]>(`/intelligence/attribution?project_id=${encodeURIComponent(projectId)}`),
       get: (id: string) => request<any>(`/intelligence/attribution/${id}`),
     },
     forecast: {
       generate: (data: any) => request<any>("/intelligence/forecast", { method: "POST", body: JSON.stringify(data) }),
       list: (projectId: string, metric?: string) =>
-        request<any[]>(`/intelligence/forecast?project_id=${projectId}${metric ? `&metric=${metric}` : ""}`),
+        request<any[]>(`/intelligence/forecast?project_id=${encodeURIComponent(projectId)}${metric ? `&metric=${encodeURIComponent(metric)}` : ""}`),
     },
     rum: {
       ingest: (data: any) => request<any>("/intelligence/rum/ingest", { method: "POST", body: JSON.stringify(data) }),
       ingestBatch: (events: any[]) =>
         request<any>("/intelligence/rum/ingest/batch", { method: "POST", body: JSON.stringify({ events }) }),
       summary: (projectId: string, days?: number, origin?: string) =>
-        request<any[]>(`/intelligence/rum/summary?project_id=${projectId}${days ? `&days=${days}` : ""}${origin ? `&origin=${origin}` : ""}`),
+        request<any[]>(`/intelligence/rum/summary?project_id=${encodeURIComponent(projectId)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
       trend: (projectId: string, metric: string, days?: number) =>
-        request<any[]>(`/intelligence/rum/trend?project_id=${projectId}&metric=${metric}${days ? `&days=${days}` : ""}`),
+        request<any[]>(`/intelligence/rum/trend?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}${days ? `&days=${days}` : ""}`),
     },
     crux: {
       fetch: (data: any) => request<any>("/intelligence/crux/fetch", { method: "POST", body: JSON.stringify(data) }),
       list: (projectId: string, origin?: string) =>
-        request<any[]>(`/intelligence/crux?project_id=${projectId}${origin ? `&origin=${origin}` : ""}`),
+        request<any[]>(`/intelligence/crux?project_id=${encodeURIComponent(projectId)}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
     },
     capacity: {
       generateReport: (data: { project_id: string; horizon_days?: number }) =>
         request<any>("/intelligence/capacity/report", { method: "POST", body: JSON.stringify(data) }),
-      listReports: (projectId: string) => request<any[]>(`/intelligence/capacity/reports?project_id=${projectId}`),
+      listReports: (projectId: string) => request<any[]>(`/intelligence/capacity/reports?project_id=${encodeURIComponent(projectId)}`),
       evaluateResourceFloor: (data: any) =>
         request<any>("/intelligence/capacity/resource-floor", { method: "POST", body: JSON.stringify(data) }),
     },
     audit: {
       query: (params: Record<string, string>) => {
-        const qs = Object.entries(params).map(([k, v]) => `${k}=${v}`).join("&");
-        return request<any[]>(`/intelligence/audit?${qs}`);
+        const qs = new URLSearchParams(params).toString();
+        return request<any[]>(`/intelligence/audit${qs ? `?${qs}` : ""}`);
       },
-      summary: (projectId: string) => request<any[]>(`/intelligence/audit/summary?project_id=${projectId}`),
+      summary: (projectId: string) => request<any[]>(`/intelligence/audit/summary?project_id=${encodeURIComponent(projectId)}`),
     },
     apiKeys: {
       create: (data: any) => request<any>("/intelligence/api-keys", { method: "POST", body: JSON.stringify(data) }),
-      list: (projectId: string) => request<any[]>(`/intelligence/api-keys?project_id=${projectId}`),
+      list: (projectId: string) => request<any[]>(`/intelligence/api-keys?project_id=${encodeURIComponent(projectId)}`),
       revoke: (id: string) => request<void>(`/intelligence/api-keys/${id}/revoke`, { method: "POST" }),
       delete: (id: string) => request<void>(`/intelligence/api-keys/${id}`, { method: "DELETE" }),
     },
     geo: {
       locations: (provider?: string) =>
-        request<any[]>(`/intelligence/geo/locations${provider ? `?provider=${provider}` : ""}`),
+        request<any[]>(`/intelligence/geo/locations${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`),
       dispatch: (data: any) =>
         request<any>("/intelligence/geo/dispatch", { method: "POST", body: JSON.stringify(data) }),
     },

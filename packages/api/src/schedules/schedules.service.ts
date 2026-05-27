@@ -35,28 +35,61 @@ export interface ScheduleRow {
 }
 
 /**
+ * Parse a single cron field into a Set of allowed values.
+ * Supports: * (wildcard), N (number), N-M (range), N,M,... (list),
+ *           *\/N (step from 0), N-M/S (range with step).
+ */
+export function parseCronField(field: string, min: number, max: number): Set<number> | null {
+  if (field === "*") return null; // null = any value
+
+  const allowed = new Set<number>();
+
+  for (const part of field.split(",")) {
+    const trimmed = part.trim();
+
+    // */N — step from min
+    const stepMatch = trimmed.match(/^\*\/(\d+)$/);
+    if (stepMatch) {
+      const step = parseInt(stepMatch[1], 10);
+      if (step < 1) return null;
+      for (let v = min; v <= max; v += step) allowed.add(v);
+      continue;
+    }
+
+    // N-M or N-M/S — range with optional step
+    const rangeMatch = trimmed.match(/^(\d+)-(\d+)(?:\/(\d+))?$/);
+    if (rangeMatch) {
+      const lo = parseInt(rangeMatch[1], 10);
+      const hi = parseInt(rangeMatch[2], 10);
+      const step = rangeMatch[3] ? parseInt(rangeMatch[3], 10) : 1;
+      if (lo < min || hi > max || lo > hi || step < 1) return null;
+      for (let v = lo; v <= hi; v += step) allowed.add(v);
+      continue;
+    }
+
+    // plain number
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n < min || n > max) return null;
+    allowed.add(n);
+  }
+
+  return allowed.size > 0 ? allowed : null;
+}
+
+/**
  * Parse a 5-field cron expression and compute the next occurrence after `after`.
  * Supports: minute, hour, day-of-month, month, day-of-week.
- * Wildcards (*) and simple numeric values only (no ranges/lists in this MVP).
+ * Full syntax: *, N, N-M, N,M,..., *\/N, N-M/S.
  */
 export function computeNextRun(cron: string, after: Date): Date {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) throw new Error(`Invalid cron expression: ${cron}`);
 
-  const [minField, hourField, domField, monField, dowField] = parts;
-
-  const parseField = (field: string, max: number): number | null => {
-    if (field === "*") return null;
-    const n = parseInt(field, 10);
-    if (isNaN(n) || n < 0 || n > max) return null;
-    return n;
-  };
-
-  const minute = parseField(minField, 59);
-  const hour = parseField(hourField, 23);
-  const dom = parseField(domField, 31);
-  const month = parseField(monField, 12);
-  const dow = parseField(dowField, 6);
+  const minutes = parseCronField(parts[0], 0, 59);
+  const hours   = parseCronField(parts[1], 0, 23);
+  const doms    = parseCronField(parts[2], 1, 31);
+  const months  = parseCronField(parts[3], 1, 12);
+  const dows    = parseCronField(parts[4], 0, 6);
 
   // Simple forward search from `after`, checking each minute for up to 366 days
   const candidate = new Date(after);
@@ -66,11 +99,11 @@ export function computeNextRun(cron: string, after: Date): Date {
   const maxIterations = 366 * 24 * 60; // 366 days of minutes
   for (let i = 0; i < maxIterations; i++) {
     const matches =
-      (minute === null || candidate.getUTCMinutes() === minute) &&
-      (hour === null || candidate.getUTCHours() === hour) &&
-      (dom === null || candidate.getUTCDate() === dom) &&
-      (month === null || candidate.getUTCMonth() + 1 === month) &&
-      (dow === null || candidate.getUTCDay() === dow);
+      (minutes === null || minutes.has(candidate.getUTCMinutes())) &&
+      (hours === null   || hours.has(candidate.getUTCHours())) &&
+      (doms === null    || doms.has(candidate.getUTCDate())) &&
+      (months === null  || months.has(candidate.getUTCMonth() + 1)) &&
+      (dows === null    || dows.has(candidate.getUTCDay()));
 
     if (matches) return candidate;
     candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);

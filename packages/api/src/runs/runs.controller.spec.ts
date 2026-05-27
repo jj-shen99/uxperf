@@ -3,6 +3,7 @@ import { RunsController } from "./runs.controller";
 import { RunsService, RunRow } from "./runs.service";
 import { RunOrchestratorService } from "./run-orchestrator.service";
 import { DatabaseService } from "../database/database.service";
+import { RbacService } from "../rbac/rbac.service";
 
 const sampleRun: RunRow = {
   id: "run-1",
@@ -33,6 +34,18 @@ const mockOrchestrator = {
   completeRun: jest.fn(),
   getGateResultsForRun: jest.fn(),
 };
+const mockRbac = {
+  findUserById: jest.fn().mockResolvedValue({ id: "u-1", role: "viewer" }),
+  findAllUsers: jest.fn(),
+  findUserByEmail: jest.fn(),
+  createUser: jest.fn(),
+  updateUser: jest.fn(),
+  deleteUser: jest.fn(),
+  getProjectMembers: jest.fn(),
+  addProjectMember: jest.fn(),
+  removeProjectMember: jest.fn(),
+  checkProjectAccess: jest.fn(),
+};
 
 describe("RunsController", () => {
   let controller: RunsController;
@@ -45,6 +58,7 @@ describe("RunsController", () => {
         RunsService,
         { provide: DatabaseService, useValue: mockDb },
         { provide: RunOrchestratorService, useValue: mockOrchestrator },
+        { provide: RbacService, useValue: mockRbac },
       ],
     }).compile();
 
@@ -69,6 +83,37 @@ describe("RunsController", () => {
         expect.stringContaining("WHERE project_id"),
         ["proj-1"]
       );
+    });
+  });
+
+  // ==========================================================
+  // Admin role server-validation (Security regression)
+  // ==========================================================
+
+  describe("findAll — admin role server-validation", () => {
+    it("looks up user role from DB instead of trusting is_admin param (security)", async () => {
+      mockRbac.findUserById.mockResolvedValueOnce({ id: "u-1", role: "viewer" });
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      // Pass is_admin=true but user is viewer — should still filter by user_id
+      await controller.findAll("proj-1", "u-1", "true");
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).toContain("user_id = $");
+    });
+
+    it("skips user_id filter when user is actually admin", async () => {
+      mockRbac.findUserById.mockResolvedValueOnce({ id: "u-admin", role: "admin" });
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await controller.findAll(undefined, "u-admin");
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).not.toContain("user_id");
+    });
+
+    it("treats unknown user_id as non-admin", async () => {
+      mockRbac.findUserById.mockRejectedValueOnce(new Error("Not found"));
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await controller.findAll(undefined, "u-unknown");
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).toContain("user_id = $");
     });
   });
 

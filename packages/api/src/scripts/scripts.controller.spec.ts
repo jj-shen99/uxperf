@@ -2,6 +2,7 @@ import { Test } from "@nestjs/testing";
 import { ScriptsController } from "./scripts.controller";
 import { ScriptsService } from "./scripts.service";
 import { ScriptVersionsService } from "./script-versions.service";
+import { RbacService } from "../rbac/rbac.service";
 
 describe("ScriptsController", () => {
   let controller: ScriptsController;
@@ -17,6 +18,9 @@ describe("ScriptsController", () => {
     getVersion: jest.fn().mockResolvedValue({ version: 1 }),
     createVersion: jest.fn().mockResolvedValue({ version: 2 }),
   };
+  const mockRbac = {
+    findUserById: jest.fn().mockResolvedValue({ id: "u-1", role: "viewer" }),
+  };
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -24,6 +28,7 @@ describe("ScriptsController", () => {
       providers: [
         { provide: ScriptsService, useValue: mockScripts },
         { provide: ScriptVersionsService, useValue: mockVersions },
+        { provide: RbacService, useValue: mockRbac },
       ],
     }).compile();
     controller = module.get(ScriptsController);
@@ -32,6 +37,7 @@ describe("ScriptsController", () => {
   it("lists scripts", async () => {
     const result = await controller.findAll("p-1");
     expect(result).toHaveLength(1);
+    // userId is undefined, so isAdmin stays false (no RBAC lookup needed)
     expect(mockScripts.findAll).toHaveBeenCalledWith("p-1", undefined, false);
   });
 

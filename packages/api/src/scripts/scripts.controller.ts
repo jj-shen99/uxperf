@@ -14,21 +14,33 @@ import {
   UpdateScriptDto,
 } from "./scripts.service";
 import { ScriptVersionsService, CreateVersionDto } from "./script-versions.service";
+import { RbacService } from "../rbac/rbac.service";
 
 @Controller("scripts")
 export class ScriptsController {
   constructor(
     private readonly scriptsService: ScriptsService,
     private readonly versionsService: ScriptVersionsService,
+    private readonly rbacService: RbacService,
   ) {}
 
   @Get()
-  findAll(
+  async findAll(
     @Query("project_id") projectId?: string,
     @Query("user_id") userId?: string,
-    @Query("is_admin") isAdmin?: string,
+    @Query("is_admin") _isAdmin?: string,
   ) {
-    return this.scriptsService.findAll(projectId, userId, isAdmin === "true");
+    // Server-validate admin role instead of trusting client query param
+    let isAdmin = false;
+    if (userId) {
+      try {
+        const user = await this.rbacService.findUserById(userId);
+        isAdmin = user.role === "admin";
+      } catch {
+        // User not found — treat as non-admin
+      }
+    }
+    return this.scriptsService.findAll(projectId, userId, isAdmin);
   }
 
   @Get(":id")

@@ -1,11 +1,86 @@
 import { Test } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
-import { SchedulesService, computeNextRun } from "./schedules.service";
+import { SchedulesService, computeNextRun, parseCronField } from "./schedules.service";
 import { DatabaseService } from "../database/database.service";
 
 // ============================================================
 // Schedules Service — Unit Tests
 // Techniques: EP, boundary, decision tree, structural, MC/DC
+// ============================================================
+
+// ============================================================
+// parseCronField — Unit Tests
+// ============================================================
+
+describe("parseCronField", () => {
+  it("returns null for wildcard *", () => {
+    expect(parseCronField("*", 0, 59)).toBeNull();
+  });
+
+  it("parses plain number", () => {
+    const result = parseCronField("5", 0, 59);
+    expect(result).toEqual(new Set([5]));
+  });
+
+  it("rejects out-of-range number", () => {
+    expect(parseCronField("60", 0, 59)).toBeNull();
+  });
+
+  it("parses */N step syntax", () => {
+    const result = parseCronField("*/6", 0, 23);
+    expect(result).toEqual(new Set([0, 6, 12, 18]));
+  });
+
+  it("parses */15 for minutes", () => {
+    const result = parseCronField("*/15", 0, 59);
+    expect(result).toEqual(new Set([0, 15, 30, 45]));
+  });
+
+  it("parses range N-M", () => {
+    const result = parseCronField("1-5", 0, 6);
+    expect(result).toEqual(new Set([1, 2, 3, 4, 5]));
+  });
+
+  it("parses range with step N-M/S", () => {
+    const result = parseCronField("0-10/3", 0, 59);
+    expect(result).toEqual(new Set([0, 3, 6, 9]));
+  });
+
+  it("parses comma-separated list", () => {
+    const result = parseCronField("1,3,5", 0, 6);
+    expect(result).toEqual(new Set([1, 3, 5]));
+  });
+
+  it("rejects invalid range (lo > hi)", () => {
+    expect(parseCronField("5-2", 0, 6)).toBeNull();
+  });
+
+  it("rejects range exceeding max", () => {
+    expect(parseCronField("0-7", 0, 6)).toBeNull();
+  });
+
+  it("rejects step of 0", () => {
+    expect(parseCronField("*/0", 0, 59)).toBeNull();
+  });
+
+  it("parses single-value range (1-1)", () => {
+    const result = parseCronField("1-1", 1, 31);
+    expect(result).toEqual(new Set([1]));
+  });
+
+  it("handles min boundary for day-of-month", () => {
+    const result = parseCronField("1", 1, 31);
+    expect(result).toEqual(new Set([1]));
+  });
+
+  it("handles max boundary for day-of-month", () => {
+    const result = parseCronField("31", 1, 31);
+    expect(result).toEqual(new Set([31]));
+  });
+});
+
+// ============================================================
+// computeNextRun — Unit Tests
 // ============================================================
 
 describe("computeNextRun", () => {
@@ -64,6 +139,65 @@ describe("computeNextRun", () => {
     const after = new Date("2024-06-15T23:59:00Z");
     const next = computeNextRun("* * * * *", after);
     expect(next.getTime()).toBeGreaterThan(after.getTime());
+  });
+
+  // ============================================================
+  // Regression: */N step syntax was previously treated as wildcard
+  // ============================================================
+
+  it("*/6 hour runs at 0,6,12,18 — NOT every hour (regression: step syntax)", () => {
+    const after = new Date("2024-01-15T01:00:00Z");
+    const next = computeNextRun("0 */6 * * *", after);
+    expect(next.getUTCHours()).toBe(6);
+    expect(next.getUTCMinutes()).toBe(0);
+  });
+
+  it("*/2 hour runs at even hours (regression: step syntax)", () => {
+    const after = new Date("2024-01-15T03:00:00Z");
+    const next = computeNextRun("0 */2 * * *", after);
+    expect(next.getUTCHours()).toBe(4);
+    expect(next.getUTCMinutes()).toBe(0);
+  });
+
+  it("*/30 minute runs at 0 and 30 (regression: step syntax)", () => {
+    const after = new Date("2024-01-15T10:01:00Z");
+    const next = computeNextRun("*/30 * * * *", after);
+    expect(next.getUTCMinutes()).toBe(30);
+  });
+
+  it("*/15 minute generates 4 occurrences per hour", () => {
+    const after = new Date("2024-01-15T10:00:00Z");
+    const next = computeNextRun("*/15 * * * *", after);
+    expect(next.getUTCMinutes()).toBe(15);
+  });
+
+  // Range syntax
+  it("weekday range 1-5 matches Monday through Friday", () => {
+    // 2024-01-13 is Saturday
+    const after = new Date("2024-01-13T00:00:00Z");
+    const next = computeNextRun("0 9 * * 1-5", after);
+    expect(next.getUTCDay()).toBeGreaterThanOrEqual(1);
+    expect(next.getUTCDay()).toBeLessThanOrEqual(5);
+    expect(next.getUTCHours()).toBe(9);
+  });
+
+  // Comma-separated list
+  it("comma list in hour field", () => {
+    const after = new Date("2024-01-15T10:00:00Z");
+    const next = computeNextRun("0 6,12,18 * * *", after);
+    expect(next.getUTCHours()).toBe(12);
+  });
+
+  // Default form value
+  it("default schedule form value 0 */6 * * * is correct", () => {
+    const after = new Date("2024-01-15T00:00:00Z");
+    const runs: Date[] = [];
+    let cursor = after;
+    for (let i = 0; i < 4; i++) {
+      cursor = computeNextRun("0 */6 * * *", cursor);
+      runs.push(cursor);
+    }
+    expect(runs.map((d) => d.getUTCHours())).toEqual([6, 12, 18, 0]);
   });
 });
 
