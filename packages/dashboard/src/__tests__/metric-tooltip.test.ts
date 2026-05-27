@@ -6,7 +6,7 @@
 
 const EXPECTED_METRIC_KEYS = [
   "LCP", "FCP", "CLS", "TTFB", "INP", "TBT", "TTI", "SI", "Lighthouse Score",
-  "Server Processing", "Browser Rendering",
+  "Server Processing", "Content Rendering",
 ];
 
 const TIMING_KEYS = ["LCP", "FCP", "TTFB", "INP", "TBT", "TTI", "SI"];
@@ -22,11 +22,11 @@ const METRIC_FULL_NAMES: Record<string, string> = {
   SI: "Speed Index",
   "Lighthouse Score": "Lighthouse Performance Score",
   "Server Processing": "Server Processing Time",
-  "Browser Rendering": "Browser Rendering Time",
+  "Content Rendering": "Content Rendering (FCP \u2192 LCP)",
 };
 
 describe("Metric Glossary expectations", () => {
-  it("framework tracks all 11 metrics (9 standard + server processing + browser rendering)", () => {
+  it("framework tracks all 11 metrics (9 standard + server processing + content rendering)", () => {
     expect(EXPECTED_METRIC_KEYS).toHaveLength(11);
   });
 

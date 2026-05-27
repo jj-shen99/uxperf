@@ -13,5 +13,5 @@ COPY packages/shared packages/shared
 COPY packages/worker packages/worker
 COPY tsconfig.base.json ./
 
-# Default: run against a URL passed as argument
-ENTRYPOINT ["npx", "tsx", "packages/worker/src/cli.ts"]
+# Default: poll loop mode (claims and runs queued tests)
+CMD ["npx", "tsx", "packages/worker/src/poll-loop.ts"]

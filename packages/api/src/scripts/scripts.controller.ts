@@ -23,8 +23,12 @@ export class ScriptsController {
   ) {}
 
   @Get()
-  findAll(@Query("project_id") projectId?: string) {
-    return this.scriptsService.findAll(projectId);
+  findAll(
+    @Query("project_id") projectId?: string,
+    @Query("user_id") userId?: string,
+    @Query("is_admin") isAdmin?: string,
+  ) {
+    return this.scriptsService.findAll(projectId, userId, isAdmin === "true");
   }
 
   @Get(":id")

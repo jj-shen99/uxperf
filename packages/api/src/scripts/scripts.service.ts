@@ -9,6 +9,7 @@ export interface CreateScriptDto {
   version_ref?: string;
   authoring_mode?: string;
   template_id?: string;
+  user_id?: string;
 }
 
 export interface UpdateScriptDto {
@@ -21,6 +22,7 @@ export interface UpdateScriptDto {
 export interface ScriptRow {
   id: string;
   project_id: string;
+  user_id: string | null;
   name: string;
   canonical_json: Record<string, unknown>;
   source_prompt: string | null;
@@ -34,16 +36,24 @@ export interface ScriptRow {
 export class ScriptsService {
   constructor(private db: DatabaseService) {}
 
-  async findAll(projectId?: string): Promise<ScriptRow[]> {
+  async findAll(projectId?: string, userId?: string, isAdmin?: boolean): Promise<ScriptRow[]> {
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
     if (projectId) {
-      const result = await this.db.query<ScriptRow>(
-        "SELECT * FROM scripts WHERE project_id = $1 ORDER BY updated_at DESC",
-        [projectId]
-      );
-      return result.rows;
+      conditions.push(`project_id = $${idx++}`);
+      values.push(projectId);
     }
+    if (userId && !isAdmin) {
+      conditions.push(`user_id = $${idx++}`);
+      values.push(userId);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.db.query<ScriptRow>(
-      "SELECT * FROM scripts ORDER BY updated_at DESC LIMIT 100"
+      `SELECT * FROM scripts ${where} ORDER BY updated_at DESC LIMIT 100`,
+      values
     );
     return result.rows;
   }
@@ -61,8 +71,8 @@ export class ScriptsService {
 
   async create(dto: CreateScriptDto): Promise<ScriptRow> {
     const result = await this.db.query<ScriptRow>(
-      `INSERT INTO scripts (project_id, name, canonical_json, source_prompt, version_ref, authoring_mode)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO scripts (project_id, name, canonical_json, source_prompt, version_ref, authoring_mode, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         dto.project_id,
@@ -71,6 +81,7 @@ export class ScriptsService {
         dto.template_id ? `template:${dto.template_id}` : (dto.source_prompt ?? null),
         dto.version_ref ?? null,
         dto.template_id ? "template" : (dto.authoring_mode ?? "manual"),
+        dto.user_id ?? null,
       ]
     );
     return result.rows[0];

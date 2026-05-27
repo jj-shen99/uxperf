@@ -15,5 +15,5 @@ COPY tsconfig.base.json ./
 
 RUN npm run build --workspace=packages/api
 
-EXPOSE 3001
-CMD ["node", "packages/api/dist/main.js"]
+EXPOSE 4000
+CMD ["sh", "-c", "node packages/db/migrate.mjs && node packages/db/seed.mjs && node packages/api/dist/main.js"]

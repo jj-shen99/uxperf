@@ -73,10 +73,10 @@ export const METRIC_GLOSSARY: Record<string, { name: string; full: string; descr
     good: "≤ 200 ms",
     unit: "ms",
   },
-  "Browser Rendering": {
-    name: "Browser Rendering",
-    full: "Browser Rendering Time",
-    description: "The time the browser spends parsing HTML, constructing the DOM and CSSOM, running JavaScript, building the render tree, computing layout, and painting pixels to the screen. It accounts for the gap between receiving content (after TTFB/FCP) and fully displaying it (LCP). Render-blocking resources, large DOM trees, and expensive JS execution increase this time.",
+  "Content Rendering": {
+    name: "Content Rendering",
+    full: "Content Rendering (FCP → LCP)",
+    description: "The time between first paint and when the largest content element finishes rendering. After FCP, the browser continues loading images, web fonts, and deferred resources. Render-blocking resources, large images, and expensive JS execution widen this gap.",
     good: "≤ 1,000 ms",
     unit: "ms",
   },

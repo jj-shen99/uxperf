@@ -133,12 +133,66 @@ export default function KnowledgePage() {
       </div>
 
       {/* Metric Relationship Diagram */}
+      <MetricRelationshipDiagram />
+
+      {/* Network & Server Fundamentals */}
       <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-        <h2 className="text-sm font-medium text-gray-400 mb-4">Metric Relationships & Timeline</h2>
+        <h2 className="text-sm font-medium text-gray-400 mb-2">Network & Server Fundamentals</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Interactive diagram showing how each metric maps to the page-load timeline. Hover over any metric to highlight its dependencies.
+          Before a browser can render anything it must complete several network handshakes. These phases compose <strong className="text-indigo-400">TTFB (Time to First Byte)</strong>.
         </p>
-        <MetricRelationshipDiagram />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-teal-300">DNS Lookup</h3>
+            <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">
+              The browser resolves the domain name (e.g. <code className="text-teal-400">www.example.com</code>) to an IP address by querying DNS servers. A cold lookup may take 20-120 ms; cached lookups are near-instant.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-gray-500">
+              <li className="flex gap-2"><span className="text-teal-500">-</span>Minimize third-party domains to reduce extra DNS lookups</li>
+              <li className="flex gap-2"><span className="text-teal-500">-</span>Use <code className="text-gray-400">&lt;link rel=&quot;dns-prefetch&quot;&gt;</code> for known origins</li>
+              <li className="flex gap-2"><span className="text-teal-500">-</span>Typical budget: &lt; 50 ms</li>
+            </ul>
+          </div>
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-teal-400">TCP Connection</h3>
+            <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">
+              A three-way handshake (<code className="text-teal-400">SYN → SYN-ACK → ACK</code>) establishes a reliable connection. This adds one round-trip time (RTT) of latency, typically 20-100 ms depending on geographic distance.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-gray-500">
+              <li className="flex gap-2"><span className="text-teal-500">-</span>Use a CDN to reduce RTT by placing servers closer to users</li>
+              <li className="flex gap-2"><span className="text-teal-500">-</span>Enable <code className="text-gray-400">TCP Fast Open</code> where supported</li>
+              <li className="flex gap-2"><span className="text-teal-500">-</span>HTTP/2 and HTTP/3 multiplex requests over a single connection</li>
+            </ul>
+          </div>
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-cyan-400">TLS Negotiation</h3>
+            <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">
+              For HTTPS, a TLS handshake follows TCP. The client and server exchange certificates, agree on a cipher suite, and derive session keys. TLS 1.2 requires 2 RTTs; TLS 1.3 needs only 1 RTT (0-RTT for resumption).
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-gray-500">
+              <li className="flex gap-2"><span className="text-cyan-500">-</span>Upgrade to TLS 1.3 for faster handshakes</li>
+              <li className="flex gap-2"><span className="text-cyan-500">-</span>Enable OCSP stapling to avoid extra certificate validation roundtrips</li>
+              <li className="flex gap-2"><span className="text-cyan-500">-</span>Use session tickets / 0-RTT resumption for returning visitors</li>
+            </ul>
+          </div>
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-emerald-400">Server Response</h3>
+            <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">
+              After the connection is established, the browser sends an HTTP request. The server processes it (routing, authentication, DB queries, template rendering) and sends back the first byte of the response. This is usually the largest contributor to TTFB.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-gray-500">
+              <li className="flex gap-2"><span className="text-emerald-500">-</span>Profile slow queries with <code className="text-gray-400">EXPLAIN ANALYZE</code></li>
+              <li className="flex gap-2"><span className="text-emerald-500">-</span>Add caching layers (Redis, CDN edge caching, stale-while-revalidate)</li>
+              <li className="flex gap-2"><span className="text-emerald-500">-</span>Consider streaming SSR to send the first byte sooner</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mt-4 rounded-md border border-teal-900/50 bg-teal-900/10 p-3">
+          <p className="text-xs text-teal-300 font-medium">TTFB = DNS + TCP + TLS + Server Response Time</p>
+          <p className="mt-1 text-xs text-gray-400">
+            A good TTFB is under 800 ms. Anything above 1.8 s is considered poor. Use the waterfall chart in browser DevTools (Network tab) to see the exact duration of each phase for your site.
+          </p>
+        </div>
       </div>
 
       {/* Metric Categories */}

@@ -8,6 +8,7 @@ const sampleRun: RunRow = {
   id: "run-1",
   script_id: null,
   project_id: "proj-1",
+  user_id: null,
   mode: "stability",
   engine: "playwright_lighthouse",
   environment: "staging",
@@ -23,6 +24,7 @@ const sampleRun: RunRow = {
   finished_at: null,
   created_at: new Date(),
   error: null,
+  logs: null,
 };
 
 const mockDb = { query: jest.fn() };
@@ -97,6 +99,47 @@ describe("RunsController", () => {
         status: "running",
       });
       expect(result.status).toBe("running");
+    });
+  });
+
+  // ==========================================================
+  // appendLog (POST /runs/:id/log) — Regression
+  //   Route must not 404. Worker posts log lines here.
+  //   Verifies the controller delegates to RunsService.appendLog.
+  // ==========================================================
+
+  describe("appendLog (POST /runs/:id/log)", () => {
+    it("delegates to runsService.appendLog with correct args", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      await controller.appendLog("run-1", { lines: "[ts] Starting run\n" });
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining("COALESCE(logs, '') || $1"),
+        ["[ts] Starting run\n", "run-1"]
+      );
+    });
+
+    it("method exists on the controller (route not 404)", () => {
+      expect(typeof controller.appendLog).toBe("function");
+    });
+  });
+
+  // ==========================================================
+  // logs field — Regression
+  //   RunRow includes logs field; GET /runs/:id returns it.
+  // ==========================================================
+
+  describe("logs field in run response", () => {
+    it("GET /runs/:id includes logs field", async () => {
+      const runWithLogs = { ...sampleRun, logs: "[ts] test line\n" };
+      mockDb.query.mockResolvedValue({ rows: [runWithLogs] });
+      const result = await controller.findOne(sampleRun.id);
+      expect(result.logs).toBe("[ts] test line\n");
+    });
+
+    it("logs defaults to null for new runs", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      const result = await controller.findOne(sampleRun.id);
+      expect(result.logs).toBeNull();
     });
   });
 });

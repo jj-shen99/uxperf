@@ -29,6 +29,7 @@
 | **Real-User Monitoring** | RUM event pipeline with p75 aggregation and CrUX snapshot integration |
 | **NL Test Authoring** | Six-stage pipeline: intent parse → page recon → locator synthesis → script assembly → validation → confidence scoring |
 | **CI/CD Integration** | GitHub Check Runs, commit statuses, Slack/webhook notifications |
+| **Authentication** | Password-based login with session persistence, forgot/reset password flow, demo seed accounts |
 | **Role-Based Access** | Admin / editor / viewer roles with project-level membership, admin-only controls |
 | **Multi-Geo Testing** | Fan-out dispatch across WPT agents and k6 browser instances with cross-region comparison |
 
@@ -42,7 +43,7 @@ ui_performance_testing_and_analysis/
 │   ├── api/            NestJS REST API — orchestrator, gates, intelligence (port 4000)
 │   ├── dashboard/      Next.js web dashboard with Tailwind CSS (port 4200)
 │   ├── worker/         Playwright + Lighthouse execution engine (containerized)
-│   ├── db/             PostgreSQL migrations (7 migration sets, 14 files)
+│   ├── db/             PostgreSQL migrations (9 migration sets, 18 files)
 │   └── shared/         Shared TypeScript types and validators
 ├── docker/             Dockerfiles for api, dashboard, worker
 ├── .github/workflows/  CI pipeline (test → lint → build → db migration test)
@@ -60,7 +61,16 @@ ui_performance_testing_and_analysis/
 - **PostgreSQL** 16 (or use Docker)
 - **Docker & Docker Compose** (optional)
 
-### Development Setup
+### One-Command Setup
+
+```bash
+git clone https://github.com/jj-shen99/ui_performance_testing_and_analysis.git
+cd ui_performance_testing_and_analysis
+docker compose up -d postgres    # Start Postgres
+npm run setup                    # Install deps, migrate DB, seed users, install Playwright
+```
+
+### Manual Development Setup
 
 ```bash
 # 1. Clone and install
@@ -74,14 +84,18 @@ docker compose up -d postgres
 # 3. Run database migrations
 npm run db:migrate
 
-# 4. Start services (two terminals)
-npm run dev:api          # API server → http://localhost:4000
-npm run dev:dashboard    # Dashboard  → http://localhost:4200
+# 4. Seed demo users (creates 5 users with passwords)
+npm run db:seed
 
-# 5. (Optional) Start the worker poll loop
-npm run worker:poll
+# 5. Install Playwright browsers (required for test execution)
+npx playwright install chromium --with-deps
 
-# 6. (Optional) Run a one-off test
+# 6. Start services (three terminals)
+npm run dev:api          # Terminal 1: API server → http://localhost:4000
+npm run dev:dashboard    # Terminal 2: Dashboard  → http://localhost:4200
+npm run worker:poll      # Terminal 3: Worker poll loop (executes queued runs)
+
+# 7. (Optional) Run a one-off test
 npm run worker:run -- --url https://example.com
 ```
 
@@ -89,9 +103,53 @@ npm run worker:run -- --url https://example.com
 
 ```bash
 docker compose up --build
-# API:       http://localhost:4000
+# API:       http://localhost:4000 (auto-runs migrations + seed)
 # Dashboard: http://localhost:4200
+
+# Start the worker (optional — needed for test execution)
+docker compose --profile worker up --build
 ```
+
+### Seed Users
+
+After running `npm run db:seed`, these accounts are available:
+
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@perftest.io` | `admin123!` | admin |
+| `editor@perftest.io` | `editor123!` | editor |
+| `viewer@perftest.io` | `viewer123!` | viewer |
+| `qa@perftest.io` | `qatest123!` | editor |
+| `dev@perftest.io` | `devtest123!` | viewer |
+
+---
+
+## Authentication
+
+The framework uses **password-based authentication** with session persistence via `localStorage`.
+
+### Login flow
+
+1. Navigate to `http://localhost:4200` — unauthenticated users are redirected to `/login`
+2. Enter email and password → `POST /api/v1/auth/login`
+3. On success, the user session is stored in `localStorage` and you are redirected to the dashboard
+4. The sidebar shows the current user avatar, name, email, and role
+5. Admin users see a **Switch User** dropdown to impersonate other accounts
+
+### Available auth endpoints
+
+| Action | Endpoint | Description |
+|--------|----------|-------------|
+| Register | `POST /auth/register` | Create a new account (default role: `viewer`) |
+| Login | `POST /auth/login` | Authenticate and receive user profile |
+| Forgot password | `POST /auth/forgot-password` | Request a reset token (shown in dev mode) |
+| Reset password | `POST /auth/reset-password` | Set new password using reset token |
+| Change password | `POST /auth/change-password` | Change password for current user |
+
+### Password requirements
+
+- Minimum **8 characters** (API) / **6 characters** (dashboard profile change)
+- Passwords are hashed with `scryptSync` (64-byte key, 32-byte random salt)
 
 ---
 
@@ -102,10 +160,10 @@ The dashboard provides 18 pages organized into four navigation groups:
 ### Overview
 | Page | Description |
 |------|-------------|
-| **Dashboard** | Home view with overview counters, Core Web Vitals from the latest run, active runs, KPI averages, and script/run statistics |
+| **Dashboard** | Home view with overview counters, recent runs table, KPI averages, and interactive metric relationship diagram |
 | **Results** | Detailed run results with Lighthouse scores and metric breakdowns |
 | **Trends** | Time-series charts of performance metrics across runs with environment filtering |
-| **Reports** | Executive performance reports (7/30/90-day summaries with CWV p75, pass rates, anomaly counts) |
+| **Reports** | Executive performance reports (7/30/90-day summaries with CWV p75, pass rates, anomaly counts) and Lighthouse score explanations (Performance, Accessibility, Best Practices, SEO) with calculation details and tunable parameters |
 | **Knowledge** | Knowledge base and documentation reference |
 
 ### Testing
@@ -128,8 +186,8 @@ The dashboard provides 18 pages organized into four navigation groups:
 ### Admin
 | Page | Description |
 |------|-------------|
-| **Users** | User management (admin-only) with sortable columns |
-| **Settings** | Project management (sortable list, admin-only create/delete), notification channels, environments, user profile (My Profile tab) |
+| **Users** | User management (admin-only) — create, update roles, activate/deactivate, delete |
+| **Settings** | Project management (sortable list, admin-only create/delete), notification channels, environments, user profile (My Profile tab with email change and password change) |
 
 ---
 
@@ -171,9 +229,9 @@ All gates use **3-of-5 quorum** — a metric must fail 3 of the last 5 runs to t
 
 | Role | Permissions |
 |------|-------------|
-| **Admin** | Full access — manage users, projects, channels, environments, all CRUD operations |
-| **Editor** | Run tests, create scripts, view all data |
-| **Viewer** | Read-only access to dashboards and results |
+| **Admin** | Full access — manage users, projects, channels, environments, all CRUD operations. Can switch between user accounts via sidebar. Sees all scripts and runs across all users. |
+| **Editor** | Run tests, create scripts, view all data within assigned projects |
+| **Viewer** | Read-only access to dashboards and results within assigned projects. Sees only own scripts and runs. |
 
 ---
 
@@ -229,14 +287,14 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 | GET | `/projects/:id` | Get project |
 | PATCH | `/projects/:id` | Update project |
 | DELETE | `/projects/:id` | Delete project |
-| GET | `/runs` | List runs (`?project_id=`) |
+| GET | `/runs` | List runs (`?project_id=&user_id=&is_admin=`) |
 | POST | `/runs` | Create (queue) a run |
 | POST | `/runs/claim` | Worker claims next queued run |
 | GET | `/runs/:id` | Get run details |
 | GET | `/runs/:id/gates` | Gate results for run |
 | POST | `/runs/:id/complete` | Worker reports completion |
 | PATCH | `/runs/:id` | Update run |
-| GET | `/scripts` | List scripts (`?project_id=`) |
+| GET | `/scripts` | List scripts (`?project_id=&user_id=&is_admin=`) |
 | POST | `/scripts` | Create script |
 | GET | `/scripts/:id` | Get script |
 | PATCH | `/scripts/:id` | Update script |
@@ -323,7 +381,7 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 | POST | `/auth/reset-password` | Reset password |
 | GET | `/rbac/users` | List users |
 | POST | `/rbac/users` | Create user |
-| PATCH | `/rbac/users/:id` | Update user |
+| PATCH | `/rbac/users/:id` | Update user (display_name, email, role, is_active) |
 | DELETE | `/rbac/users/:id` | Delete user |
 | GET | `/rbac/projects/:id/members` | List project members |
 | POST | `/rbac/projects/:id/members` | Add member |
@@ -350,6 +408,7 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 | `API_URL` | `http://localhost:4000/api/v1` | Worker → API URL |
 | `SCHEDULE_POLL_INTERVAL_MS` | `30000` | Schedule dispatcher interval |
 | `POLL_INTERVAL_MS` | `5000` | Worker poll interval |
+| `NODE_ENV` | `development` | Set to `production` to hide reset tokens in forgot-password response |
 | `WPT_SERVER` | — | WebPageTest server URL (opt-in) |
 | `WPT_API_KEY` | — | WebPageTest API key |
 | `CRUX_API_KEY` | — | Chrome UX Report API key |

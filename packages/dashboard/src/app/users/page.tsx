@@ -200,9 +200,16 @@ export default function UsersPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[u.role] ?? ROLE_COLORS.viewer}`}>
-                        {u.role}
-                      </span>
+                      <select
+                        value={u.role}
+                        onChange={(e) => updateMut.mutate({ id: u.id, data: { role: e.target.value } })}
+                        className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium cursor-pointer ${ROLE_COLORS[u.role] ?? ROLE_COLORS.viewer} bg-transparent appearance-none focus:ring-1 focus:ring-indigo-500`}
+                        title="Change role"
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r} className="bg-gray-800 text-gray-200">{r}</option>
+                        ))}
+                      </select>
                     )}
                   </td>
                   <td className="px-4 py-2">

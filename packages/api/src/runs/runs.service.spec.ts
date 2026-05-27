@@ -9,6 +9,7 @@ const sampleRun: RunRow = {
   id: "00000000-0000-0000-0000-000000000010",
   script_id: null,
   project_id: "00000000-0000-0000-0000-000000000001",
+  user_id: null,
   mode: "stability",
   engine: "playwright_lighthouse",
   environment: "staging",
@@ -24,6 +25,7 @@ const sampleRun: RunRow = {
   finished_at: null,
   created_at: new Date("2024-01-01"),
   error: null,
+  logs: null,
 };
 
 describe("RunsService", () => {
@@ -61,6 +63,7 @@ describe("RunsService", () => {
       await service.findAll();
       expect(mockDb.query).toHaveBeenCalledWith(
         expect.stringContaining("ORDER BY created_at DESC"),
+        []
       );
     });
 
@@ -68,6 +71,74 @@ describe("RunsService", () => {
       mockDb.query.mockResolvedValue({ rows: [] });
       const result = await service.findAll();
       expect(result).toEqual([]);
+    });
+  });
+
+  // ==========================================================
+  // findAll — user_id ownership filtering (Regression)
+  // ==========================================================
+
+  describe("findAll — user_id ownership filtering", () => {
+    it("filters by user_id for non-admin (regression: user sees own runs)", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll(undefined, "user-1", false);
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      const args = mockDb.query.mock.calls[0][1];
+      expect(sql).toContain("user_id = $");
+      expect(args).toContain("user-1");
+    });
+
+    it("does NOT filter by user_id for admin (regression: admin sees all)", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll(undefined, "admin-1", true);
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).not.toContain("user_id");
+    });
+
+    it("combines project_id and user_id filters for non-admin", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll("proj-1", "user-1", false);
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).toContain("project_id = $");
+      expect(sql).toContain("user_id = $");
+    });
+
+    it("skips user_id filter when userId is undefined", async () => {
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.findAll(undefined, undefined, false);
+      const sql = mockDb.query.mock.calls[0][0] as string;
+      expect(sql).not.toContain("user_id");
+    });
+  });
+
+  // ==========================================================
+  // create — user_id ownership (Regression)
+  // ==========================================================
+
+  describe("create — user_id ownership", () => {
+    it("stores user_id when provided (regression: run ownership)", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        config: { url: "https://example.com" },
+        user_id: "user-1",
+      };
+      mockDb.query.mockResolvedValue({ rows: [{ ...sampleRun, user_id: "user-1" }] });
+      const result = await service.create(dto);
+      expect(result.user_id).toBe("user-1");
+      const args = mockDb.query.mock.calls[0][1];
+      expect(args).toContain("user-1");
+    });
+
+    it("stores null user_id when not provided", async () => {
+      const dto: CreateRunDto = {
+        project_id: "proj-1",
+        config: { url: "https://example.com" },
+      };
+      mockDb.query.mockResolvedValue({ rows: [sampleRun] });
+      await service.create(dto);
+      const args = mockDb.query.mock.calls[0][1];
+      // user_id is the last param (index 7)
+      expect(args[7]).toBeNull();
     });
   });
 
@@ -265,6 +336,76 @@ describe("RunsService", () => {
         expect(sql).toContain(sqlSnippet);
       }
     );
+  });
+
+  // ==========================================================
+  // delete — Regression (empty body response bug)
+  //   Successful delete: rowCount > 0 → returns void
+  //   Missing run: rowCount === 0 → throws NotFoundException
+  // ==========================================================
+
+  describe("delete — Regression", () => {
+    it("deletes an existing run (returns void, not JSON)", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      const result = await service.delete(sampleRun.id);
+      expect(result).toBeUndefined();
+      expect(mockDb.query).toHaveBeenCalledWith(
+        "DELETE FROM runs WHERE id = $1",
+        [sampleRun.id]
+      );
+    });
+
+    it("throws NotFoundException for non-existent run", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 0 });
+      await expect(service.delete("missing-id")).rejects.toThrow(NotFoundException);
+    });
+
+    it("passes the correct id parameter to DELETE query", async () => {
+      const testId = "00000000-0000-0000-0000-000000000099";
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      await service.delete(testId);
+      expect(mockDb.query.mock.calls[0][1]).toEqual([testId]);
+    });
+  });
+
+  // ==========================================================
+  // appendLog — Regression (worker console log streaming)
+  //   Appends text to the runs.logs column via SQL concatenation.
+  //   Throws NotFoundException if run does not exist.
+  // ==========================================================
+
+  describe("appendLog — Regression", () => {
+    it("appends lines to an existing run", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      await service.appendLog(sampleRun.id, "[2026-01-01T00:00:00Z] Starting run\n");
+
+      expect(mockDb.query).toHaveBeenCalledWith(
+        `UPDATE runs SET logs = COALESCE(logs, '') || $1 WHERE id = $2`,
+        ["[2026-01-01T00:00:00Z] Starting run\n", sampleRun.id]
+      );
+    });
+
+    it("throws NotFoundException for non-existent run", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 0 });
+      await expect(service.appendLog("missing-id", "line\n")).rejects.toThrow(NotFoundException);
+    });
+
+    it("returns void on success (no body)", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      const result = await service.appendLog(sampleRun.id, "test\n");
+      expect(result).toBeUndefined();
+    });
+
+    it("concatenates multiple append calls in SQL", async () => {
+      mockDb.query.mockResolvedValue({ rowCount: 1 });
+      await service.appendLog(sampleRun.id, "line 1\n");
+      await service.appendLog(sampleRun.id, "line 2\n");
+      expect(mockDb.query).toHaveBeenCalledTimes(2);
+      // Both calls use COALESCE concatenation — DB handles ordering
+      for (const call of mockDb.query.mock.calls) {
+        expect(call[0]).toContain("COALESCE(logs, '') || $1");
+      }
+    });
   });
 
   // ==========================================================

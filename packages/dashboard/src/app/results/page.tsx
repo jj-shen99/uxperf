@@ -14,6 +14,17 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  PieChart,
+  Pie,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  Legend,
 } from "recharts";
 
 const METRIC_META: Record<string, { label: string; tooltipKey: string; unit: string; good: number; poor: number }> = {
@@ -72,8 +83,8 @@ export default function ResultsPage() {
   const [selectedRunId, setSelectedRunId] = useState<string>("");
 
   const { data: allRuns = [], isLoading } = useQuery({
-    queryKey: ["runs"],
-    queryFn: () => api.runs.list(),
+    queryKey: ["runs", currentUser?.id, isAdmin],
+    queryFn: () => api.runs.list(undefined, currentUser?.id, isAdmin),
   });
 
   // Filter: only completed runs; non-admin users see only their project runs
@@ -265,6 +276,79 @@ export default function ResultsPage() {
             </div>
           )}
 
+          {/* Lighthouse Radar Chart */}
+          {lighthouseScores.length >= 3 && (
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+              <h2 className="mb-4 text-sm font-medium text-gray-300">Lighthouse Category Radar</h2>
+              <ResponsiveContainer width="100%" height={320}>
+                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={lighthouseScores.map(s => ({ category: s.label, score: s.score, fullMark: 100 }))}>
+                  <PolarGrid stroke="#374151" />
+                  <PolarAngleAxis dataKey="category" tick={{ fill: "#9ca3af", fontSize: 12 }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 10 }} />
+                  <Radar name="Score" dataKey="score" stroke="#818cf8" fill="#818cf8" fillOpacity={0.3} strokeWidth={2} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Core Web Vitals Gauge Rings */}
+          {(() => {
+            const cwvMetrics = [
+              { key: "lcp_ms", label: "LCP", good: 2500, poor: 4000, max: 8000, unit: "ms" },
+              { key: "fcp_ms", label: "FCP", good: 1800, poor: 3000, max: 6000, unit: "ms" },
+              { key: "cls",    label: "CLS", good: 0.1,  poor: 0.25, max: 0.5, unit: "" },
+              { key: "inp_ms", label: "INP", good: 200,  poor: 500,  max: 1000, unit: "ms" },
+              { key: "ttfb_ms", label: "TTFB", good: 800, poor: 1800, max: 3600, unit: "ms" },
+              { key: "tbt_ms", label: "TBT", good: 200, poor: 600, max: 1200, unit: "ms" },
+            ].filter(m => metrics[m.key] != null);
+            if (cwvMetrics.length === 0) return null;
+            return (
+              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+                <h2 className="mb-4 text-sm font-medium text-gray-300">Core Metrics Gauges</h2>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                  {cwvMetrics.map(m => {
+                    const val = metrics[m.key] as number;
+                    const pct = Math.min(val / m.max, 1) * 100;
+                    const color = val <= m.good ? COLORS.good : val <= m.poor ? COLORS.needs_improvement : COLORS.poor;
+                    const gaugeData = [
+                      { name: "value", value: pct, fill: color },
+                      { name: "remaining", value: 100 - pct, fill: "#1f2937" },
+                    ];
+                    return (
+                      <div key={m.key} className="flex flex-col items-center">
+                        <div className="relative" style={{ width: 100, height: 100 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={gaugeData}
+                                cx="50%" cy="50%"
+                                innerRadius={30} outerRadius={42}
+                                startAngle={90} endAngle={-270}
+                                dataKey="value"
+                                stroke="none"
+                              >
+                                {gaugeData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-sm font-bold" style={{ color }}>
+                              {m.unit === "ms" ? Math.round(val) : val.toFixed(3)}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-400">{m.label}</p>
+                        <p className="text-[10px]" style={{ color }}>
+                          {val <= m.good ? "Good" : val <= m.poor ? "Needs Work" : "Poor"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* CLS separate card */}
           {metrics.cls != null && (
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
@@ -384,6 +468,82 @@ export default function ResultsPage() {
           </div>
         </>
       )}
+
+      {/* Cross-run comparison charts (always visible when runs exist) */}
+      {completedRuns.length >= 2 && (() => {
+        const scatterData = completedRuns
+          .filter((r: any) => r.metrics?.fcp_ms != null && r.metrics?.lcp_ms != null)
+          .map((r: any) => ({
+            fcp: Math.round(r.metrics.fcp_ms),
+            lcp: Math.round(r.metrics.lcp_ms),
+            lh: Math.round((r.metrics.lighthouse_performance_score ?? 0) * 100),
+            url: (r.config?.url ?? "").replace(/^https?:\/\//, "").slice(0, 30),
+            id: r.id.slice(0, 8),
+          }));
+
+        const lhDistribution = completedRuns
+          .filter((r: any) => r.metrics?.lighthouse_performance_score != null)
+          .map((r: any) => {
+            const score = Math.round((r.metrics.lighthouse_performance_score as number) * 100);
+            return {
+              name: new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + r.id.slice(0, 4),
+              score,
+              fill: score >= 90 ? COLORS.good : score >= 50 ? COLORS.needs_improvement : COLORS.poor,
+            };
+          })
+          .slice(-20); // last 20 runs
+
+        return (
+          <div className="space-y-6">
+            {scatterData.length >= 2 && (
+              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+                <h2 className="mb-1 text-sm font-medium text-gray-300">FCP vs LCP Scatter — All Completed Runs</h2>
+                <p className="mb-4 text-xs text-gray-500">Each dot is a completed run. Color shows Lighthouse Performance score.</p>
+                <ResponsiveContainer width="100%" height={320}>
+                  <ScatterChart margin={{ top: 10, right: 30, bottom: 10, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis type="number" dataKey="fcp" name="FCP" unit=" ms" tick={{ fill: "#9ca3af", fontSize: 11 }} label={{ value: "FCP (ms)", position: "insideBottomRight", offset: -5, fill: "#6b7280", fontSize: 11 }} />
+                    <YAxis type="number" dataKey="lcp" name="LCP" unit=" ms" tick={{ fill: "#9ca3af", fontSize: 11 }} label={{ value: "LCP (ms)", angle: -90, position: "insideLeft", fill: "#6b7280", fontSize: 11 }} />
+                    <ZAxis type="number" dataKey="lh" range={[40, 200]} name="LH Score" />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
+                      formatter={(value: number, name: string) => [`${value} ${name === "LH Score" ? "/100" : "ms"}`, name]}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.url ?? ""}
+                    />
+                    <Legend />
+                    <Scatter name="Runs" data={scatterData} fill="#818cf8">
+                      {scatterData.map((d, i) => (
+                        <Cell key={i} fill={d.lh >= 90 ? COLORS.good : d.lh >= 50 ? COLORS.needs_improvement : COLORS.poor} />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {lhDistribution.length >= 2 && (
+              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+                <h2 className="mb-1 text-sm font-medium text-gray-300">Lighthouse Performance Score History</h2>
+                <p className="mb-4 text-xs text-gray-500">Recent completed runs. Green ≥ 90, Yellow ≥ 50, Red &lt; 50.</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={lhDistribution} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
+                      formatter={(value: number) => [`${value}/100`, "Performance"]}
+                    />
+                    <Bar dataKey="score" radius={[4, 4, 0, 0]}>
+                      {lhDistribution.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {!selectedRunId && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-12 text-center text-gray-500">

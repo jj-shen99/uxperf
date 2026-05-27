@@ -15,6 +15,7 @@ describe("ScriptsService", () => {
   const mockScript = {
     id: "s-1",
     project_id: "p-1",
+    user_id: null,
     name: "Homepage Test",
     canonical_json: { steps: [] },
     source_prompt: null,
@@ -156,6 +157,76 @@ describe("ScriptsService", () => {
     it("throws NotFoundException on missing script (decision tree)", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [] });
       await expect(service.update("missing", { name: "X" })).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // -- findAll with user_id ownership (regression) --
+  describe("findAll — user_id ownership filtering", () => {
+    it("filters by user_id when non-admin (regression: user sees only own scripts)", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.findAll(undefined, "user-1", false);
+      const sql = mockDb.query.mock.calls[0][0];
+      const args = mockDb.query.mock.calls[0][1];
+      expect(sql).toContain("user_id = $");
+      expect(args).toContain("user-1");
+    });
+
+    it("does NOT filter by user_id when admin (regression: admin sees all)", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.findAll(undefined, "admin-1", true);
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).not.toContain("user_id");
+    });
+
+    it("filters by both project_id and user_id for non-admin", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.findAll("p-1", "user-1", false);
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).toContain("project_id = $");
+      expect(sql).toContain("user_id = $");
+    });
+
+    it("filters only by project_id for admin", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.findAll("p-1", "admin-1", true);
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).toContain("project_id = $");
+      expect(sql).not.toContain("user_id");
+    });
+
+    it("returns all when no filters and no userId", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.findAll();
+      const sql = mockDb.query.mock.calls[0][0];
+      expect(sql).not.toContain("WHERE");
+    });
+  });
+
+  // -- create with user_id --
+  describe("create — user_id ownership", () => {
+    it("stores user_id when provided (regression: script ownership)", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ ...mockScript, user_id: "user-1" }] });
+      const result = await service.create({
+        project_id: "p-1",
+        name: "My Script",
+        canonical_json: { steps: [] },
+        user_id: "user-1",
+      });
+      expect(result.user_id).toBe("user-1");
+      const args = mockDb.query.mock.calls[0][1];
+      expect(args).toContain("user-1");
+    });
+
+    it("stores null user_id when not provided", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [mockScript] });
+      await service.create({
+        project_id: "p-1",
+        name: "Anon Script",
+        canonical_json: {},
+      });
+      const args = mockDb.query.mock.calls[0][1];
+      // user_id is the last param (index 6)
+      expect(args[6]).toBeNull();
     });
   });
 

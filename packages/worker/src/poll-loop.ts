@@ -60,21 +60,55 @@ async function completeRun(
   }
 }
 
+async function postLog(runId: string, message: string): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${message}\n`;
+  console.log(`[worker] ${message}`);
+  try {
+    await fetch(`${API_URL}/runs/${runId}/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines: line }),
+    });
+  } catch {
+    // best-effort — don't block execution if log post fails
+  }
+}
+
 async function executeRun(run: ClaimedRun): Promise<void> {
-  console.log(`[worker] Executing run ${run.id} — ${run.config.url}`);
   const startedAt = new Date().toISOString();
+  const nRuns = run.config.n_runs ?? 3;
+
+  await postLog(run.id, `Starting run — URL: ${run.config.url}`);
+  await postLog(run.id, `Config: ${nRuns} iteration(s), device: ${run.config.device ?? "desktop"}, env: ${run.environment}`);
+  await postLog(run.id, `Engine: playwright_lighthouse`);
 
   try {
-    const result = await runPlaywrightLighthouse({
-      url: run.config.url,
-      n_runs: run.config.n_runs ?? 3,
-      device: (run.config.device as "desktop" | "mobile") ?? "desktop",
-      viewport: run.config.viewport ?? { width: 1920, height: 1080 },
-    });
+    await postLog(run.id, `Launching Chromium browser...`);
+
+    const result = await runPlaywrightLighthouse(
+      {
+        url: run.config.url,
+        n_runs: nRuns,
+        device: (run.config.device as "desktop" | "mobile") ?? "desktop",
+        viewport: run.config.viewport ?? { width: 1920, height: 1080 },
+      },
+      (msg) => postLog(run.id, msg),
+    );
+
+    if (result.success) {
+      const m = result.metrics ?? {};
+      await postLog(run.id, `Test completed successfully in ${(result.duration_ms / 1000).toFixed(1)}s`);
+      await postLog(run.id, `Results — LCP: ${m.lcp_ms != null ? Math.round(m.lcp_ms as number) + "ms" : "N/A"}, FCP: ${m.fcp_ms != null ? Math.round(m.fcp_ms as number) + "ms" : "N/A"}, CLS: ${m.cls != null ? (m.cls as number).toFixed(3) : "N/A"}`);
+      await postLog(run.id, `Lighthouse: ${m.lighthouse_performance_score != null ? Math.round((m.lighthouse_performance_score as number) * 100) + "/100" : "N/A"}`);
+    } else {
+      await postLog(run.id, `Test failed: ${result.error ?? "unknown error"}`);
+    }
 
     // Extract lighthouse report from first individual run (if available)
     const lighthouseReport = result.individual_runs?.[0]?.lighthouse_report_json ?? null;
 
+    await postLog(run.id, `Saving results...`);
     await completeRun(run.id, {
       success: result.success,
       metrics: result.metrics,
@@ -84,12 +118,9 @@ async function executeRun(run: ClaimedRun): Promise<void> {
       finished_at: new Date().toISOString(),
     });
 
-    console.log(
-      `[worker] Run ${run.id} completed: ${result.success ? "success" : "failed"} ` +
-      `(${(result.duration_ms / 1000).toFixed(1)}s)`,
-    );
+    await postLog(run.id, `Run finished.`);
   } catch (e) {
-    console.error(`[worker] Run ${run.id} crashed: ${e}`);
+    await postLog(run.id, `Run crashed: ${e}`);
     await completeRun(run.id, {
       success: false,
       error: String(e),

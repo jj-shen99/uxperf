@@ -18,6 +18,8 @@ interface UserContextValue {
   users: CurrentUser[];
   isAdmin: boolean;
   isLoading: boolean;
+  login: (user: CurrentUser) => void;
+  logout: () => void;
 }
 
 const UserContext = createContext<UserContextValue>({
@@ -26,6 +28,8 @@ const UserContext = createContext<UserContextValue>({
   users: [],
   isAdmin: false,
   isLoading: true,
+  login: () => {},
+  logout: () => {},
 });
 
 export function useCurrentUser() {

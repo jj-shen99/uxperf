@@ -32,7 +32,7 @@ describe("ScriptsController", () => {
   it("lists scripts", async () => {
     const result = await controller.findAll("p-1");
     expect(result).toHaveLength(1);
-    expect(mockScripts.findAll).toHaveBeenCalledWith("p-1");
+    expect(mockScripts.findAll).toHaveBeenCalledWith("p-1", undefined, false);
   });
 
   it("gets script by id", async () => {

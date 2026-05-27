@@ -9,7 +9,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${body}`);
   }
-  return res.json();
+  const contentLength = res.headers.get("content-length");
+  if (res.status === 204 || contentLength === "0") {
+    return undefined as T;
+  }
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text);
 }
 
 // -- Projects --
@@ -21,14 +27,28 @@ export const api = {
     delete: (id: string) => request<void>(`/projects/${id}`, { method: "DELETE" }),
   },
   scripts: {
-    list: (projectId?: string) => request<any[]>(`/scripts${projectId ? `?project_id=${projectId}` : ""}`),
+    list: (projectId?: string, userId?: string, isAdmin?: boolean) => {
+      const params = new URLSearchParams();
+      if (projectId) params.set("project_id", projectId);
+      if (userId) params.set("user_id", userId);
+      if (isAdmin) params.set("is_admin", "true");
+      const qs = params.toString();
+      return request<any[]>(`/scripts${qs ? `?${qs}` : ""}`);
+    },
     get: (id: string) => request<any>(`/scripts/${id}`),
     create: (data: any) => request<any>("/scripts", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/scripts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/scripts/${id}`, { method: "DELETE" }),
   },
   runs: {
-    list: (projectId?: string) => request<any[]>(`/runs${projectId ? `?project_id=${projectId}` : ""}`),
+    list: (projectId?: string, userId?: string, isAdmin?: boolean) => {
+      const params = new URLSearchParams();
+      if (projectId) params.set("project_id", projectId);
+      if (userId) params.set("user_id", userId);
+      if (isAdmin) params.set("is_admin", "true");
+      const qs = params.toString();
+      return request<any[]>(`/runs${qs ? `?${qs}` : ""}`);
+    },
     get: (id: string) => request<any>(`/runs/${id}`),
     create: (data: any) => request<any>("/runs", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/runs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -230,7 +250,7 @@ export const api = {
       get: (id: string) => request<any>(`/rbac/users/${id}`),
       create: (data: { email: string; display_name: string; role?: string; password?: string }) =>
         request<any>("/rbac/users", { method: "POST", body: JSON.stringify(data) }),
-      update: (id: string, data: { display_name?: string; role?: string; is_active?: boolean }) =>
+      update: (id: string, data: { display_name?: string; email?: string; role?: string; is_active?: boolean }) =>
         request<any>(`/rbac/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
       delete: (id: string) => request<void>(`/rbac/users/${id}`, { method: "DELETE" }),
     },

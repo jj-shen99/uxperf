@@ -14,7 +14,9 @@
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "worker:run": "npm run run --workspace=packages/worker",
     "worker:poll": "npm run poll --workspace=packages/worker",
-    "db:migrate": "npm run migrate --workspace=packages/db"
+    "db:migrate": "npm run migrate --workspace=packages/db",
+    "db:seed": "npm run seed --workspace=packages/db",
+    "setup": "bash scripts/setup.sh"
   },
   "engines": {
     "node": ">=20.0.0"

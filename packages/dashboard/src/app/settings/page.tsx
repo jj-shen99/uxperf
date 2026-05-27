@@ -12,7 +12,7 @@ type SettingsTab = "general" | "profile";
 export default function SettingsPage() {
   const qc = useQueryClient();
   const { projects } = useProjects();
-  const { isAdmin, currentUser } = useCurrentUser();
+  const { isAdmin, currentUser, login } = useCurrentUser();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
   // --- Profile Management ---
@@ -39,9 +39,16 @@ export default function SettingsPage() {
   }, [currentUser?.id]);
 
   const updateProfileMut = useMutation({
-    mutationFn: (data: { display_name?: string }) =>
+    mutationFn: (data: { display_name?: string; email?: string }) =>
       api.rbac.users.update(currentUser!.id, data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      if (currentUser) {
+        login({
+          ...currentUser,
+          ...(variables.display_name ? { display_name: variables.display_name } : {}),
+          ...(variables.email ? { email: variables.email } : {}),
+        });
+      }
       qc.invalidateQueries({ queryKey: ["users"] });
       setProfileMsg({ type: "success", text: "Profile updated successfully" });
     },
@@ -195,11 +202,11 @@ export default function SettingsPage() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Email</label>
                 <input
+                  type="email"
                   value={profileForm.email}
-                  disabled
-                  className="w-full rounded-md border border-gray-700 bg-gray-800/50 px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
+                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
                 />
-                <p className="text-[10px] text-gray-600 mt-1">Email changes require admin assistance</p>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Role</label>
@@ -212,9 +219,20 @@ export default function SettingsPage() {
               <button
                 onClick={() => {
                   setProfileMsg(null);
-                  updateProfileMut.mutate({ display_name: profileForm.display_name });
+                  const updates: { display_name?: string; email?: string } = {};
+                  if (profileForm.display_name !== currentUser.display_name) {
+                    updates.display_name = profileForm.display_name;
+                  }
+                  if (profileForm.email !== currentUser.email) {
+                    updates.email = profileForm.email;
+                  }
+                  if (Object.keys(updates).length === 0) {
+                    setProfileMsg({ type: "error", text: "No changes to save" });
+                    return;
+                  }
+                  updateProfileMut.mutate(updates);
                 }}
-                disabled={!profileForm.display_name || updateProfileMut.isPending}
+                disabled={!profileForm.display_name || !profileForm.email || updateProfileMut.isPending}
                 className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
               >
                 {updateProfileMut.isPending ? "Saving..." : "Save Changes"}

@@ -44,13 +44,18 @@ export default function RunsPage() {
   const { projects, projectId: defaultProjectId } = useProjects();
   const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
-  const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5" });
+  const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging" });
 
   const formProjectId = form.project_id || defaultProjectId;
 
   const { data: allRuns, isLoading } = useQuery<Run[]>({
-    queryKey: ["runs"],
-    queryFn: () => api.runs.list(),
+    queryKey: ["runs", currentUser?.id, isAdmin],
+    queryFn: () => api.runs.list(undefined, currentUser?.id, isAdmin),
+    refetchInterval: (query) => {
+      const runs = query.state.data;
+      const hasActive = runs?.some((r) => r.status === "queued" || r.status === "running");
+      return hasActive ? 3000 : false;
+    },
   });
 
   // Filter runs: admins see all, regular users see only their projects
@@ -70,31 +75,11 @@ export default function RunsPage() {
   });
 
   const createMut = useMutation({
-    mutationFn: async (data: any) => {
-      const run = await api.runs.create(data);
-      // Auto-claim the queued run (transitions to 'running')
-      try { await api.runs.claim(); } catch { /* no-op if claim fails */ }
-      // Auto-complete with simulated metrics (no real worker available)
-      try {
-        await api.runs.complete(run.id, {
-          success: true,
-          metrics: {
-            lcp_ms: 1200 + Math.random() * 800,
-            fcp_ms: 400 + Math.random() * 300,
-            cls: Math.random() * 0.15,
-            ttfb_ms: 150 + Math.random() * 200,
-            lighthouse_performance_score: 0.7 + Math.random() * 0.25,
-          },
-          started_at: new Date().toISOString(),
-          finished_at: new Date().toISOString(),
-        });
-      } catch { /* no-op */ }
-      return run;
-    },
+    mutationFn: (data: any) => api.runs.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["runs"] });
       setShowCreate(false);
-      setForm({ project_id: "", script_id: "", url: "", n_runs: "5" });
+      setForm({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging" });
     },
   });
 
@@ -173,12 +158,29 @@ export default function RunsPage() {
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Environment</label>
+              <select
+                value={form.environment}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, environment: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="staging">staging</option>
+                <option value="production">production</option>
+                <option value="development">development</option>
+                <option value="preview">preview</option>
+              </select>
+            </div>
+          </div>
           <button
             onClick={() =>
               createMut.mutate({
                 project_id: formProjectId,
                 script_id: form.script_id || undefined,
+                environment: form.environment,
                 config: { url: form.url, n_runs: parseInt(form.n_runs) || 5 },
+                user_id: currentUser?.id,
               })
             }
             disabled={!formProjectId || !form.url}

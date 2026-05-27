@@ -114,10 +114,12 @@ async function executeSingleRun(
 
     const page = await context.newPage();
 
-    // Navigate and wait for load
+    // Navigate and wait for load event (not networkidle — heavy sites never
+    // reach networkidle due to continuous background requests like analytics,
+    // chat widgets, etc.)
     await page.goto(request.url, {
-      waitUntil: "networkidle",
-      timeout: 60_000,
+      waitUntil: "load",
+      timeout: 90_000,
     });
 
     // Allow page to settle for LCP/CLS observation
@@ -187,7 +189,8 @@ async function executeSingleRun(
  * Runs Playwright + Lighthouse N times, aggregates via median, returns structured result.
  */
 export async function runPlaywrightLighthouse(
-  request: EngineRunRequest
+  request: EngineRunRequest,
+  onProgress?: (message: string) => void | Promise<void>,
 ): Promise<EngineRunResult> {
   const startedAt = new Date().toISOString();
   const startMs = Date.now();
@@ -199,14 +202,20 @@ export async function runPlaywrightLighthouse(
 
   try {
     for (let i = 0; i < request.n_runs; i++) {
+      const iterMsg = `Iteration ${i + 1}/${request.n_runs}`;
       console.log(`  Run ${i + 1}/${request.n_runs}...`);
+      await onProgress?.(`${iterMsg} — starting...`);
+      const iterStart = Date.now();
       const result = await executeSingleRun(request, i);
       individualRuns.push(result);
+      const iterSec = ((Date.now() - iterStart) / 1000).toFixed(1);
+      const lcp = result.web_vitals.lcp_ms?.toFixed(0) ?? "n/a";
+      const fcp = result.web_vitals.fcp_ms?.toFixed(0) ?? "n/a";
+      const lhPerf = ((result.lighthouse_scores.performance ?? 0) * 100).toFixed(0);
       console.log(
-        `  Run ${i + 1} complete — LCP: ${result.web_vitals.lcp_ms?.toFixed(0) ?? "n/a"}ms, ` +
-          `FCP: ${result.web_vitals.fcp_ms?.toFixed(0) ?? "n/a"}ms, ` +
-          `LH Perf: ${((result.lighthouse_scores.performance ?? 0) * 100).toFixed(0)}`
+        `  Run ${i + 1} complete — LCP: ${lcp}ms, FCP: ${fcp}ms, LH Perf: ${lhPerf}`
       );
+      await onProgress?.(`${iterMsg} — done in ${iterSec}s (LCP: ${lcp}ms, FCP: ${fcp}ms, LH: ${lhPerf})`);
     }
 
     const metrics = aggregateResults(individualRuns);

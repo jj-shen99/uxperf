@@ -108,7 +108,7 @@ export default function ScriptsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const { projects, projectId: defaultProjectId } = useProjects();
-  const { isAdmin } = useCurrentUser();
+  const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
   const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}", template_id: "", target_url: "" });
   const [showTemplates, setShowTemplates] = useState(false);
@@ -117,8 +117,8 @@ export default function ScriptsPage() {
   const formProjectId = form.project_id || defaultProjectId;
 
   const { data: allScripts, isLoading } = useQuery({
-    queryKey: ["scripts"],
-    queryFn: () => api.scripts.list(),
+    queryKey: ["scripts", currentUser?.id, isAdmin],
+    queryFn: () => api.scripts.list(undefined, currentUser?.id, isAdmin),
   });
 
   // Filter scripts: admins see all, regular users see only their projects
@@ -291,6 +291,7 @@ export default function ScriptsPage() {
                     name: form.name,
                     project_id: formProjectId,
                     canonical_json: JSON.parse(form.canonical_json),
+                    user_id: currentUser?.id,
                   };
                   if (form.template_id) payload.template_id = form.template_id;
                   createMut.mutate(payload);

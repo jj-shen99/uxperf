@@ -14,6 +14,7 @@ export interface CreateUserDto {
 
 export interface UpdateUserDto {
   display_name?: string;
+  email?: string;
   role?: GlobalRole;
   is_active?: boolean;
 }
@@ -98,6 +99,7 @@ export class RbacService {
     let idx = 1;
 
     if (dto.display_name !== undefined) { sets.push(`display_name = $${idx++}`); values.push(dto.display_name); }
+    if (dto.email !== undefined) { sets.push(`email = $${idx++}`); values.push(dto.email.toLowerCase().trim()); }
     if (dto.role !== undefined) { sets.push(`role = $${idx++}`); values.push(dto.role); }
     if (dto.is_active !== undefined) { sets.push(`is_active = $${idx++}`); values.push(dto.is_active); }
 

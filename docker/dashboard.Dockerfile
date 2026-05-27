@@ -8,7 +8,11 @@ RUN npm install --workspace=packages/dashboard
 
 COPY packages/dashboard packages/dashboard
 
+ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build --workspace=packages/dashboard
 
-EXPOSE 3000
+EXPOSE 4200
+ENV PORT=4200
 CMD ["npm", "run", "start", "--workspace=packages/dashboard"]

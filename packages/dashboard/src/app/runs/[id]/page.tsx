@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import { MetricTooltip } from "@/components/metric-tooltip";
@@ -51,10 +52,22 @@ export default function RunDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
+  const isActive = (s: string) => s === "queued" || s === "running";
+
   const { data: run, isLoading, error } = useQuery({
     queryKey: ["run", id],
     queryFn: () => api.runs.get(id),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && isActive(status) ? 2000 : false;
+    },
   });
+
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const logs = run?.logs ?? "";
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   const { data: gateResults } = useQuery({
     queryKey: ["run-gates", id],
@@ -182,6 +195,29 @@ export default function RunDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Console Log */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-medium text-gray-300">Console Log</h2>
+          {isActive(run.status) && (
+            <span className="flex items-center gap-1.5 text-xs text-blue-400">
+              <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+              Live
+            </span>
+          )}
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-black/80 p-4 max-h-80 overflow-y-auto font-mono text-xs">
+          {logs ? (
+            <pre className="text-green-400 whitespace-pre-wrap leading-relaxed">{logs}</pre>
+          ) : isActive(run.status) ? (
+            <p className="text-gray-600">Waiting for worker to start...</p>
+          ) : (
+            <p className="text-gray-600">No log output recorded for this run.</p>
+          )}
+          <div ref={logEndRef} />
+        </div>
+      </div>
 
       {/* Error */}
       {run.error && (

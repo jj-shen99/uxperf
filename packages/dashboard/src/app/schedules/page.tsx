@@ -89,7 +89,7 @@ export default function SchedulesPage() {
         <div>
           <h1 className="text-xl font-semibold text-white">Scheduled Tests</h1>
           <p className="mt-1 text-sm text-gray-400">
-            Schedule individual tests (scripts) on a cron. Standard 5-field cron format.
+            Schedule recurring tests on a cron. Schedules repeat indefinitely while enabled — no repeat count is needed.
           </p>
         </div>
         <button
@@ -162,6 +162,7 @@ export default function SchedulesPage() {
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 font-mono"
               />
               <p className="mt-1 text-[10px] text-gray-600">min hour dom mon dow</p>
+              <p className="mt-0.5 text-[10px] text-gray-600">Runs repeat indefinitely while the schedule is enabled.</p>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Environment</label>
@@ -203,6 +204,50 @@ export default function SchedulesPage() {
           </div>
         </div>
       )}
+
+      {/* Cron Expression Reference */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+        <h3 className="text-xs font-semibold text-gray-300 mb-2">Cron Expression Reference</h3>
+        <p className="text-[11px] text-gray-500 mb-3">
+          Standard 5-field format: <code className="rounded bg-gray-800 px-1 py-0.5 font-mono text-indigo-400">minute hour day-of-month month day-of-week</code>.
+          Each field accepts a number, <code className="rounded bg-gray-800 px-1 py-0.5 font-mono">*</code> (any), <code className="rounded bg-gray-800 px-1 py-0.5 font-mono">*/N</code> (every N), or comma-separated values.
+          Schedules repeat automatically on every match while enabled — there is no repeat count.
+        </p>
+        <div className="overflow-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-gray-800 text-left text-gray-500">
+                <th className="pr-4 py-1 font-medium">Expression</th>
+                <th className="pr-4 py-1 font-medium">Frequency</th>
+                <th className="py-1 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-400">
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 */6 * * *</td><td className="pr-4 py-0.5">Every 6 hours</td><td className="py-0.5">At minute 0 past every 6th hour (00:00, 06:00, 12:00, 18:00)</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 0 * * *</td><td className="pr-4 py-0.5">Daily (midnight)</td><td className="py-0.5">Once a day at 00:00</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 9 * * 1-5</td><td className="pr-4 py-0.5">Weekdays 9 AM</td><td className="py-0.5">Monday through Friday at 09:00</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">*/30 * * * *</td><td className="pr-4 py-0.5">Every 30 min</td><td className="py-0.5">At minute 0 and 30 of every hour</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 */2 * * *</td><td className="pr-4 py-0.5">Every 2 hours</td><td className="py-0.5">At minute 0 past every 2nd hour</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 0 * * 0</td><td className="pr-4 py-0.5">Weekly (Sunday)</td><td className="py-0.5">Once a week at Sunday midnight</td></tr>
+              <tr><td className="pr-4 py-0.5 font-mono text-indigo-400">0 0 1 * *</td><td className="pr-4 py-0.5">Monthly</td><td className="py-0.5">First day of every month at midnight</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 grid grid-cols-5 gap-2">
+          {[
+            { field: "Minute", range: "0–59" },
+            { field: "Hour", range: "0–23" },
+            { field: "Day of Month", range: "1–31" },
+            { field: "Month", range: "1–12" },
+            { field: "Day of Week", range: "0–6 (Sun=0)" },
+          ].map((f) => (
+            <div key={f.field} className="rounded border border-gray-800 bg-gray-800/30 px-2 py-1 text-center">
+              <p className="text-[10px] font-medium text-gray-300">{f.field}</p>
+              <p className="text-[10px] text-gray-500">{f.range}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="text-gray-400">Loading...</div>

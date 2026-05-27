@@ -8,6 +8,7 @@ export interface CreateRunDto {
   mode?: string;
   engine?: string;
   environment?: string;
+  user_id?: string;
   config: {
     url: string;
     device?: string;
@@ -33,6 +34,7 @@ export interface RunRow {
   id: string;
   script_id: string | null;
   project_id: string;
+  user_id: string | null;
   mode: string;
   engine: string;
   environment: string;
@@ -48,22 +50,31 @@ export interface RunRow {
   finished_at: Date | null;
   created_at: Date;
   error: string | null;
+  logs: string | null;
 }
 
 @Injectable()
 export class RunsService {
   constructor(private db: DatabaseService) {}
 
-  async findAll(projectId?: string): Promise<RunRow[]> {
+  async findAll(projectId?: string, userId?: string, isAdmin?: boolean): Promise<RunRow[]> {
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
     if (projectId) {
-      const result = await this.db.query<RunRow>(
-        "SELECT * FROM runs WHERE project_id = $1 ORDER BY created_at DESC LIMIT 100",
-        [projectId]
-      );
-      return result.rows;
+      conditions.push(`project_id = $${idx++}`);
+      values.push(projectId);
     }
+    if (userId && !isAdmin) {
+      conditions.push(`user_id = $${idx++}`);
+      values.push(userId);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.db.query<RunRow>(
-      "SELECT * FROM runs ORDER BY created_at DESC LIMIT 100"
+      `SELECT * FROM runs ${where} ORDER BY created_at DESC LIMIT 100`,
+      values
     );
     return result.rows;
   }
@@ -81,8 +92,8 @@ export class RunsService {
 
   async create(dto: CreateRunDto): Promise<RunRow> {
     const result = await this.db.query<RunRow>(
-      `INSERT INTO runs (project_id, script_id, schedule_id, mode, engine, environment, config, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued')
+      `INSERT INTO runs (project_id, script_id, schedule_id, mode, engine, environment, config, status, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
        RETURNING *`,
       [
         dto.project_id,
@@ -92,9 +103,20 @@ export class RunsService {
         dto.engine ?? "playwright_lighthouse",
         dto.environment ?? "staging",
         JSON.stringify(dto.config),
+        dto.user_id ?? null,
       ]
     );
     return result.rows[0];
+  }
+
+  async appendLog(id: string, lines: string): Promise<void> {
+    const result = await this.db.query(
+      `UPDATE runs SET logs = COALESCE(logs, '') || $1 WHERE id = $2`,
+      [lines, id]
+    );
+    if (result.rowCount === 0) {
+      throw new NotFoundException(`Run ${id} not found`);
+    }
   }
 
   async delete(id: string): Promise<void> {

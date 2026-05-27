@@ -19,8 +19,12 @@ export class RunsController {
   ) {}
 
   @Get()
-  findAll(@Query("project_id") projectId?: string) {
-    return this.runsService.findAll(projectId);
+  findAll(
+    @Query("project_id") projectId?: string,
+    @Query("user_id") userId?: string,
+    @Query("is_admin") isAdmin?: string,
+  ) {
+    return this.runsService.findAll(projectId, userId, isAdmin === "true");
   }
 
   /** Worker polls this to claim the next queued run. */
@@ -43,6 +47,12 @@ export class RunsController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.runsService.findById(id);
+  }
+
+  /** Worker appends log lines during execution. */
+  @Post(":id/log")
+  appendLog(@Param("id") id: string, @Body() body: { lines: string }) {
+    return this.runsService.appendLog(id, body.lines);
   }
 
   /** Worker calls this when a run completes or fails. */

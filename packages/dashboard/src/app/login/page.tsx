@@ -1,20 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login, currentUser } = useCurrentUser();
   const [form, setForm] = useState({ email: "", password: "" });
+  const justRegistered = searchParams.get("registered") === "1";
+
+  useEffect(() => {
+    if (currentUser) {
+      router.replace("/");
+    }
+  }, [currentUser, router]);
 
   const loginMut = useMutation({
     mutationFn: (data: { email: string; password: string }) => api.auth.login(data),
     onSuccess: (user) => {
-      // Store user info in localStorage for the session
-      localStorage.setItem("perf_user", JSON.stringify(user));
+      login(user);
       router.push("/");
     },
   });
@@ -28,6 +37,12 @@ export default function LoginPage() {
             Performance Testing Framework
           </p>
         </div>
+
+        {justRegistered && (
+          <div className="rounded-md border border-green-800 bg-green-900/20 p-3 text-center">
+            <p className="text-sm text-green-300">Account created! Sign in to continue.</p>
+          </div>
+        )}
 
         <div className="space-y-4 rounded-lg border border-gray-800 bg-gray-900 p-6">
           <div>
@@ -74,7 +89,24 @@ export default function LoginPage() {
             </Link>
           </div>
         </div>
+
+        <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+          <p className="text-xs font-medium text-gray-500 mb-2">Demo accounts</p>
+          <div className="space-y-1 text-xs text-gray-500">
+            <p><span className="text-gray-400">admin@perftest.io</span> / admin123! <span className="text-amber-400/60">(admin)</span></p>
+            <p><span className="text-gray-400">editor@perftest.io</span> / editor123! <span className="text-blue-400/60">(editor)</span></p>
+            <p><span className="text-gray-400">viewer@perftest.io</span> / viewer123! <span className="text-gray-400/60">(viewer)</span></p>
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-950"><p className="text-gray-400">Loading...</p></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

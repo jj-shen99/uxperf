@@ -34,10 +34,10 @@ CREATE TABLE IF NOT EXISTS rum_events (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_rum_events_project ON rum_events(project_id);
-CREATE INDEX idx_rum_events_origin ON rum_events(origin, recorded_at);
-CREATE INDEX idx_rum_events_recorded ON rum_events(recorded_at);
-CREATE INDEX idx_rum_events_country ON rum_events(country_code, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_rum_events_project ON rum_events(project_id);
+CREATE INDEX IF NOT EXISTS idx_rum_events_origin ON rum_events(origin, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_rum_events_recorded ON rum_events(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_rum_events_country ON rum_events(country_code, recorded_at);
 
 -- CrUX (Chrome User Experience Report) snapshots
 CREATE TABLE IF NOT EXISTS crux_snapshots (
@@ -70,8 +70,8 @@ CREATE TABLE IF NOT EXISTS crux_snapshots (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_crux_snapshots_project ON crux_snapshots(project_id);
-CREATE INDEX idx_crux_snapshots_origin ON crux_snapshots(origin, collection_period_end);
+CREATE INDEX IF NOT EXISTS idx_crux_snapshots_project ON crux_snapshots(project_id);
+CREATE INDEX IF NOT EXISTS idx_crux_snapshots_origin ON crux_snapshots(origin, collection_period_end);
 
 -- Forecasts: stored time-series forecasts
 CREATE TABLE IF NOT EXISTS forecasts (
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_forecasts_project ON forecasts(project_id, metric);
+CREATE INDEX IF NOT EXISTS idx_forecasts_project ON forecasts(project_id, metric);
 
 -- ML attributions: SHAP-based feature attribution results
 CREATE TABLE IF NOT EXISTS ml_attributions (
@@ -115,8 +115,8 @@ CREATE TABLE IF NOT EXISTS ml_attributions (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ml_attributions_project ON ml_attributions(project_id);
-CREATE INDEX idx_ml_attributions_anomaly ON ml_attributions(anomaly_id);
+CREATE INDEX IF NOT EXISTS idx_ml_attributions_project ON ml_attributions(project_id);
+CREATE INDEX IF NOT EXISTS idx_ml_attributions_anomaly ON ml_attributions(anomaly_id);
 
 -- Capacity planning reports
 CREATE TABLE IF NOT EXISTS capacity_reports (
@@ -137,26 +137,21 @@ CREATE TABLE IF NOT EXISTS capacity_reports (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_capacity_reports_project ON capacity_reports(project_id);
+CREATE INDEX IF NOT EXISTS idx_capacity_reports_project ON capacity_reports(project_id);
 
--- Audit log
-CREATE TABLE IF NOT EXISTS audit_log (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
-  action          TEXT NOT NULL,
-  resource_type   TEXT NOT NULL,
-  resource_id     TEXT,
-  project_id      UUID REFERENCES projects(id) ON DELETE SET NULL,
-  details         JSONB DEFAULT '{}',
-  ip_address      TEXT,
-  user_agent      TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Audit log: add columns missing from the migration-003 version
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS resource_type TEXT;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS resource_id TEXT;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}';
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS ip_address TEXT;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS user_agent TEXT;
 
-CREATE INDEX idx_audit_log_user ON audit_log(user_id, created_at);
-CREATE INDEX idx_audit_log_project ON audit_log(project_id, created_at);
-CREATE INDEX idx_audit_log_action ON audit_log(action, created_at);
-CREATE INDEX idx_audit_log_resource ON audit_log(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_project ON audit_log(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource_type ON audit_log(resource_type, resource_id);
 
 -- API keys for public API / SDK
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -176,8 +171,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
-CREATE INDEX idx_api_keys_project ON api_keys(project_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_project ON api_keys(project_id);
 
 -- Resource floor conditions on gates
 ALTER TABLE gates ADD COLUMN IF NOT EXISTS resource_floor_conditions JSONB;
@@ -193,5 +188,6 @@ ALTER TABLE load_profiles ADD COLUMN IF NOT EXISTS regions TEXT[] DEFAULT '{"us-
 -- Multi-geo on WPT runs
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS geo_locations TEXT[];
 
+DROP TRIGGER IF EXISTS set_api_keys_updated_at ON api_keys;
 CREATE TRIGGER set_api_keys_updated_at BEFORE UPDATE ON api_keys
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

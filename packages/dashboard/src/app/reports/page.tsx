@@ -333,6 +333,187 @@ export default function ReportsPage() {
         </>
       )}
 
+      {/* Score Explanations */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-6 space-y-6">
+        <div>
+          <h2 className="text-sm font-semibold text-white mb-1">Lighthouse Score Breakdown</h2>
+          <p className="text-xs text-gray-500">
+            Each Lighthouse category score is 0–100. Scores are computed by running audits, converting raw values to 0–1 via a
+            <strong className="text-gray-300"> log-normal scoring curve</strong>, then applying category-specific weights.
+            Scores ≥ 90 are <span className="text-green-400 font-medium">Good</span>, 50–89 are
+            <span className="text-yellow-400 font-medium"> Needs Improvement</span>, and &lt; 50 are
+            <span className="text-red-400 font-medium"> Poor</span>.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Performance */}
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-indigo-400 mb-2">Performance (Lighthouse 11)</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-3">
+              Measures how fast the page loads and becomes interactive. The score is a <strong className="text-gray-300">weighted average</strong> of 5 lab metrics, each scored on a log-normal curve derived from real HTTP Archive data.
+            </p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-500 border-b border-gray-700">
+                  <th className="text-left py-1 pr-2">Metric</th>
+                  <th className="text-right py-1 px-2">Weight</th>
+                  <th className="text-right py-1">Good Threshold</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-400">
+                <tr><td className="py-0.5 pr-2 font-medium text-gray-300">FCP (First Contentful Paint)</td><td className="text-right px-2">10%</td><td className="text-right text-green-400">≤ 1.8s</td></tr>
+                <tr><td className="py-0.5 pr-2 font-medium text-gray-300">SI (Speed Index)</td><td className="text-right px-2">10%</td><td className="text-right text-green-400">≤ 3.4s</td></tr>
+                <tr><td className="py-0.5 pr-2 font-medium text-gray-300">LCP (Largest Contentful Paint)</td><td className="text-right px-2">25%</td><td className="text-right text-green-400">≤ 2.5s</td></tr>
+                <tr><td className="py-0.5 pr-2 font-medium text-gray-300">TBT (Total Blocking Time)</td><td className="text-right px-2">30%</td><td className="text-right text-green-400">≤ 200ms</td></tr>
+                <tr><td className="py-0.5 pr-2 font-medium text-gray-300">CLS (Cumulative Layout Shift)</td><td className="text-right px-2">25%</td><td className="text-right text-green-400">≤ 0.1</td></tr>
+              </tbody>
+            </table>
+            <div className="mt-3 rounded-md border border-indigo-900/40 bg-indigo-900/10 p-2">
+              <p className="text-[11px] text-indigo-300 font-medium">How to improve:</p>
+              <ul className="mt-1 space-y-0.5 text-[10px] text-gray-400">
+                <li>- Optimize images (WebP/AVIF, responsive sizes, lazy-load below fold)</li>
+                <li>- Remove render-blocking JS/CSS, defer non-critical scripts</li>
+                <li>- Reduce server response time (TTFB) with caching/CDN</li>
+                <li>- Code-split JS bundles, tree-shake unused modules</li>
+                <li>- Set explicit dimensions on images/videos to reduce CLS</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Accessibility */}
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-purple-400 mb-2">Accessibility</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-3">
+              Runs ~50 automated audits based on the <strong className="text-gray-300">axe-core library</strong> and WCAG 2.1 guidelines. Each audit is pass/fail/not-applicable. The score = (passing audits ÷ applicable audits) × 100. All applicable audits are <strong className="text-gray-300">weighted equally</strong>.
+            </p>
+            <p className="text-xs text-gray-500 mb-2">Key audit categories:</p>
+            <ul className="space-y-0.5 text-[11px] text-gray-400">
+              <li>- <strong className="text-gray-300">Color Contrast</strong> — text must have ≥ 4.5:1 contrast ratio</li>
+              <li>- <strong className="text-gray-300">Alt Text</strong> — all images need descriptive alt attributes</li>
+              <li>- <strong className="text-gray-300">ARIA</strong> — roles, labels, and states must be valid and complete</li>
+              <li>- <strong className="text-gray-300">Keyboard Navigation</strong> — all interactive elements must be focusable</li>
+              <li>- <strong className="text-gray-300">Semantic HTML</strong> — headings in order, landmarks present, form labels</li>
+              <li>- <strong className="text-gray-300">Document</strong> — valid lang attribute, meta viewport not blocking zoom</li>
+            </ul>
+            <div className="mt-3 rounded-md border border-purple-900/40 bg-purple-900/10 p-2">
+              <p className="text-[11px] text-purple-300 font-medium">How to improve:</p>
+              <ul className="mt-1 space-y-0.5 text-[10px] text-gray-400">
+                <li>- Fix color contrast issues (use a contrast checker)</li>
+                <li>- Add alt text to every image; use aria-label on icon buttons</li>
+                <li>- Ensure all form inputs have associated labels</li>
+                <li>- Use semantic elements (&lt;nav&gt;, &lt;main&gt;, &lt;header&gt;, &lt;button&gt;)</li>
+                <li>- Note: automated tests catch ~30% of real a11y issues — manual testing is also needed</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Best Practices */}
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-cyan-400 mb-2">Best Practices</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-3">
+              Checks ~15 audits for modern web development standards and security. Like Accessibility, the score = (passing ÷ applicable) × 100 with <strong className="text-gray-300">equal weight per audit</strong>.
+            </p>
+            <p className="text-xs text-gray-500 mb-2">What it checks:</p>
+            <ul className="space-y-0.5 text-[11px] text-gray-400">
+              <li>- <strong className="text-gray-300">HTTPS</strong> — page and all sub-resources served over HTTPS</li>
+              <li>- <strong className="text-gray-300">No console errors</strong> — no JS errors logged to the browser console</li>
+              <li>- <strong className="text-gray-300">Image aspect ratios</strong> — displayed size matches natural size</li>
+              <li>- <strong className="text-gray-300">Deprecated APIs</strong> — no use of deprecated web platform APIs</li>
+              <li>- <strong className="text-gray-300">CSP / XSS</strong> — Content Security Policy present, no XSS vulnerabilities</li>
+              <li>- <strong className="text-gray-300">Source maps</strong> — source maps detected for debugging</li>
+              <li>- <strong className="text-gray-300">Charset declaration</strong> — UTF-8 charset declared in first 1024 bytes</li>
+            </ul>
+            <div className="mt-3 rounded-md border border-cyan-900/40 bg-cyan-900/10 p-2">
+              <p className="text-[11px] text-cyan-300 font-medium">How to improve:</p>
+              <ul className="mt-1 space-y-0.5 text-[10px] text-gray-400">
+                <li>- Migrate all resources to HTTPS</li>
+                <li>- Fix JS errors visible in the browser console</li>
+                <li>- Serve images at their displayed dimensions</li>
+                <li>- Replace deprecated APIs (document.write, etc.)</li>
+                <li>- Add a Content Security Policy header</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* SEO */}
+          <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+            <h3 className="text-sm font-semibold text-emerald-400 mb-2">SEO</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-3">
+              Checks ~13 audits for baseline search-engine-optimization hygiene. Score = (passing ÷ applicable) × 100, <strong className="text-gray-300">equally weighted</strong>. This tests technical SEO — not content quality, backlinks, or domain authority.
+            </p>
+            <p className="text-xs text-gray-500 mb-2">What it checks:</p>
+            <ul className="space-y-0.5 text-[11px] text-gray-400">
+              <li>- <strong className="text-gray-300">Meta description</strong> — present and not empty</li>
+              <li>- <strong className="text-gray-300">HTTP status</strong> — page returns 2xx status code</li>
+              <li>- <strong className="text-gray-300">Crawlable links</strong> — links use &lt;a href&gt;, not JS-only navigation</li>
+              <li>- <strong className="text-gray-300">robots.txt</strong> — valid and doesn't block page</li>
+              <li>- <strong className="text-gray-300">Indexable</strong> — no noindex meta tag or header</li>
+              <li>- <strong className="text-gray-300">Structured data</strong> — JSON-LD/microdata is valid (if present)</li>
+              <li>- <strong className="text-gray-300">Viewport meta</strong> — &lt;meta name="viewport"&gt; is present</li>
+              <li>- <strong className="text-gray-300">Font legibility</strong> — text is ≥ 12px on mobile</li>
+              <li>- <strong className="text-gray-300">Tap targets</strong> — buttons/links have adequate spacing</li>
+            </ul>
+            <div className="mt-3 rounded-md border border-emerald-900/40 bg-emerald-900/10 p-2">
+              <p className="text-[11px] text-emerald-300 font-medium">How to improve:</p>
+              <ul className="mt-1 space-y-0.5 text-[10px] text-gray-400">
+                <li>- Add unique, descriptive &lt;title&gt; and &lt;meta description&gt; per page</li>
+                <li>- Use semantic heading hierarchy (h1 → h2 → h3)</li>
+                <li>- Ensure all links are crawlable &lt;a href="..."&gt;</li>
+                <li>- Add a valid robots.txt and XML sitemap</li>
+                <li>- Set viewport meta for mobile responsiveness</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Parameters that affect scores */}
+        <div className="rounded-md border border-gray-800 bg-gray-800/20 p-4">
+          <h3 className="text-sm font-semibold text-yellow-400 mb-2">Test Parameters That Change Scores</h3>
+          <p className="text-xs text-gray-400 leading-relaxed mb-3">
+            The same URL can produce very different scores depending on how Lighthouse runs. These parameters are configurable in our test runner:
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Device (desktop / mobile)</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Mobile applies 4× CPU throttling and slower network (simulated 4G). Desktop has no CPU throttle and faster network. Switching from mobile → desktop typically <span className="text-green-400">increases Performance by 10–30 pts</span>.
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Number of Iterations (n_runs)</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                We report the <span className="text-gray-300 font-medium">median</span> across iterations. More runs (5–10) reduces variance and gives a more stable score. Single runs can fluctuate ± 5–8 pts.
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Viewport Size</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Affects which LCP element is in view, how images load, and CLS measurement. Narrow viewports may trigger different responsive layouts and larger CLS values.
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Network Conditions</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Lighthouse simulates network throttling. Actual throughput of the test machine's network also matters. Testing from a slow connection increases TTFB and all loading metrics.
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Server Warm/Cold State</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                First run after a deploy may have cold caches (CDN, DB, application). Subsequent runs with warm caches often produce <span className="text-green-400">better TTFB and overall scores</span>.
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+              <p className="text-xs font-semibold text-gray-200">Third-Party Scripts</p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Ad networks, analytics, chat widgets, etc. can add 500ms–2s of TBT and degrade Performance score significantly. <span className="text-yellow-400">Blocking 3rd-parties</span> during testing isolates your own code's performance.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Previous Reports */}
       {savedReports.length > 0 && (
         <div>

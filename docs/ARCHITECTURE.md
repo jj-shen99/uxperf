@@ -481,48 +481,87 @@ graph TB
 
 ## Authentication & RBAC
 
+### Auth Flow
+
 ```mermaid
-graph LR
-    subgraph "Auth Flow"
-        Register["POST /auth/register"]
-        Login["POST /auth/login"]
-        ChangePW["POST /auth/change-password"]
+graph TB
+    subgraph "Dashboard (Browser)"
+        LP["Login Page"]
+        RP["Register Page"]
+        FP["Forgot Password"]
+        RSP["Reset Password"]
+        LS["localStorage<br/>(perf_user)"]
+        UP["UserProvider<br/>(React Context)"]
+        SL["ShellLayout<br/>(conditional sidebar)"]
     end
 
-    subgraph "User Model"
-        User["User<br/>(id, email, display_name,<br/>role, password_hash)"]
+    subgraph "API Server"
+        AuthC["AuthController"]
+        AuthS["AuthService"]
+        DB["PostgreSQL<br/>(users table)"]
     end
 
-    subgraph "Roles"
-        Admin["Admin<br/>Full access"]
-        Editor["Editor<br/>Run tests, create scripts"]
-        Viewer["Viewer<br/>Read-only"]
-    end
+    LP -->|"POST /auth/login"| AuthC
+    RP -->|"POST /auth/register"| AuthC
+    FP -->|"POST /auth/forgot-password"| AuthC
+    RSP -->|"POST /auth/reset-password"| AuthC
+    AuthC --> AuthS --> DB
 
-    subgraph "Project Access"
-        Global["Global Role<br/>(admin sees all)"]
-        Membership["Project Membership<br/>(per-project role)"]
-    end
-
-    Register --> User
-    Login --> User
-    User --> Admin
-    User --> Editor
-    User --> Viewer
-    Admin --> Global
-    Editor --> Membership
-    Viewer --> Membership
+    AuthS -->|"user profile"| LP
+    LP -->|"store session"| LS
+    LS -->|"hydrate on mount"| UP
+    UP -->|"redirect if no session"| LP
+    UP -->|"isAdmin, currentUser"| SL
+    SL -->|"hide sidebar on auth pages"| LP
 ```
 
-### UI Access Control
+### Session Management
+
+1. **Login** → API returns `{id, email, display_name, role}` → stored in `localStorage`
+2. **App mount** → `UserProvider` reads `localStorage`, sets `currentUser` in React context
+3. **Route guard** → unauthenticated users on non-auth pages are redirected to `/login`
+4. **Auth pages** → `ShellLayout` hides the sidebar on `/login`, `/register`, `/forgot-password`, `/reset-password`
+5. **Session sync** → when the API returns updated user data (e.g., role changed by admin), `localStorage` is auto-refreshed
+6. **Logout** → clears `localStorage`, clears React Query cache, redirects to `/login`
+
+### Password Hashing
+
+- Algorithm: `scryptSync` (Node.js `crypto`)
+- Salt: 32 random bytes (hex-encoded)
+- Key length: 64 bytes
+- Storage format: `{salt_hex}:{hash_hex}` in `password_hash` column
+- Reset tokens: 32 random bytes (hex), 1-hour expiry
+
+### Seed Data
+
+`npm run db:seed` creates demo users via `packages/db/seed.mjs` using the same hashing algorithm as the API. Passwords are pre-hashed and inserted with `ON CONFLICT ... DO UPDATE` for idempotency.
+
+### User Model
+
+```
+users table:
+  id              UUID PRIMARY KEY
+  email           TEXT UNIQUE NOT NULL
+  display_name    TEXT
+  role            TEXT ('admin' | 'editor' | 'viewer')
+  password_hash   TEXT
+  reset_token     TEXT
+  reset_token_expires TIMESTAMPTZ
+  is_active       BOOLEAN DEFAULT true
+  created_at      TIMESTAMPTZ
+```
+
+### Roles & Permissions
 
 | Feature | Admin | Editor | Viewer |
 |---------|-------|--------|--------|
-| Users page | ✅ | ❌ | ❌ |
-| Create/delete projects | ✅ | ❌ | ❌ |
-| Create/delete channels | ✅ | ❌ | ❌ |
-| Create/run scripts | ✅ | ✅ | ❌ |
-| View dashboards | ✅ | ✅ | ✅ |
+| Login / register / reset password | ✅ | ✅ | ✅ |
+| View dashboards & results | ✅ | ✅ | ✅ |
+| Create/run scripts & tests | ✅ | ✅ | ❌ |
+| Users page & manage users | ✅ | ❌ | ❌ |
+| Create/delete projects & channels | ✅ | ❌ | ❌ |
+| Switch user (impersonate) | ✅ | ❌ | ❌ |
+| Change own password & profile | ✅ | ✅ | ✅ |
 
 ---
 

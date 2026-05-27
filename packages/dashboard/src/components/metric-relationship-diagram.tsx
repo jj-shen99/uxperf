@@ -17,24 +17,31 @@ interface TimelinePhase {
 }
 
 const PHASES: TimelinePhase[] = [
-  { id: "ttfb", label: "TTFB",  metricKey: "TTFB", x: 8,   color: "#a78bfa" },
-  { id: "fcp",  label: "FCP",   metricKey: "FCP",  x: 22,  color: "#60a5fa" },
-  { id: "si",   label: "SI",    metricKey: "SI",   x: 40,  color: "#38bdf8" },
-  { id: "lcp",  label: "LCP",   metricKey: "LCP",  x: 55,  color: "#34d399" },
-  { id: "tti",  label: "TTI",   metricKey: "TTI",  x: 70,  color: "#fbbf24" },
-  { id: "inp",  label: "INP",   metricKey: "INP",  x: 88,  color: "#f87171" },
+  { id: "ttfb", label: "TTFB",  metricKey: "TTFB", x: 25,  color: "#a78bfa" },
+  { id: "fcp",  label: "FCP",   metricKey: "FCP",  x: 38,  color: "#60a5fa" },
+  { id: "si",   label: "SI",    metricKey: "SI",   x: 50,  color: "#38bdf8" },
+  { id: "lcp",  label: "LCP",   metricKey: "LCP",  x: 62,  color: "#34d399" },
+  { id: "tti",  label: "TTI",   metricKey: "TTI",  x: 75,  color: "#fbbf24" },
+  { id: "inp",  label: "INP",   metricKey: "INP",  x: 92,  color: "#f87171" },
+];
+
+// Sub-phases within TTFB (Nav Start → TTFB), shown as segmented bar
+const TTFB_SUB_PHASES = [
+  { id: "dns",    label: "DNS",          color: "#2dd4bf", pct: 0.20 },
+  { id: "tcp",    label: "TCP + TLS",    color: "#14b8a6", pct: 0.30 },
+  { id: "server", label: "Server Response", color: "#0d9488", pct: 0.50 },
 ];
 
 const SPAN_METRICS = [
-  { id: "server", label: "Server Processing (DB + App)", metricKey: "Server Processing", fromId: "ttfb", toId: "fcp", color: "#14b8a6", y: 125 },
-  { id: "render", label: "Browser Rendering", metricKey: "Browser Rendering", fromId: "fcp", toId: "lcp", color: "#06b6d4", y: 125 },
-  { id: "tbt", label: "TBT", metricKey: "TBT", fromId: "fcp", toId: "tti", color: "#fb923c", y: 155 },
-  { id: "cls", label: "CLS", metricKey: "CLS", fromId: "fcp", toId: "inp", color: "#e879f9", y: 185 },
+  { id: "transfer", label: "Transfer + Parse", metricKey: "Transfer + Parse", fromId: "ttfb", toId: "fcp", color: "#818cf8", y: 140 },
+  { id: "render", label: "Content Rendering", metricKey: "Content Rendering", fromId: "fcp", toId: "lcp", color: "#06b6d4", y: 140 },
+  { id: "tbt", label: "TBT", metricKey: "TBT", fromId: "fcp", toId: "tti", color: "#fb923c", y: 170 },
+  { id: "cls", label: "CLS", metricKey: "CLS", fromId: "fcp", toId: "inp", color: "#e879f9", y: 200 },
 ];
 
 const RELATIONSHIPS = [
-  { from: "ttfb", to: "fcp",  label: "Server Processing + Network" },
-  { from: "fcp",  to: "lcp",  label: "Browser Rendering" },
+  { from: "ttfb", to: "fcp",  label: "Transfer + HTML Parsing" },
+  { from: "fcp",  to: "lcp",  label: "Content Rendering" },
   { from: "fcp",  to: "tti",  label: "Blocking spans (TBT)" },
   { from: "tti",  to: "inp",  label: "Interactive → Responsive" },
 ];
@@ -43,7 +50,10 @@ export function MetricRelationshipDiagram() {
   const [hoveredMetric, setHoveredMetric] = useState<string | null>(null);
   const info = hoveredMetric ? METRIC_GLOSSARY[hoveredMetric] : null;
 
-  const phaseMap = Object.fromEntries(PHASES.map((p) => [p.id, p]));
+  const phaseMap: Record<string, TimelinePhase> = {
+    nav: { id: "nav", label: "Nav Start", metricKey: "", x: 1, color: "#6b7280" },
+    ...Object.fromEntries(PHASES.map((p) => [p.id, p])),
+  };
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
@@ -55,7 +65,7 @@ export function MetricRelationshipDiagram() {
       </p>
 
       <div className="relative">
-        <svg viewBox="0 0 800 260" className="w-full" style={{ maxHeight: 310 }}>
+        <svg viewBox="0 0 800 290" className="w-full" style={{ minHeight: 420 }}>
           {/* Background grid */}
           <defs>
             <linearGradient id="timeline-grad" x1="0" y1="0" x2="1" y2="0">
@@ -67,8 +77,45 @@ export function MetricRelationshipDiagram() {
           {/* Timeline bar */}
           <rect x="40" y="90" width="720" height="6" rx="3" fill="url(#timeline-grad)" />
 
-          {/* Phase labels: "Navigation Start" and "Fully Loaded" */}
-          <text x="40" y="82" fill="#6b7280" fontSize="9" textAnchor="start">Navigation Start</text>
+          {/* Navigation Start marker */}
+          {(() => {
+            const navX = 40 + (1 / 100) * 720;
+            return (
+              <g>
+                <line x1={navX} y1={60} x2={navX} y2={130} stroke="#6b7280" strokeWidth={1} opacity={0.5} />
+                <circle cx={navX} cy={93} r={5} fill="#6b7280" fillOpacity={0.7} />
+                <text x={navX} y={52} fill="#9ca3af" fontSize="10" fontWeight="600" textAnchor="middle">Nav Start</text>
+              </g>
+            );
+          })()}
+
+          {/* TTFB sub-phases: DNS → TCP+TLS → Server Response */}
+          {(() => {
+            const navX = 40 + (1 / 100) * 720;
+            const ttfbX = 40 + (25 / 100) * 720;
+            const totalW = ttfbX - navX;
+            const barY = 118;
+            const barH = 16;
+            let cx = navX;
+            return (
+              <g>
+                <text x={(navX + ttfbX) / 2} y={barY - 4} fill="#5eead4" fontSize="8" fontWeight="600" textAnchor="middle">TTFB breakdown</text>
+                {TTFB_SUB_PHASES.map((sub) => {
+                  const w = totalW * sub.pct;
+                  const x = cx;
+                  cx += w;
+                  return (
+                    <g key={sub.id}>
+                      <rect x={x} y={barY} width={w} height={barH} rx={sub.id === "dns" ? 4 : 0} fill={sub.color} fillOpacity={0.25} stroke={sub.color} strokeWidth={0.5} />
+                      <text x={x + w / 2} y={barY + barH / 2 + 3.5} fill={sub.color} fontSize="8" fontWeight="600" textAnchor="middle">{sub.label}</text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })()}
+
+          {/* Phase labels */}
           <text x="760" y="82" fill="#6b7280" fontSize="9" textAnchor="end">Fully Loaded</text>
 
           {/* Relationship arrows */}
@@ -138,11 +185,11 @@ export function MetricRelationshipDiagram() {
           })}
 
           {/* Legend */}
-          <text x="400" y="230" fill="#4b5563" fontSize="8" textAnchor="middle">
+          <text x="400" y="240" fill="#4b5563" fontSize="8" textAnchor="middle">
             Timeline markers = when each metric is measured · Spans = metrics measured across a range
           </text>
-          <text x="400" y="242" fill="#4b5563" fontSize="8" textAnchor="middle">
-            Server Processing (DB queries + app logic) happens inside TTFB · Browser Rendering (DOM/CSSOM/paint) fills FCP→LCP
+          <text x="400" y="252" fill="#4b5563" fontSize="8" textAnchor="middle">
+            TTFB = DNS + TCP/TLS + Server Response · Transfer + Parse fills TTFB→FCP · Content Rendering fills FCP→LCP
           </text>
         </svg>
 
@@ -160,11 +207,11 @@ export function MetricRelationshipDiagram() {
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-400">Server Side</p>
-          <p className="mt-1 text-xs text-gray-400">Server Processing (routing, DB queries, response serialisation) is the largest chunk of TTFB. Optimise queries and add caching to reduce it.</p>
+          <p className="mt-1 text-xs text-gray-400">Server Processing (DNS, TCP, TLS, routing, DB queries, response generation) makes up TTFB. After the first byte arrives, Transfer + Parse fills the gap to FCP.</p>
         </div>
         <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Browser Rendering</p>
-          <p className="mt-1 text-xs text-gray-400">After receiving bytes, the browser parses HTML/CSS, executes JS, builds the render tree, and paints. This fills the FCP → LCP gap.</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Content Rendering</p>
+          <p className="mt-1 text-xs text-gray-400">After first paint (FCP), the browser continues loading images, web fonts, and deferred resources until the largest element is fully rendered (LCP). This span measures FCP → LCP.</p>
         </div>
         <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-purple-400">Loading</p>

@@ -7,20 +7,21 @@ Comprehensive guide for setting up, configuring, and using the framework for day
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Dashboard Overview](#dashboard-overview)
-3. [Managing Projects](#managing-projects)
-4. [Managing Scripts](#managing-scripts)
-5. [Running Performance Tests](#running-performance-tests)
-6. [Understanding Run Results](#understanding-run-results)
-7. [Quality Gates](#quality-gates)
-8. [Scheduled Runs](#scheduled-runs)
-9. [Load Testing](#load-testing)
-10. [Trends & Analysis](#trends--analysis)
-11. [Anomalies & Intelligence](#anomalies--intelligence)
-12. [User Management & RBAC](#user-management--rbac)
-13. [Settings & Notifications](#settings--notifications)
-14. [GitHub Integration](#github-integration)
-15. [Troubleshooting](#troubleshooting)
+2. [Authentication](#authentication)
+3. [Dashboard Overview](#dashboard-overview)
+4. [Managing Projects](#managing-projects)
+5. [Managing Scripts](#managing-scripts)
+6. [Running Performance Tests](#running-performance-tests)
+7. [Understanding Run Results](#understanding-run-results)
+8. [Quality Gates](#quality-gates)
+9. [Scheduled Runs](#scheduled-runs)
+10. [Load Testing](#load-testing)
+11. [Trends & Analysis](#trends--analysis)
+12. [Anomalies & Intelligence](#anomalies--intelligence)
+13. [User Management & RBAC](#user-management--rbac)
+14. [Settings & Notifications](#settings--notifications)
+15. [GitHub Integration](#github-integration)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -44,7 +45,31 @@ docker compose up -d postgres
 npm run db:migrate
 ```
 
-### 4. Start the services
+### 4. Seed demo users
+
+```bash
+npm run db:seed
+```
+
+This creates 5 accounts with passwords:
+
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@perftest.io` | `admin123!` | admin |
+| `editor@perftest.io` | `editor123!` | editor |
+| `viewer@perftest.io` | `viewer123!` | viewer |
+| `qa@perftest.io` | `qatest123!` | editor |
+| `dev@perftest.io` | `devtest123!` | viewer |
+
+### 5. Install Playwright browsers
+
+```bash
+npx playwright install chromium --with-deps
+```
+
+Required for the worker to execute real performance tests.
+
+### 6. Start the services
 
 ```bash
 # Terminal 1: API server
@@ -52,11 +77,56 @@ npm run dev:api          # → http://localhost:4000
 
 # Terminal 2: Dashboard
 npm run dev:dashboard    # → http://localhost:4200
+
+# Terminal 3: Worker (executes queued test runs)
+npm run worker:poll
 ```
 
-### 5. Open the dashboard
+### 7. Open the dashboard
 
-Navigate to **http://localhost:4200**. The first registered user is auto-selected.
+Navigate to **http://localhost:4200**. You will be redirected to the **login page**.
+Sign in with one of the seed accounts above (e.g., `admin@perftest.io` / `admin123!`).
+
+---
+
+## Authentication
+
+The framework uses password-based authentication. All dashboard pages (except login, register, forgot-password, and reset-password) require an active session.
+
+### Logging in
+
+1. Navigate to `http://localhost:4200` — you are redirected to `/login`
+2. Enter email and password, then click **Sign In**
+3. The login page shows demo credentials for convenience
+4. On success, you are redirected to the dashboard home
+
+### Registering a new account
+
+1. Click **Create an account** on the login page
+2. Enter email, display name, and password (min 8 characters)
+3. On success, you are redirected to login with a confirmation banner
+4. New accounts are created with the **viewer** role by default
+
+### Forgot / reset password
+
+1. Click **Forgot password?** on the login page
+2. Enter your email → a reset token is generated
+3. In development mode, the token and a direct reset link are shown on screen
+4. On the reset page, enter the token and your new password
+
+### Changing your password
+
+Go to **Settings** → **My Profile** → **Change Password**. Enter your current password and the new password.
+
+### Logging out
+
+Click the **Logout** button at the bottom of the sidebar. This clears your session and redirects to `/login`.
+
+### Session management
+
+- Sessions are stored in `localStorage` as `perf_user`
+- The session includes user ID, email, display name, and role
+- If the API reports updated user data (e.g., role change by admin), the session auto-refreshes
 
 ---
 
@@ -347,23 +417,33 @@ Reports can be scheduled as daily/weekly/monthly digests via Slack or webhooks.
 
 | Role | Permissions |
 |------|-------------|
-| **Admin** | Full access — manage users, projects, channels, all settings |
-| **Editor** | Run tests, create scripts, view all data |
-| **Viewer** | Read-only dashboard and results access |
+| **Admin** | Full access — manage users, projects, channels, all settings. Can switch between user accounts via sidebar. |
+| **Editor** | Run tests, create scripts, view all data within assigned projects |
+| **Viewer** | Read-only dashboard and results access within assigned projects |
 
 ### Admin-only features
 
-- **Users page** — only visible to admins
+- **Users page** — only visible to admins; create users, assign roles, activate/deactivate, delete
 - **Settings** — project create/delete, channel management restricted to admins
-- **User management** — create, update, delete users
+- **Switch User** — admin-only dropdown in the sidebar to impersonate other accounts
+
+### Assigning roles
+
+1. Log in as an admin user
+2. Navigate to **Users** in the sidebar
+3. Click the role dropdown next to any user
+4. Select the new role (admin, editor, viewer) — changes take effect immediately
 
 ### User profile
 
-Go to **Settings** → **My Profile** to update display name, email, and password.
+Go to **Settings** → **My Profile** to:
+- Update your display name
+- View your email and role
+- Change your password (requires current password)
 
 ### Logout
 
-Click **Logout** in the sidebar user switcher area (bottom of sidebar).
+Click **Logout** at the bottom of the sidebar. This clears your session and redirects to the login page.
 
 ---
 
@@ -426,7 +506,16 @@ Token requires `checks:write` or `repo:status` permission.
 
 ### Run stays in "queued" status
 - Start the worker: `npm run worker:poll`
-- Verify worker can reach the API
+- Verify worker can reach the API (`API_URL` env var)
+- Ensure Playwright browsers are installed: `npx playwright install chromium`
+
+### Login page shows but credentials don't work
+- Run `npm run db:seed` to create/reset demo users with passwords
+- Verify the API is running: `curl http://localhost:4000/api/v1/health`
+
+### Redirected to /login repeatedly
+- Clear `localStorage` in browser DevTools and try again
+- Verify the API returns user data: `curl -X POST http://localhost:4000/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@perftest.io","password":"admin123!"}'`
 
 ### Gate results not showing
 - Gates evaluate only for **completed** runs with metrics
