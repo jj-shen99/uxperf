@@ -36,6 +36,9 @@ export default function GatesPage() {
   const { projects, projectId: defaultProjectId } = useProjects();
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
+  const [checkRunId, setCheckRunId] = useState("");
+  const [checkResults, setCheckResults] = useState<any[] | null>(null);
   const [form, setForm] = useState({
     project_id: "",
     name: "",
@@ -49,6 +52,24 @@ export default function GatesPage() {
   const { data: gates, isLoading } = useQuery({
     queryKey: ["gates"],
     queryFn: () => api.gates.list(),
+  });
+
+  const { data: allRuns = [] } = useQuery({
+    queryKey: ["runs"],
+    queryFn: () => api.runs.list(),
+  });
+
+  const completedRuns = allRuns
+    .filter((r: any) => r.status === "completed" && r.metrics)
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 50);
+
+  const evaluateMut = useMutation({
+    mutationFn: (runId: string) => api.gates.evaluate(runId),
+    onSuccess: (data) => {
+      setCheckResults(data);
+      qc.invalidateQueries({ queryKey: ["gates"] });
+    },
   });
 
   const createMut = useMutation({
@@ -82,19 +103,110 @@ export default function GatesPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => { setShowTemplates(!showTemplates); setShowCreate(false); }}
+            onClick={() => { setShowCheck(!showCheck); setShowCreate(false); setShowTemplates(false); setCheckResults(null); }}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
+          >
+            {showCheck ? "Hide Check" : "Check Against Run"}
+          </button>
+          <button
+            onClick={() => { setShowTemplates(!showTemplates); setShowCreate(false); setShowCheck(false); }}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
           >
             {showTemplates ? "Hide Templates" : "Templates"}
           </button>
           <button
-            onClick={() => { setShowCreate(!showCreate); setShowTemplates(false); }}
+            onClick={() => { setShowCreate(!showCreate); setShowTemplates(false); setShowCheck(false); }}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
           >
             {showCreate ? "Cancel" : "New Gate"}
           </button>
         </div>
       </div>
+
+      {/* Check Against Run */}
+      {showCheck && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-4">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Select a Completed Run</label>
+              <select
+                value={checkRunId}
+                onChange={(e) => { setCheckRunId(e.target.value); setCheckResults(null); }}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="">Select a run…</option>
+                {completedRuns.map((r: any) => (
+                  <option key={r.id} value={r.id}>
+                    {r.config?.url ? new URL(r.config.url).hostname : r.id.slice(0, 8)} — {r.engine} — {new Date(r.created_at).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => evaluateMut.mutate(checkRunId)}
+              disabled={!checkRunId || evaluateMut.isPending}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {evaluateMut.isPending ? "Evaluating…" : "Evaluate Gates"}
+            </button>
+          </div>
+          {evaluateMut.isError && (
+            <p className="text-sm text-red-400">Error: {(evaluateMut.error as any)?.message ?? "Evaluation failed"}</p>
+          )}
+          {checkResults && checkResults.length === 0 && (
+            <p className="text-sm text-gray-500">No enabled gates found for this run's project, or run has no metrics.</p>
+          )}
+          {checkResults && checkResults.length > 0 && (
+            <div className="rounded-lg border border-gray-800 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-800/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs text-gray-400">Gate</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-400">Metric</th>
+                    <th className="px-4 py-2 text-right text-xs text-gray-400">Actual</th>
+                    <th className="px-4 py-2 text-right text-xs text-gray-400">Threshold</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-400">Policy</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-400">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {checkResults.map((r: any, i: number) => (
+                    <tr key={r.gate_id ?? i} className="hover:bg-gray-800/30">
+                      <td className="px-4 py-2 text-gray-200">{r.gate_name}</td>
+                      <td className="px-4 py-2 text-gray-400">{r.metric}</td>
+                      <td className="px-4 py-2 text-right font-mono text-gray-300">
+                        {r.actual_value != null ? (r.metric?.includes("lighthouse") ? (r.actual_value * 100).toFixed(0) : typeof r.actual_value === "number" ? r.actual_value.toFixed(1) : r.actual_value) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-gray-400">
+                        {r.operator} {r.computed_threshold ?? r.threshold}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          r.policy === "block" ? "bg-red-900/30 text-red-400" :
+                          r.policy === "warn" ? "bg-yellow-900/30 text-yellow-400" :
+                          "bg-blue-900/30 text-blue-400"
+                        }`}>{r.policy}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          r.status === "passed" ? "bg-green-900/30 text-green-400" :
+                          r.status === "failed" ? "bg-red-900/30 text-red-400" :
+                          "bg-gray-700/30 text-gray-400"
+                        }`}>{r.status}</span>
+                        {r.quorum_detail && r.status === "failed" && (
+                          <span className="ml-1 text-[10px] text-gray-500">
+                            ({r.quorum_detail.recent_failures}/{r.quorum_detail.window_size} failed)
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Gate Templates */}
       {showTemplates && (

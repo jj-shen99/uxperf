@@ -64,8 +64,8 @@ ui_performance_testing_and_analysis/
 ### One-Command Setup
 
 ```bash
-git clone https://github.com/jj-shen99/ui_performance_testing_and_analysis.git
-cd ui_performance_testing_and_analysis
+git clone https://github.com/jj-shen99/uxperf.git
+cd uxperf
 docker compose up -d postgres    # Start Postgres
 npm run setup                    # Install deps, migrate DB, seed users, install Playwright
 ```
@@ -74,8 +74,8 @@ npm run setup                    # Install deps, migrate DB, seed users, install
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/jj-shen99/ui_performance_testing_and_analysis.git
-cd ui_performance_testing_and_analysis
+git clone https://github.com/jj-shen99/uxperf.git
+cd uxperf
 npm install
 
 # 2. Start Postgres
@@ -163,8 +163,8 @@ The dashboard provides 18 pages organized into four navigation groups:
 | **Dashboard** | Home view with overview counters, recent runs table, KPI averages, and interactive metric relationship diagram |
 | **Results** | Detailed run results with Lighthouse scores and metric breakdowns |
 | **Trends** | Time-series charts of performance metrics across runs with environment filtering |
-| **Reports** | Executive performance reports (7/30/90-day summaries with CWV p75, pass rates, anomaly counts) and Lighthouse score explanations (Performance, Accessibility, Best Practices, SEO) with calculation details and tunable parameters |
-| **Knowledge** | Knowledge base and documentation reference |
+| **Reports** | Executive performance reports (7/30/90-day summaries with CWV p75, pass rates, anomaly counts, trend directions) |
+| **Knowledge** | Tabbed knowledge base: Metrics & Glossary, Lighthouse Score Breakdown, Optimization Guide, Testing Methodology, Threshold Reference, Network Fundamentals |
 
 ### Testing
 | Page | Description |
@@ -178,7 +178,7 @@ The dashboard provides 18 pages organized into four navigation groups:
 ### Analysis
 | Page | Description |
 |------|-------------|
-| **Gates** | Quality gate configuration (threshold, baseline-relative, statistical, VU-tiered) |
+| **Gates** | Quality gate configuration (threshold, baseline-relative, statistical, VU-tiered) with on-demand "Check Against Run" evaluation |
 | **Compare** | Side-by-side run comparison with bar charts, diff table, waterfall/filmstrip |
 | **Anomalies** | Anomaly feed with project/time-range/metric filters, trend chart, severity badges, resolution actions |
 | **Intelligence** | Tabbed view: SHAP attribution, Prophet forecasting, RUM summary, CrUX snapshots, capacity planning |
@@ -244,7 +244,7 @@ All gates use **3-of-5 quorum** — a metric must fail 3 of the last 5 runs to t
 | **Database** | PostgreSQL 16 (ClickHouse-ready per-request schema) |
 | **Test Engines** | Playwright + Lighthouse, k6 Browser, WebPageTest |
 | **Object Storage** | Local filesystem (S3-ready abstraction) |
-| **CI/CD** | GitHub Actions (test → lint → build → migration verification) |
+| **CI/CD** | GitHub Actions (manual dispatch; test → lint → build → migration verification) |
 | **Containerization** | Docker, Docker Compose |
 
 ---
@@ -268,7 +268,7 @@ npm test --workspace=packages/worker     # 52 tests
 npm test --workspace=packages/dashboard  # 6 test suites
 ```
 
-The CI pipeline (`.github/workflows/ci.yml`) runs all tests, linting, builds, and database migration verification on every push/PR.
+The CI pipeline (`.github/workflows/ci.yml`) is configured for manual dispatch (`workflow_dispatch`). It runs all tests, linting, builds, and database migration verification.
 
 ---
 
@@ -313,6 +313,7 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 | POST | `/gates` | Create gate |
 | PATCH | `/gates/:id` | Update gate |
 | DELETE | `/gates/:id` | Delete gate |
+| POST | `/gates/evaluate` | Evaluate all gates against a specific run |
 | GET | `/gates/results/:runId` | Gate results for a run |
 | GET | `/schedules` | List schedules (`?project_id=`) |
 | POST | `/schedules` | Create schedule |

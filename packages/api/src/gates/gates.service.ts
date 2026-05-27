@@ -368,6 +368,29 @@ export class GatesService {
   }
 
   /**
+   * Evaluate all gates for a given run_id.
+   * Fetches the run from the database, then delegates to evaluateGatesForRun.
+   */
+  async evaluateAgainstRun(runId: string): Promise<GateEvaluationOutcome[]> {
+    const result = await this.db.query<{
+      project_id: string;
+      metrics: Record<string, unknown> | null;
+      status: string;
+    }>(
+      "SELECT project_id, metrics, status FROM runs WHERE id = $1",
+      [runId],
+    );
+    const run = result.rows[0];
+    if (!run) {
+      throw new Error(`Run ${runId} not found`);
+    }
+    if (!run.metrics) {
+      return [];
+    }
+    return this.evaluateGatesForRun(run.project_id, runId, run.metrics);
+  }
+
+  /**
    * Evaluate a metric against a baseline-relative gate.
    * Fails if actual > baseline_stat * (1 + regression_pct/100).
    * Example: if p75=2000 and regression_pct=10, fails if actual > 2200.

@@ -348,6 +348,7 @@ migrations/
 
 ```mermaid
 flowchart LR
+    OnDemand["POST /gates/evaluate<br/>(on-demand)"] --> FetchGates
     RunComplete["Run Completed<br/>(metrics available)"]
     FetchGates["Fetch Enabled<br/>Gates for Project"]
     EvalGate{"Evaluate Each Gate"}
@@ -580,7 +581,7 @@ graph TB
     API --- Dash
     API --- Worker
 
-    subgraph "CI/CD (GitHub Actions)"
+    subgraph "CI/CD (GitHub Actions, manual dispatch)"
         Test["Test<br/>(Jest + Vitest)"]
         Lint["Lint + Build"]
         DBTest["DB Migration<br/>Up + Down"]

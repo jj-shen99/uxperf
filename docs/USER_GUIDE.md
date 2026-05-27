@@ -139,7 +139,7 @@ The sidebar organizes 18 pages into four groups:
 - **Results** — Detailed run results with Lighthouse scores and metric breakdowns
 - **Trends** — Time-series charts with environment filtering
 - **Reports** — Executive performance summaries (7/30/90-day)
-- **Knowledge** — Documentation and reference
+- **Knowledge** — Tabbed knowledge base: Metrics & Glossary, Lighthouse Score Breakdown, Optimization Guide, Testing Methodology, Thresholds, Network Fundamentals
 
 ### Testing
 - **Runs** — Run list, manual launcher, run detail with gate results
@@ -149,7 +149,7 @@ The sidebar organizes 18 pages into four groups:
 - **Schedules** — Cron-based schedule management
 
 ### Analysis
-- **Gates** — Quality gate configuration (threshold, baseline, statistical, VU-tiered)
+- **Gates** — Quality gate configuration (threshold, baseline, statistical, VU-tiered) with on-demand "Check Against Run" evaluation
 - **Compare** — Side-by-side run comparison with bar charts and diff table
 - **Anomalies** — Anomaly feed with filters (project, time range, metric), trend charts, resolution actions
 - **Intelligence** — SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning
@@ -293,6 +293,22 @@ A gate only triggers if the metric fails in **at least 3 of the last 5 runs**.
 | `block` | Fails CI check — blocks merge |
 | `warn` | Warning only |
 | `page` | Sends notification |
+
+### Check Against Run
+
+You can evaluate all enabled gates against a specific completed test run:
+
+1. On the **Gates** page, click **Check Against Run**
+2. Select a completed run from the dropdown
+3. Click **Evaluate Gates** — results show pass/fail status, actual vs. threshold values, and quorum details
+
+Via API:
+
+```bash
+curl -X POST http://localhost:4000/api/v1/gates/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{"run_id": "<run-uuid>"}'
+```
 
 ### Create via API
 

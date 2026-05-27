@@ -675,6 +675,9 @@ export default function IntelligencePage() {
                   </div>
                 )}
               </div>
+              {forecastMut.isError && (
+                <p className="text-sm text-red-400">Error generating forecast: {(forecastMut.error as any)?.message ?? "Unknown error"}</p>
+              )}
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view forecasts.</p>
               ) : forecasts.length === 0 ? (
@@ -684,13 +687,24 @@ export default function IntelligencePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {forecasts.slice(0, 10).map((f: any, idx: number) => (
+                  {forecasts.slice(0, 10).map((f: any, idx: number) => {
+                    const points: any[] = f.forecast_data ?? f.predictions ?? [];
+                    const trend = f.trend_component ?? f.trend;
+                    const trendDir = typeof trend === "string" ? trend : trend?.direction;
+                    const accuracy = f.accuracy;
+                    const seasonal = f.seasonal_component;
+                    return (
                     <div key={f.id ?? idx} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-200">{f.metric ?? "Metric"}</span>
-                        <span className="text-xs text-gray-500">{f.created_at ? new Date(f.created_at).toLocaleString() : ""}</span>
+                        <span className="text-sm font-medium text-gray-200">
+                          {f.metric ?? "Metric"}
+                          {f.environment && <span className="ml-2 text-xs text-gray-500">({f.environment})</span>}
+                        </span>
+                        <span className="text-xs text-gray-500">{f.computed_at ? new Date(f.computed_at).toLocaleString() : f.created_at ? new Date(f.created_at).toLocaleString() : ""}</span>
                       </div>
-                      {f.predictions && Array.isArray(f.predictions) && (
+                      {points.length === 0 ? (
+                        <p className="text-xs text-yellow-400">Insufficient historical data to generate a forecast. Need at least 7 days of completed runs for this metric.</p>
+                      ) : (
                         <div className="overflow-auto">
                           <table className="w-full text-xs">
                             <thead>
@@ -702,26 +716,28 @@ export default function IntelligencePage() {
                               </tr>
                             </thead>
                             <tbody className="text-gray-400">
-                              {(f.predictions as any[]).slice(0, 14).map((p: any, pi: number) => (
+                              {points.slice(0, 14).map((p: any, pi: number) => (
                                 <tr key={pi} className="border-b border-gray-800/30">
                                   <td className="py-1 px-2 text-gray-300">{p.date ?? `Day ${pi + 1}`}</td>
-                                  <td className="py-1 px-2 text-right font-mono">{(p.yhat ?? p.predicted)?.toFixed(1)}</td>
-                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{(p.yhat_lower ?? p.lower)?.toFixed(1)}</td>
-                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{(p.yhat_upper ?? p.upper)?.toFixed(1)}</td>
+                                  <td className="py-1 px-2 text-right font-mono">{p.yhat?.toFixed(1)}</td>
+                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{p.yhat_lower?.toFixed(1)}</td>
+                                  <td className="py-1 px-2 text-right font-mono text-gray-500">{p.yhat_upper?.toFixed(1)}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                       )}
-                      {f.trend && (
+                      {trendDir && (
                         <p className="mt-2 text-xs text-gray-500">
-                          Trend: <span className={`font-medium ${f.trend === "improving" ? "text-green-400" : f.trend === "degrading" ? "text-red-400" : "text-gray-400"}`}>{f.trend}</span>
-                          {f.seasonality_strength != null && <> • Seasonality: <span className="text-gray-300">{(f.seasonality_strength * 100).toFixed(0)}%</span></>}
+                          Trend: <span className={`font-medium ${trendDir === "improving" ? "text-green-400" : trendDir === "degrading" ? "text-red-400" : "text-gray-400"}`}>{trendDir}</span>
+                          {seasonal?.has_weekly_pattern && <> • Weekly seasonality detected</>}
+                          {accuracy?.mape != null && <> • MAPE: <span className="text-gray-300">{accuracy.mape.toFixed(1)}%</span></>}
                         </p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

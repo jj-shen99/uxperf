@@ -43,6 +43,11 @@ export class GatesController {
     return this.gatesService.delete(id);
   }
 
+  @Post("evaluate")
+  evaluate(@Body() body: { run_id: string }) {
+    return this.gatesService.evaluateAgainstRun(body.run_id);
+  }
+
   @Get("results/:runId")
   getRunResults(@Param("runId") runId: string) {
     return this.gatesService.getResultsForRun(runId);
