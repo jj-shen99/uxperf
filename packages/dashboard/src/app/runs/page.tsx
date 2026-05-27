@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Play, Clock, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useProjects } from "@/hooks/use-projects";
@@ -62,6 +62,11 @@ export default function RunsPage() {
     queryKey: ["scripts-for-run", formProjectId],
     queryFn: () => api.scripts.list(formProjectId),
     enabled: !!formProjectId,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.runs.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
   });
 
   const createMut = useMutation({
@@ -208,7 +213,9 @@ export default function RunsPage() {
                 <th className="px-4 py-3 font-medium">Mode</th>
                 <th className="px-4 py-3 font-medium"><MetricTooltip metricKey="LCP" className="text-xs text-gray-500" /></th>
                 <th className="px-4 py-3 font-medium"><MetricTooltip metricKey="Lighthouse Score" className="text-xs text-gray-500"><span>LH Score</span></MetricTooltip></th>
+                <th className="px-4 py-3 font-medium">Env</th>
                 <th className="px-4 py-3 font-medium">Created</th>
+                {isAdmin && <th className="px-4 py-3 font-medium text-right">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -243,9 +250,21 @@ export default function RunsPage() {
                           )
                         : "—"}
                     </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{run.environment}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {new Date(run.created_at).toLocaleString()}
                     </td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (confirm(`Delete run ${run.id.slice(0, 8)}?`)) deleteMut.mutate(run.id); }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                          title="Delete run"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

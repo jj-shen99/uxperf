@@ -1,6 +1,6 @@
-# User Guide — Frontend Performance Testing Framework
+# User Guide — UI Performance Testing & Analysis Framework
 
-This guide covers how to set up, configure, and use the performance testing framework for day-to-day work.
+Comprehensive guide for setting up, configuring, and using the framework for day-to-day performance testing and analysis.
 
 ---
 
@@ -14,10 +14,13 @@ This guide covers how to set up, configure, and use the performance testing fram
 6. [Understanding Run Results](#understanding-run-results)
 7. [Quality Gates](#quality-gates)
 8. [Scheduled Runs](#scheduled-runs)
-9. [Trends & Analysis](#trends--analysis)
-10. [GitHub Integration](#github-integration)
-11. [API Reference](#api-reference)
-12. [Troubleshooting](#troubleshooting)
+9. [Load Testing](#load-testing)
+10. [Trends & Analysis](#trends--analysis)
+11. [Anomalies & Intelligence](#anomalies--intelligence)
+12. [User Management & RBAC](#user-management--rbac)
+13. [Settings & Notifications](#settings--notifications)
+14. [GitHub Integration](#github-integration)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -30,8 +33,6 @@ npm install
 ```
 
 ### 2. Start Postgres
-
-Use Docker Compose or your own Postgres instance:
 
 ```bash
 docker compose up -d postgres
@@ -46,49 +47,66 @@ npm run db:migrate
 ### 4. Start the services
 
 ```bash
-# Terminal 1: API server (http://localhost:4000)
-npm run dev:api
+# Terminal 1: API server
+npm run dev:api          # → http://localhost:4000
 
-# Terminal 2: Dashboard (http://localhost:3000)
-npm run dev:dashboard
+# Terminal 2: Dashboard
+npm run dev:dashboard    # → http://localhost:4200
 ```
 
 ### 5. Open the dashboard
 
-Navigate to **http://localhost:3000** in your browser.
+Navigate to **http://localhost:4200**. The first registered user is auto-selected.
 
 ---
 
 ## Dashboard Overview
 
-The dashboard sidebar provides navigation to all sections:
+The sidebar organizes 18 pages into four groups:
 
-| Section | Description |
-|---------|-------------|
-| **Dashboard** | Home / overview |
-| **Runs** | View all test runs, launch manual runs, view run details |
-| **Scripts** | Manage test scripts (create, edit, delete) |
-| **Trends** | Time-series charts of performance metrics across runs |
-| **Gates** | Configure quality gates with thresholds |
-| **Schedules** | Set up cron-based scheduled performance tests |
+### Overview
+- **Dashboard** — Home with overview counters, Core Web Vitals, active runs, KPI averages, script/run statistics
+- **Results** — Detailed run results with Lighthouse scores and metric breakdowns
+- **Trends** — Time-series charts with environment filtering
+- **Reports** — Executive performance summaries (7/30/90-day)
+- **Knowledge** — Documentation and reference
+
+### Testing
+- **Runs** — Run list, manual launcher, run detail with gate results
+- **Scripts** — Script CRUD with template creation
+- **Author** — Natural-language test authoring with pipeline visualization
+- **Load Test** — Load profiles, summary stats, status filtering, completed-run metrics
+- **Schedules** — Cron-based schedule management
+
+### Analysis
+- **Gates** — Quality gate configuration (threshold, baseline, statistical, VU-tiered)
+- **Compare** — Side-by-side run comparison with bar charts and diff table
+- **Anomalies** — Anomaly feed with filters (project, time range, metric), trend charts, resolution actions
+- **Intelligence** — SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning
+
+### Admin
+- **Users** — User management (admin-only, sortable columns)
+- **Settings** — Project management, notification channels, environments, user profile
 
 ---
 
 ## Managing Projects
 
-Projects are the top-level organizational unit. Each project has scripts, runs, gates, and schedules.
+Projects are the top-level organizational unit.
 
-### Create a project
+### Via dashboard
+
+Go to **Settings** → create, edit, or delete projects (admin only).
+
+### Via API
 
 ```bash
+# Create
 curl -X POST http://localhost:4000/api/v1/projects \
   -H 'Content-Type: application/json' \
   -d '{"name": "My App", "owner_team": "frontend"}'
-```
 
-### List projects
-
-```bash
+# List
 curl http://localhost:4000/api/v1/projects
 ```
 
@@ -96,31 +114,13 @@ curl http://localhost:4000/api/v1/projects
 
 ## Managing Scripts
 
-Scripts define what pages and actions to test. They use a canonical JSON format that supports multiple authoring modes.
+Scripts define test steps using a canonical JSON format.
 
-### Create a script via API
+### Create from template (dashboard)
 
-```bash
-curl -X POST http://localhost:4000/api/v1/scripts \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "project_id": "<project-uuid>",
-    "name": "Homepage Load Test",
-    "canonical_json": {
-      "steps": [
-        {"action": "navigate", "url": "https://example.com"},
-        {"action": "wait", "selector": "#main-content"}
-      ]
-    },
-    "authoring_mode": "manual"
-  }'
-```
-
-### Create via dashboard
-
-1. Navigate to **Scripts** in the sidebar
-2. Click **New Script**
-3. Fill in the project ID, name, and JSON steps
+1. Go to **Scripts** → **Create from Template**
+2. Pick a template (Lighthouse Audit, Multi-Page Flow, SPA Navigation, API + UI, Mobile Viewport)
+3. Enter a name, select a project, and provide a target URL
 4. Click **Create**
 
 ### Authoring modes
@@ -128,38 +128,45 @@ curl -X POST http://localhost:4000/api/v1/scripts \
 | Mode | Description |
 |------|-------------|
 | `manual` | Hand-written JSON script steps |
-| `describe` | Natural language prompt converted to steps |
-| `record` | Browser session recording (future) |
-| `template` | Pre-built templates with variable substitution (future) |
+| `describe` | Natural language prompt → generated steps |
+| `record` | Browser session recording |
+| `template` | Pre-built templates with variable substitution |
+
+### Via API
+
+```bash
+curl -X POST http://localhost:4000/api/v1/scripts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "project_id": "<project-uuid>",
+    "name": "Homepage Audit",
+    "canonical_json": {
+      "steps": [
+        {"action": "navigate", "url": "https://example.com"},
+        {"action": "audit", "categories": ["performance", "accessibility"]}
+      ]
+    }
+  }'
+```
 
 ---
 
 ## Running Performance Tests
 
-### Manual run from dashboard
+### From dashboard
 
-1. Navigate to **Runs**
-2. Click **New Run**
-3. Enter:
-   - **Project ID** — UUID of the project
-   - **URL** — The page URL to test
-   - **N runs** — Number of iterations (default: 5, recommended for stable medians)
-4. Click **Launch**
+1. Go to **Runs** → **New Run**
+2. Enter Project ID, URL, number of iterations
+3. Click **Launch** — the run is queued for the next available worker
 
-The run will be queued and picked up by the next available worker.
-
-### Manual run via API
+### Via API
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/runs \
   -H 'Content-Type: application/json' \
   -d '{
     "project_id": "<project-uuid>",
-    "config": {
-      "url": "https://example.com",
-      "n_runs": 5,
-      "device": "desktop"
-    }
+    "config": {"url": "https://example.com", "n_runs": 5, "device": "desktop"}
   }'
 ```
 
@@ -169,158 +176,221 @@ curl -X POST http://localhost:4000/api/v1/runs \
 queued → running → completed | failed
 ```
 
-1. **Queued** — Run is created and waiting for a worker
-2. **Running** — Worker has claimed the run and is executing
-3. **Completed** — Metrics collected, gates evaluated, artifacts stored
-4. **Failed** — An error occurred during execution
-
 ---
 
 ## Understanding Run Results
 
-Click any run in the **Runs** list to view its details:
-
-### Lighthouse Scores
-
-Four category scores (0-100):
-- **Performance** — Core web vitals and loading metrics
-- **Accessibility** — WCAG compliance checks
-- **Best Practices** — Modern web development practices
-- **SEO** — Search engine optimization basics
-
-Color coding: 🟢 90+ (good), 🟡 50-89 (needs improvement), 🔴 <50 (poor)
-
-### Web Vitals
+### Core Web Vitals
 
 | Metric | Good | Poor | Description |
 |--------|------|------|-------------|
-| **LCP** | ≤ 2500ms | > 4000ms | Largest Contentful Paint — when the main content loads |
-| **FCP** | ≤ 1800ms | > 3000ms | First Contentful Paint — when first content appears |
-| **INP** | ≤ 200ms | > 500ms | Interaction to Next Paint — input responsiveness |
-| **CLS** | ≤ 0.1 | > 0.25 | Cumulative Layout Shift — visual stability |
-| **TTFB** | ≤ 800ms | > 1800ms | Time to First Byte — server response time |
-| **TBT** | ≤ 200ms | > 600ms | Total Blocking Time — main thread blocking |
+| **LCP** | ≤ 2500ms | > 4000ms | Largest Contentful Paint |
+| **FCP** | ≤ 1800ms | > 3000ms | First Contentful Paint |
+| **INP** | ≤ 200ms | > 500ms | Interaction to Next Paint |
+| **CLS** | ≤ 0.1 | > 0.25 | Cumulative Layout Shift |
+| **TTFB** | ≤ 800ms | > 1800ms | Time to First Byte |
+| **TBT** | ≤ 200ms | > 600ms | Total Blocking Time |
 
-### Gate Results
+### Lighthouse Scores
 
-If quality gates are configured, the run detail page shows which gates passed, failed, or were skipped, along with the quorum status.
+Four category scores (0-100): Performance, Accessibility, Best Practices, SEO.
+
+Color coding: 🟢 90+ (good) · 🟡 50-89 (needs improvement) · 🔴 <50 (poor)
 
 ---
 
 ## Quality Gates
 
-Gates enforce performance standards. A gate defines a metric threshold and a failure policy.
+### Gate types
 
-### Create a gate
+| Type | Description |
+|------|-------------|
+| `threshold` | Static value (e.g., LCP ≤ 2500ms) |
+| `baseline_relative` | Compare against baseline percentiles (e.g., p75 + 10%) |
+| `statistical` | Mean ± N×stddev from baseline |
+| `vu_tiered` | Thresholds that scale with concurrency level |
+| `resource_floor` | Server resource conditions (CPU, memory, event-loop lag) |
+| `capacity_floor` | Minimum sustainable VUs |
+
+### 3-of-5 Quorum
+
+A gate only triggers if the metric fails in **at least 3 of the last 5 runs**.
+
+### Policies
+
+| Policy | Behavior |
+|--------|----------|
+| `block` | Fails CI check — blocks merge |
+| `warn` | Warning only |
+| `page` | Sends notification |
+
+### Create via API
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/gates \
   -H 'Content-Type: application/json' \
   -d '{
-    "project_id": "<project-uuid>",
-    "name": "LCP must be under 2.5s",
-    "definition": {
-      "type": "threshold",
-      "metric": "lcp",
-      "operator": "lte",
-      "threshold": 2500
-    },
+    "project_id": "<uuid>",
+    "name": "LCP under 2.5s",
+    "definition": {"type": "threshold", "metric": "lcp", "operator": "lte", "threshold": 2500},
     "policy": "block"
   }'
 ```
-
-### Gate definition fields
-
-| Field | Values | Description |
-|-------|--------|-------------|
-| `type` | `threshold` | Comparison type (more types in Phase 2) |
-| `metric` | `lcp`, `fcp`, `inp`, `cls`, `ttfb`, `tbt`, `lighthouse_performance`, etc. | Which metric to evaluate |
-| `operator` | `lte`, `gte`, `lt`, `gt` | Comparison operator |
-| `threshold` | number | The threshold value |
-
-### Gate policies
-
-| Policy | Behavior |
-|--------|----------|
-| `block` | Fails the CI check — blocks merge |
-| `warn` | Shows a warning but doesn't block |
-| `page` | Sends a notification (future) |
-
-### 3-of-5 Quorum
-
-To avoid flaky failures, a gate only triggers if the metric fails in **at least 3 of the last 5 runs**. A single bad run won't block your pipeline.
-
-### Manage gates in the dashboard
-
-1. Navigate to **Gates**
-2. View existing gates with toggle switches to enable/disable
-3. Click **New Gate** to create one with the form
-4. Delete gates with the trash button
 
 ---
 
 ## Scheduled Runs
 
-Set up automated recurring performance tests using cron expressions.
-
-### Create a schedule
-
-```bash
-curl -X POST http://localhost:4000/api/v1/schedules \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "project_id": "<project-uuid>",
-    "name": "Nightly homepage check",
-    "cron_expression": "0 0 * * *",
-    "config": {"url": "https://example.com", "n_runs": 5},
-    "environment": "production"
-  }'
-```
-
-### Cron expression format
+### Cron format
 
 ```
 ┌───────── minute (0-59)
 │ ┌─────── hour (0-23)
 │ │ ┌───── day of month (1-31)
 │ │ │ ┌─── month (1-12)
-│ │ │ │ ┌─ day of week (0-6, Sunday=0)
-│ │ │ │ │
+│ │ │ │ ┌─ day of week (0-6)
 * * * * *
 ```
 
-### Common schedules
-
 | Expression | Description |
 |------------|-------------|
-| `0 0 * * *` | Every day at midnight |
+| `0 0 * * *` | Daily at midnight |
 | `0 */6 * * *` | Every 6 hours |
 | `30 9 * * 1-5` | Weekdays at 9:30 AM |
-| `0 0 * * 0` | Every Sunday at midnight |
 
-### Manage in dashboard
+Navigate to **Schedules** to create, enable/disable, and manage scheduled runs.
 
-Navigate to **Schedules** to create, enable/disable, and delete schedules.
+---
+
+## Load Testing
+
+### Overview
+
+Load testing uses the **k6 browser adapter** with staged virtual user (VU) ramp.
+
+### Load profiles
+
+Configure reusable profiles with:
+- **Stages** — VU count, duration, ramp type
+- **Cache state** — cold, warm, or production-replay
+- **Scrape targets** — Server metrics endpoints for telemetry
+
+### Dashboard features
+
+The **Load Test** page shows:
+- **Summary stats** — Total, active, completed, failed runs, total VU-minutes, estimated cost
+- **Status filter** — Filter runs by status
+- **Completed run metrics** — Aggregated performance metrics from finished runs
+
+### Cost estimation
+
+VU-minutes are calculated from stage profiles. Per-project daily quotas can be enforced.
+
+### Server telemetry
+
+During load runs, the system scrapes CPU, memory, disk I/O, network, event-loop lag, and nginx metrics, then correlates them with the VU ramp curve.
 
 ---
 
 ## Trends & Analysis
 
-The **Trends** page shows time-series charts of your performance metrics across runs.
+### Trends page
 
-- Select metrics to display (LCP, FCP, CLS, Lighthouse scores, etc.)
-- Identify regressions by spotting upward trends in timing metrics
-- Compare before/after deployments
+- Time-series charts of any metric across runs
+- Environment filtering
+- Identify regressions by spotting upward trends
+
+### Compare page
+
+Side-by-side comparison of two runs:
+- Bar charts for metric differences
+- Diff table with color-coded deltas
+- Waterfall and filmstrip placeholders
+
+---
+
+## Anomalies & Intelligence
+
+### Anomalies
+
+The **Anomalies** page shows detected performance regressions:
+- **Filters** — by project, time range (7/14/30/90 days), metric
+- **Severity** — info, warning, critical
+- **Workflow** — open → acknowledged → resolved
+- **Trend chart** — visual anomaly trend over time
+
+### Intelligence page (tabbed)
+
+| Tab | Feature |
+|-----|---------|
+| **Attribution** | SHAP-based feature importance for regression root-cause |
+| **Forecasting** | Prophet-style time-series decomposition with prediction intervals |
+| **RUM** | Real User Monitoring p75 summary and trends |
+| **CrUX** | Chrome UX Report snapshots with CWV rating |
+| **Capacity** | Saturation detection, headroom estimation, infrastructure recommendations |
+
+### Executive reports
+
+Generate rolling 7/30/90-day performance summaries including:
+- Core Web Vitals p75 values
+- Run/gate pass rates
+- Anomaly counts
+- Trend direction analysis
+
+Reports can be scheduled as daily/weekly/monthly digests via Slack or webhooks.
+
+---
+
+## User Management & RBAC
+
+### Roles
+
+| Role | Permissions |
+|------|-------------|
+| **Admin** | Full access — manage users, projects, channels, all settings |
+| **Editor** | Run tests, create scripts, view all data |
+| **Viewer** | Read-only dashboard and results access |
+
+### Admin-only features
+
+- **Users page** — only visible to admins
+- **Settings** — project create/delete, channel management restricted to admins
+- **User management** — create, update, delete users
+
+### User profile
+
+Go to **Settings** → **My Profile** to update display name, email, and password.
+
+### Logout
+
+Click **Logout** in the sidebar user switcher area (bottom of sidebar).
+
+---
+
+## Settings & Notifications
+
+### Settings tabs
+
+| Tab | Contents |
+|-----|----------|
+| **General** | Projects (sortable, admin create/delete), notification channels, environments |
+| **My Profile** | Display name, email, password change |
+
+### Notification channels
+
+| Type | Description |
+|------|-------------|
+| Slack webhook | Posts to a Slack channel URL |
+| Generic webhook | HTTP POST to any endpoint |
+| Email | Placeholder for email integration |
+
+Notifications are dispatched on gate failures and run completions.
 
 ---
 
 ## GitHub Integration
 
-Gate results can be automatically posted to GitHub as check runs or commit statuses.
-
-### How it works
-
-When completing a run via the API, include `git` metadata in the completion payload:
+Include `git` metadata when completing a run to post results as GitHub Check Runs:
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/runs/<run-id>/complete \
@@ -328,77 +398,44 @@ curl -X POST http://localhost:4000/api/v1/runs/<run-id>/complete \
   -d '{
     "success": true,
     "metrics": {"lcp_ms": 2100, "fcp_ms": 900},
-    "git": {
-      "owner": "my-org",
-      "repo": "my-app",
-      "sha": "abc123def456",
-      "token": "ghp_xxxxx"
-    }
+    "git": {"owner": "org", "repo": "app", "sha": "abc123", "token": "ghp_xxx"}
   }'
 ```
-
-### Check run conclusions
 
 | Conclusion | Meaning |
 |------------|---------|
 | ✅ `success` | All blocking gates passed |
 | ⚠️ `neutral` | Warning gates failed, no blockers |
-| ❌ `failure` | One or more blocking gates failed |
+| ❌ `failure` | Blocking gates failed |
 
-### Required permissions
-
-The GitHub token needs `checks:write` permission (for Check Runs) or `repo:status` (for commit statuses).
-
----
-
-## API Reference
-
-See the full API endpoint table in [README.md](../README.md#api-endpoints).
-
-### Common patterns
-
-**Filter by project:**
-```
-GET /api/v1/runs?project_id=<uuid>
-GET /api/v1/scripts?project_id=<uuid>
-GET /api/v1/gates?project_id=<uuid>
-```
-
-**Error responses:**
-```json
-{"statusCode": 404, "message": "Run <id> not found"}
-```
+Token requires `checks:write` or `repo:status` permission.
 
 ---
 
 ## Troubleshooting
 
 ### API won't start
-
-- Check that Postgres is running: `docker compose ps`
-- Verify `DATABASE_URL` is set correctly
+- Check Postgres is running: `docker compose ps`
+- Verify `DATABASE_URL` is set
 - Run migrations: `npm run db:migrate`
 
 ### Dashboard shows "Loading..." forever
-
-- Verify the API is running on port 4000
-- Check browser console for CORS or network errors
-- Ensure `NEXT_PUBLIC_API_URL` matches the API port
+- Verify API is running on port 4000
+- Check browser console for network errors
+- Ensure `NEXT_PUBLIC_API_URL` matches API port
 
 ### Run stays in "queued" status
-
-- A worker must be running to claim queued runs
-- Check worker logs: `npm run worker:run`
-- Verify the worker can reach the API endpoint
+- Start the worker: `npm run worker:poll`
+- Verify worker can reach the API
 
 ### Gate results not showing
-
-- Gates are only evaluated for **completed** runs with metrics
+- Gates evaluate only for **completed** runs with metrics
 - Verify gates are **enabled** for the project
-- Check that the gate metric name matches available metrics (e.g., `lcp` maps to `lcp_ms`)
 
-### Path traversal error
+### Empty user profile or missing logout button
+- Hard refresh the browser (`Cmd+Shift+R`)
+- Ensure the API is reachable at `/api/v1/rbac/users`
 
-- Run IDs and artifact filenames are validated against directory traversal
-- Legitimate UUIDs and alphanumeric filenames always work
-- If you see "Path traversal denied", check for special characters in run IDs
+### Scripts page shows "No scripts yet" after creating
+- Verify the API returned the script: `curl http://localhost:4000/api/v1/scripts`
+- If non-admin, ensure project memberships are configured or check project access

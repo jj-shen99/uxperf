@@ -110,7 +110,7 @@ export default function ScriptsPage() {
   const { projects, projectId: defaultProjectId } = useProjects();
   const { isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
-  const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}", template_id: "" });
+  const [form, setForm] = useState({ name: "", project_id: "", canonical_json: "{}", template_id: "", target_url: "" });
   const [showTemplates, setShowTemplates] = useState(false);
 
   // Pre-fill project_id when projects load
@@ -122,17 +122,19 @@ export default function ScriptsPage() {
   });
 
   // Filter scripts: admins see all, regular users see only their projects
+  // If no memberships are configured yet, show all scripts as a fallback
   const scripts = allScripts?.filter(
-    (s: any) => isAdmin || accessibleProjectIds.has(s.project_id)
+    (s: any) => isAdmin || accessibleProjectIds.size === 0 || accessibleProjectIds.has(s.project_id)
   );
 
   const createMut = useMutation({
     mutationFn: (data: any) => api.scripts.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["scripts"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["scripts"] });
+      await qc.invalidateQueries({ queryKey: ["user-memberships"] });
       setShowCreate(false);
       setShowTemplates(false);
-      setForm({ name: "", project_id: "", canonical_json: "{}", template_id: "" });
+      setForm({ name: "", project_id: "", canonical_json: "{}", template_id: "", target_url: "" });
     },
   });
 
@@ -141,11 +143,32 @@ export default function ScriptsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scripts"] }),
   });
 
+  // When target_url changes and a template is active, re-apply substitution in the JSON
+  const updateTargetUrl = (url: string) => {
+    let json = form.canonical_json;
+    // Replace any old URL or {{TARGET_URL}} with the new value
+    if (form.target_url) {
+      json = json.replaceAll(form.target_url, url || "{{TARGET_URL}}");
+    }
+    if (!url) {
+      // If clearing the URL, restore placeholders
+      json = json.replaceAll("{{TARGET_URL}}", "{{TARGET_URL}}");
+    } else {
+      json = json.replaceAll("{{TARGET_URL}}", url);
+    }
+    setForm({ ...form, target_url: url, canonical_json: json });
+  };
+
   const applyTemplate = (tpl: typeof SCRIPT_TEMPLATES[number]) => {
+    const url = form.target_url;
+    let jsonStr = JSON.stringify(tpl.canonical_json, null, 2);
+    if (url) {
+      jsonStr = jsonStr.replaceAll("{{TARGET_URL}}", url);
+    }
     setForm({
       ...form,
       name: tpl.name,
-      canonical_json: JSON.stringify(tpl.canonical_json, null, 2),
+      canonical_json: jsonStr,
       template_id: tpl.name,
     });
     setShowTemplates(false);
@@ -174,8 +197,18 @@ export default function ScriptsPage() {
 
       {/* Template picker */}
       {showTemplates && (
-        <div className="space-y-2">
-          <p className="text-xs text-gray-500">Choose a template to pre-fill the script form. Replace <code className="rounded bg-gray-800 px-1 text-indigo-400">{"{{TARGET_URL}}"}</code> with your actual URL.</p>
+        <div className="space-y-3">
+          <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Target URL</label>
+            <input
+              type="url"
+              placeholder="https://example.com"
+              value={form.target_url}
+              onChange={(e) => setForm({ ...form, target_url: e.target.value })}
+              className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 placeholder-gray-600"
+            />
+            <p className="mt-1.5 text-xs text-gray-500">Enter your URL first, then pick a template — it will be injected automatically.</p>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {SCRIPT_TEMPLATES.map((tpl) => (
               <button
@@ -212,14 +245,29 @@ export default function ScriptsPage() {
             ))}
           </select>
           {form.template_id && (
-            <div className="flex items-center gap-2 rounded-md border border-indigo-800 bg-indigo-900/20 px-3 py-1.5 text-xs text-indigo-300">
-              <span>Template: <strong>{form.template_id}</strong></span>
-              <button
-                onClick={() => setForm({ ...form, template_id: "" })}
-                className="ml-auto text-indigo-400 hover:text-indigo-300"
-              >
-                ✕ Clear
-              </button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-md border border-indigo-800 bg-indigo-900/20 px-3 py-1.5 text-xs text-indigo-300">
+                <span>Template: <strong>{form.template_id}</strong></span>
+                <button
+                  onClick={() => setForm({ ...form, template_id: "" })}
+                  className="ml-auto text-indigo-400 hover:text-indigo-300"
+                >
+                  ✕ Clear
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Target URL</label>
+                <input
+                  type="url"
+                  placeholder="https://example.com"
+                  value={form.target_url}
+                  onChange={(e) => updateTargetUrl(e.target.value)}
+                  className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 placeholder-gray-600"
+                />
+                {form.target_url && (
+                  <p className="mt-1 text-[10px] text-green-500">URL injected into script JSON</p>
+                )}
+              </div>
             </div>
           )}
           <textarea
@@ -250,12 +298,15 @@ export default function ScriptsPage() {
                   alert("Invalid JSON");
                 }
               }}
-              disabled={!form.name || !formProjectId}
+              disabled={!form.name || !formProjectId || createMut.isPending}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              Create
+              {createMut.isPending ? "Creating..." : "Create"}
             </button>
           </div>
+          {createMut.isError && (
+            <p className="text-sm text-red-400">{(createMut.error as Error).message}</p>
+          )}
         </div>
       )}
 

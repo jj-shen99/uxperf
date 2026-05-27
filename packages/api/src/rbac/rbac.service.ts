@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
+import { randomBytes, scryptSync } from "crypto";
 
 export type GlobalRole = "admin" | "editor" | "viewer";
 export type ProjectRole = "owner" | "editor" | "viewer";
@@ -8,6 +9,7 @@ export interface CreateUserDto {
   email: string;
   display_name: string;
   role?: GlobalRole;
+  password?: string;
 }
 
 export interface UpdateUserDto {
@@ -74,11 +76,18 @@ export class RbacService {
     return result.rows[0] ?? null;
   }
 
+  private hashPassword(password: string): string {
+    const salt = randomBytes(32).toString("hex");
+    const hash = scryptSync(password, salt, 64).toString("hex");
+    return `${salt}:${hash}`;
+  }
+
   async createUser(dto: CreateUserDto): Promise<UserRow> {
+    const passwordHash = dto.password ? this.hashPassword(dto.password) : null;
     const result = await this.db.query<UserRow>(
-      `INSERT INTO users (email, display_name, role)
-       VALUES ($1, $2, $3) RETURNING id, email, display_name, role, is_active, last_login_at, created_at, updated_at`,
-      [dto.email, dto.display_name, dto.role ?? "viewer"],
+      `INSERT INTO users (email, display_name, role, password_hash)
+       VALUES ($1, $2, $3, $4) RETURNING id, email, display_name, role, is_active, last_login_at, created_at, updated_at`,
+      [dto.email, dto.display_name, dto.role ?? "viewer", passwordHash],
     );
     return result.rows[0];
   }

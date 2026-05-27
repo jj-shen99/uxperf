@@ -25,9 +25,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Fall back to demo users when API is unavailable
   const users = apiUsers.length > 0 ? apiUsers : DEMO_USERS;
 
-  // Auto-select first user when the list arrives
+  // Auto-select first user when the list arrives, or reset if current ID is invalid
   useEffect(() => {
-    if (users.length > 0 && !currentUserId) {
+    if (users.length === 0) return;
+    if (!currentUserId || !users.some((u) => u.id === currentUserId)) {
       setCurrentUserId(users[0].id);
     }
   }, [users, currentUserId]);

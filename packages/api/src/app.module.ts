@@ -17,6 +17,8 @@ import { ReportsModule } from "./reports/reports.module";
 import { AuthoringModule } from "./authoring/authoring.module";
 import { LoadModule } from "./load/load.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
+import { AuthModule } from "./auth/auth.module";
+import { EnvironmentsModule } from "./environments/environments.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -39,6 +41,8 @@ import { HealthController } from "./health.controller";
     AuthoringModule,
     LoadModule,
     IntelligenceModule,
+    AuthModule,
+    EnvironmentsModule,
   ],
   controllers: [HealthController],
 })

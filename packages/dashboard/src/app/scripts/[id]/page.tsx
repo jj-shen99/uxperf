@@ -7,12 +7,14 @@ import { api } from "@/lib/api";
 import { useProjects } from "@/hooks/use-projects";
 
 export default function ScriptDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId ?? "";
   const router = useRouter();
   const qc = useQueryClient();
   const { projects } = useProjects();
 
-  const { data: script, isLoading } = useQuery({
+  const { data: script, isLoading, isError } = useQuery({
     queryKey: ["script", id],
     queryFn: () => api.scripts.get(id),
     enabled: !!id,
@@ -63,7 +65,7 @@ export default function ScriptDetailPage() {
   }
 
   if (!script) {
-    return <div className="p-6 text-red-400">Script not found.</div>;
+    return <div className="p-6 text-red-400">{isError ? "Error loading script. Please try again." : "Script not found."}</div>;
   }
 
   const projectName = projects.find((p: any) => p.id === script.project_id)?.name ?? script.project_id;

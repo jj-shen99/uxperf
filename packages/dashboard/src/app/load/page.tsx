@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/use-projects";
 import {
   AreaChart,
@@ -77,6 +77,7 @@ export default function LoadTestingPage() {
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [showCreateProfile, setShowCreateProfile] = useState(false);
   const [showQuickRun, setShowQuickRun] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Profile form state
   const [pName, setPName] = useState("");
@@ -182,6 +183,36 @@ export default function LoadTestingPage() {
     r: Math.round(c.pearson_r * 100) / 100,
     fill: c.direction === "positive" ? "#f87171" : c.direction === "negative" ? "#34d399" : "#6b7280",
   })) ?? [];
+
+  const runStats = useMemo(() => {
+    const active = loadRuns.filter((r: any) => ["queued", "warming", "running"].includes(r.status)).length;
+    const completed = loadRuns.filter((r: any) => r.status === "completed").length;
+    const failed = loadRuns.filter((r: any) => r.status === "failed").length;
+    const totalVUMin = loadRuns.reduce((s: number, r: any) => s + (Number(r.vu_minutes) || 0), 0);
+    const totalCost = loadRuns.reduce((s: number, r: any) => s + (r.cost_estimate?.total_cost ?? 0), 0);
+    return { total: loadRuns.length, active, completed, failed, totalVUMin, totalCost };
+  }, [loadRuns]);
+
+  const filteredRuns = useMemo(() => {
+    const list = statusFilter === "all" ? loadRuns : loadRuns.filter((r: any) => r.status === statusFilter);
+    return [...list].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [loadRuns, statusFilter]);
+
+  const completedRunMetrics = useMemo(() => {
+    const completed = loadRuns.filter((r: any) => r.status === "completed" && r.metrics);
+    if (completed.length === 0) return null;
+    const metrics = ["lcp", "fcp", "cls", "ttfb", "inp", "tbt"];
+    const labels: Record<string, string> = { lcp: "LCP", fcp: "FCP", cls: "CLS", ttfb: "TTFB", inp: "INP", tbt: "TBT" };
+    const units: Record<string, string> = { lcp: "ms", fcp: "ms", cls: "", ttfb: "ms", inp: "ms", tbt: "ms" };
+    return metrics.map((m) => {
+      const vals = completed.map((r: any) => Number(r.metrics?.[m])).filter((v: number) => !isNaN(v) && v > 0);
+      if (vals.length === 0) return null;
+      const avg = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      return { metric: m, label: labels[m], unit: units[m], avg, min, max, count: vals.length };
+    }).filter(Boolean);
+  }, [loadRuns]);
 
   return (
     <div className="space-y-6 p-6">
@@ -364,12 +395,67 @@ export default function LoadTestingPage() {
         )}
       </div>
 
+      {/* Summary Stats */}
+      {loadRuns.length > 0 && (
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          {[
+            { label: "Total Runs", value: runStats.total, color: "text-gray-100" },
+            { label: "Active", value: runStats.active, color: runStats.active > 0 ? "text-blue-400" : "text-gray-100" },
+            { label: "Completed", value: runStats.completed, color: "text-green-400" },
+            { label: "Failed", value: runStats.failed, color: runStats.failed > 0 ? "text-red-400" : "text-gray-100" },
+            { label: "Total VU-min", value: runStats.totalVUMin.toFixed(1), color: "text-indigo-400" },
+            { label: "Total Cost", value: `$${runStats.totalCost.toFixed(2)}`, color: "text-yellow-400" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className={`mt-1 text-xl font-bold ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Completed Run Metrics */}
+      {completedRunMetrics && completedRunMetrics.length > 0 && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Avg Metrics from Completed Runs</h3>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+            {completedRunMetrics.map((m: any) => (
+              <div key={m.metric} className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                <p className="text-[10px] text-gray-500">{m.label} ({m.count} runs)</p>
+                <p className="text-sm font-bold text-gray-100">{m.avg.toFixed(m.unit === "ms" ? 0 : 3)}{m.unit}</p>
+                <div className="mt-1 flex justify-between text-[9px] text-gray-600">
+                  <span>Min {m.min.toFixed(m.unit === "ms" ? 0 : 3)}{m.unit}</span>
+                  <span>Max {m.max.toFixed(m.unit === "ms" ? 0 : 3)}{m.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Load Runs */}
       <div>
-        <h2 className="text-sm font-medium text-gray-300 mb-3">Load Runs</h2>
-        {loadRuns.length > 0 ? (
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-gray-300">Load Runs</h2>
+          <div className="flex gap-1">
+            {["all", "running", "completed", "failed", "queued", "cancelled"].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  statusFilter === s
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {filteredRuns.length > 0 ? (
           <div className="space-y-2">
-            {loadRuns.map((run: any) => (
+            {filteredRuns.map((run: any) => (
               <div
                 key={run.id}
                 onClick={() => setSelectedRun(selectedRun === run.id ? null : run.id)}
@@ -428,8 +514,8 @@ export default function LoadTestingPage() {
           </div>
         ) : (
           <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-12 text-center text-gray-500">
-            <p className="text-lg">{runsLoading ? "Loading..." : "No load runs yet"}</p>
-            <p className="mt-2 text-sm">Use Quick Run or launch from a saved profile to start load testing</p>
+            <p className="text-lg">{runsLoading ? "Loading..." : statusFilter !== "all" ? `No ${statusFilter} runs` : "No load runs yet"}</p>
+            <p className="mt-2 text-sm">{statusFilter !== "all" ? "Try a different filter" : "Use Quick Run or launch from a saved profile to start load testing"}</p>
           </div>
         )}
       </div>

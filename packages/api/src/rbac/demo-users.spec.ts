@@ -44,7 +44,7 @@ describe("RbacService - Demo Users & User Scoping", () => {
       expect(user.role).toBe("viewer");
       expect(mockDb.query).toHaveBeenCalledWith(
         expect.any(String),
-        ["test@test.com", "Test", "viewer"],
+        ["test@test.com", "Test", "viewer", null],
       );
     });
   });

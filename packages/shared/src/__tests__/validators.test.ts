@@ -130,7 +130,7 @@ describe("isValidUrl — Equivalence Partitions + Boundary", () => {
       "https://example.com",
       "http://example.com",
       "https://example.com/path?q=1",
-      "http://localhost:3000",
+      "http://localhost:4200",
       "https://sub.domain.example.co.uk/a/b",
       "http://192.168.1.1:8080",
     ])("accepts '%s'", (url) => {

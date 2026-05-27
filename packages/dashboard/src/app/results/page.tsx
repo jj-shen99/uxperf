@@ -13,15 +13,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  PieChart,
-  Pie,
   Cell,
-  Legend,
 } from "recharts";
 
 const METRIC_META: Record<string, { label: string; tooltipKey: string; unit: string; good: number; poor: number }> = {
@@ -61,8 +53,6 @@ const COLORS = {
   needs_improvement: "#eab308",
   poor: "#ef4444",
   bar: "#818cf8",
-  radar: "#818cf8",
-  radarFill: "rgba(129, 140, 248, 0.3)",
 };
 
 function ratingColor(value: number, good: number, poor: number) {
@@ -107,20 +97,18 @@ export default function ResultsPage() {
       unit: meta.unit,
     }));
 
-  const lighthouseRadarData = SCORE_KEYS
+  const lighthouseScores = SCORE_KEYS
     .filter(({ key }) => metrics[key] != null)
     .map(({ key, label }) => ({
-      metric: label,
+      key,
+      label,
       score: Math.round((metrics[key] as number) * 100),
+      color: scoreRating(metrics[key] as number),
     }));
 
-  const lighthousePieData = SCORE_KEYS
-    .filter(({ key }) => metrics[key] != null)
-    .map(({ key, label }) => ({
-      name: label,
-      value: Math.round((metrics[key] as number) * 100),
-      fill: scoreRating(metrics[key] as number),
-    }));
+  const overallScore = lighthouseScores.length > 0
+    ? Math.round(lighthouseScores.reduce((s, x) => s + x.score, 0) / lighthouseScores.length)
+    : null;
 
   return (
     <div className="space-y-6 p-6">
@@ -221,50 +209,58 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* Lighthouse radar chart */}
-          {lighthouseRadarData.length > 0 && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-                <h2 className="mb-4 text-sm font-medium text-gray-300">
-                  <MetricTooltip metricKey="Lighthouse Score" className="text-gray-300">Lighthouse Scores (Radar)</MetricTooltip>
-                </h2>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RadarChart data={lighthouseRadarData}>
-                    <PolarGrid stroke="#374151" />
-                    <PolarAngleAxis dataKey="metric" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "#6b7280", fontSize: 10 }} />
-                    <Radar name="Score" dataKey="score" stroke={COLORS.radar} fill={COLORS.radarFill} fillOpacity={0.6} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-                <h2 className="mb-4 text-sm font-medium text-gray-300">Lighthouse Scores (Breakdown)</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={lighthousePieData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      label={({ name, value }) => `${name}: ${value}`}
-                      labelLine={{ stroke: "#6b7280" }}
-                    >
-                      {lighthousePieData.map((entry, index) => (
-                        <Cell key={index} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Legend wrapperStyle={{ color: "#9ca3af", fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
-                      itemStyle={{ color: "#e5e7eb" }}
-                      formatter={(value: number) => [`${value}/100`, "Score"]}
+          {/* Lighthouse KPI Scores */}
+          {lighthouseScores.length > 0 && (
+            <div className="space-y-4">
+              {/* Overall KPI */}
+              {overallScore != null && (
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-sm font-medium text-gray-400">
+                        <MetricTooltip metricKey="Lighthouse Score" className="text-gray-400">Overall Lighthouse Score</MetricTooltip>
+                      </h2>
+                      <p className="mt-1 text-xs text-gray-500">Average across all categories</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-5xl font-bold ${overallScore >= 90 ? "text-green-400" : overallScore >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                        {overallScore}
+                      </span>
+                      <span className="text-lg text-gray-500">/100</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2.5 w-full rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${overallScore}%`,
+                        backgroundColor: overallScore >= 90 ? COLORS.good : overallScore >= 50 ? COLORS.needs_improvement : COLORS.poor,
+                      }}
                     />
-                  </PieChart>
-                </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Category breakdown cards */}
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                {lighthouseScores.map((item) => (
+                  <div key={item.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                    <p className="text-xs font-medium text-gray-500">{item.label}</p>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="text-2xl font-bold" style={{ color: item.color }}>{item.score}</span>
+                      <span className="text-xs text-gray-600">/100</span>
+                    </div>
+                    <div className="mt-3 h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${item.score}%`, backgroundColor: item.color }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] text-gray-600">
+                      {item.score >= 90 ? "Good" : item.score >= 50 ? "Needs Improvement" : "Poor"}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

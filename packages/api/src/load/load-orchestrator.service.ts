@@ -78,22 +78,31 @@ export class LoadOrchestratorService {
    * MAX_RUN_DURATION_S and transition them to "failed".
    */
   async timeoutStaleRuns(): Promise<number> {
-    const result = await this.db.query<LoadRunRow>(
-      `UPDATE load_runs
-       SET status = 'failed',
-           finished_at = now(),
-           error = 'Timed out after ' || $1 || ' seconds'
-       WHERE status IN ('queued', 'warming', 'running')
-         AND created_at < now() - ($1 || ' seconds')::interval
-       RETURNING id, status`,
-      [MAX_RUN_DURATION_S],
-    );
-    if (result.rows.length > 0) {
-      this.logger.warn(
-        `Timed out ${result.rows.length} stale load run(s): ${result.rows.map((r) => r.id).join(", ")}`,
+    try {
+      const result = await this.db.query<LoadRunRow>(
+        `UPDATE load_runs
+         SET status = 'failed',
+             finished_at = now(),
+             error = 'Timed out after ' || $1 || ' seconds'
+         WHERE status IN ('queued', 'warming', 'running')
+           AND created_at < now() - ($1 || ' seconds')::interval
+         RETURNING id, status`,
+        [MAX_RUN_DURATION_S],
       );
+      if (result.rows.length > 0) {
+        this.logger.warn(
+          `Timed out ${result.rows.length} stale load run(s): ${result.rows.map((r) => r.id).join(", ")}`,
+        );
+      }
+      return result.rows.length;
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        // Table doesn't exist yet — skip silently
+        return 0;
+      }
+      this.logger.error(`timeoutStaleRuns failed: ${err.message}`);
+      return 0;
     }
-    return result.rows.length;
   }
 
   /**

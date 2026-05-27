@@ -32,6 +32,7 @@ export const api = {
     get: (id: string) => request<any>(`/runs/${id}`),
     create: (data: any) => request<any>("/runs", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/runs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/runs/${id}`, { method: "DELETE" }),
     getGateResults: (id: string) => request<any[]>(`/runs/${id}/gates`),
     claim: () => request<any>("/runs/claim", { method: "POST" }),
     complete: (id: string, payload: any) => request<any>(`/runs/${id}/complete`, { method: "POST", body: JSON.stringify(payload) }),
@@ -211,11 +212,23 @@ export const api = {
         request<any>("/intelligence/geo/dispatch", { method: "POST", body: JSON.stringify(data) }),
     },
   },
+  auth: {
+    register: (data: { email: string; display_name: string; password: string }) =>
+      request<any>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+    login: (data: { email: string; password: string }) =>
+      request<any>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+    forgotPassword: (data: { email: string }) =>
+      request<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify(data) }),
+    resetPassword: (data: { token: string; password: string }) =>
+      request<any>("/auth/reset-password", { method: "POST", body: JSON.stringify(data) }),
+    changePassword: (data: { user_id: string; current_password: string; new_password: string }) =>
+      request<any>("/auth/change-password", { method: "POST", body: JSON.stringify(data) }),
+  },
   rbac: {
     users: {
       list: () => request<any[]>("/rbac/users"),
       get: (id: string) => request<any>(`/rbac/users/${id}`),
-      create: (data: { email: string; display_name: string; role?: string }) =>
+      create: (data: { email: string; display_name: string; role?: string; password?: string }) =>
         request<any>("/rbac/users", { method: "POST", body: JSON.stringify(data) }),
       update: (id: string, data: { display_name?: string; role?: string; is_active?: boolean }) =>
         request<any>(`/rbac/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -228,6 +241,12 @@ export const api = {
       remove: (projectId: string, userId: string) =>
         request<void>(`/rbac/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
     },
+  },
+  environments: {
+    list: () => request<any[]>("/environments"),
+    create: (data: { name: string; slug: string; description?: string }) =>
+      request<any>("/environments", { method: "POST", body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/environments/${id}`, { method: "DELETE" }),
   },
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),

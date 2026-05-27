@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -48,6 +49,11 @@ export class RunsController {
   @Post(":id/complete")
   complete(@Param("id") id: string, @Body() payload: Omit<RunCompletionPayload, "run_id">) {
     return this.orchestrator.completeRun({ run_id: id, ...payload });
+  }
+
+  @Delete(":id")
+  remove(@Param("id") id: string) {
+    return this.runsService.delete(id);
   }
 
   @Patch(":id")

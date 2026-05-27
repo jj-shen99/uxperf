@@ -3,6 +3,20 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useProjects } from "@/hooks/use-projects";
+
+const GATE_TEMPLATES = [
+  { name: "LCP Budget", metric: "lcp", operator: "lte", threshold: 2500, policy: "block", description: "Largest Contentful Paint ≤ 2.5s (Good)" },
+  { name: "FCP Budget", metric: "fcp", operator: "lte", threshold: 1800, policy: "warn", description: "First Contentful Paint ≤ 1.8s (Good)" },
+  { name: "CLS Budget", metric: "cls", operator: "lte", threshold: 0.1, policy: "block", description: "Cumulative Layout Shift ≤ 0.1 (Good)" },
+  { name: "INP Budget", metric: "inp", operator: "lte", threshold: 200, policy: "warn", description: "Interaction to Next Paint ≤ 200ms (Good)" },
+  { name: "TTFB Budget", metric: "ttfb", operator: "lte", threshold: 800, policy: "warn", description: "Time to First Byte ≤ 800ms (Good)" },
+  { name: "TBT Budget", metric: "tbt", operator: "lte", threshold: 200, policy: "warn", description: "Total Blocking Time ≤ 200ms (Good)" },
+  { name: "Lighthouse Perf ≥ 90", metric: "lighthouse_performance", operator: "gte", threshold: 0.9, policy: "block", description: "Lighthouse Performance score ≥ 90" },
+  { name: "Lighthouse A11y ≥ 90", metric: "lighthouse_accessibility", operator: "gte", threshold: 0.9, policy: "warn", description: "Lighthouse Accessibility score ≥ 90" },
+  { name: "Lighthouse SEO ≥ 90", metric: "lighthouse_seo", operator: "gte", threshold: 0.9, policy: "warn", description: "Lighthouse SEO score ≥ 90" },
+  { name: "LCP Degradation Alert", metric: "lcp", operator: "lte", threshold: 4000, policy: "page", description: "Page on-call if LCP exceeds 4s (Poor)" },
+];
 
 const METRIC_OPTIONS = [
   "lcp", "fcp", "inp", "cls", "ttfb", "si", "tti", "tbt",
@@ -19,7 +33,9 @@ const OPERATOR_OPTIONS = [
 
 export default function GatesPage() {
   const qc = useQueryClient();
+  const { projects, projectId: defaultProjectId } = useProjects();
   const [showCreate, setShowCreate] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [form, setForm] = useState({
     project_id: "",
     name: "",
@@ -28,6 +44,7 @@ export default function GatesPage() {
     threshold: "",
     policy: "warn",
   });
+  const formProjectId = form.project_id || defaultProjectId;
 
   const { data: gates, isLoading } = useQuery({
     queryKey: ["gates"],
@@ -63,13 +80,73 @@ export default function GatesPage() {
             the last 5 runs to trigger a gate failure.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          {showCreate ? "Cancel" : "New Gate"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowTemplates(!showTemplates); setShowCreate(false); }}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
+          >
+            {showTemplates ? "Hide Templates" : "Templates"}
+          </button>
+          <button
+            onClick={() => { setShowCreate(!showCreate); setShowTemplates(false); }}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            {showCreate ? "Cancel" : "New Gate"}
+          </button>
+        </div>
       </div>
+
+      {/* Gate Templates */}
+      {showTemplates && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Target Project</label>
+            <select
+              value={formProjectId}
+              onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+              className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+            >
+              <option value="">Select a project</option>
+              {projects.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {GATE_TEMPLATES.map((tpl) => (
+              <button
+                key={tpl.name}
+                disabled={!formProjectId || createMut.isPending}
+                onClick={() => {
+                  createMut.mutate({
+                    project_id: formProjectId,
+                    name: tpl.name,
+                    policy: tpl.policy,
+                    definition: {
+                      type: tpl.metric.startsWith("lighthouse") ? "threshold" : "threshold",
+                      metric: tpl.metric,
+                      operator: tpl.operator,
+                      threshold: tpl.threshold,
+                    },
+                  });
+                }}
+                className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 text-left hover:border-indigo-600 hover:bg-indigo-900/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <p className="text-sm font-medium text-gray-200">{tpl.name}</p>
+                <p className="mt-1 text-xs text-gray-500">{tpl.description}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    tpl.policy === "block" ? "bg-red-900/30 text-red-400" :
+                    tpl.policy === "warn" ? "bg-yellow-900/30 text-yellow-400" :
+                    "bg-blue-900/30 text-blue-400"
+                  }`}>{tpl.policy}</span>
+                  <span className="text-[10px] text-gray-600">{tpl.operator === "lte" ? "≤" : "≥"} {tpl.threshold}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Create form */}
       {showCreate && (
@@ -80,12 +157,16 @@ export default function GatesPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="col-span-2 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 sm:col-span-1"
           />
-          <input
-            placeholder="Project ID"
-            value={form.project_id}
+          <select
+            value={formProjectId}
             onChange={(e) => setForm({ ...form, project_id: e.target.value })}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-          />
+          >
+            <option value="">Select project</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <select
             value={form.metric}
             onChange={(e) => setForm({ ...form, metric: e.target.value })}
@@ -123,7 +204,7 @@ export default function GatesPage() {
           <button
             onClick={() =>
               createMut.mutate({
-                project_id: form.project_id,
+                project_id: formProjectId,
                 name: form.name,
                 policy: form.policy,
                 definition: {
@@ -134,7 +215,7 @@ export default function GatesPage() {
                 },
               })
             }
-            disabled={!form.name || !form.project_id || !form.threshold}
+            disabled={!form.name || !formProjectId || !form.threshold}
             className="col-span-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 sm:col-span-1"
           >
             Create Gate

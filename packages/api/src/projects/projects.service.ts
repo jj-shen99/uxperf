@@ -3,7 +3,7 @@ import { DatabaseService } from "../database/database.service";
 
 export interface CreateProjectDto {
   name: string;
-  owner_team: string;
+  owner_team?: string;
   description?: string;
   environment_configs?: Record<string, unknown>;
   domain_allowlist?: string[];
@@ -58,7 +58,7 @@ export class ProjectsService {
        RETURNING *`,
       [
         dto.name,
-        dto.owner_team,
+        dto.owner_team ?? "default",
         dto.description ?? null,
         JSON.stringify(dto.environment_configs ?? {}),
         dto.domain_allowlist ?? [],

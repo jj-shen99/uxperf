@@ -97,6 +97,13 @@ export class RunsService {
     return result.rows[0];
   }
 
+  async delete(id: string): Promise<void> {
+    const result = await this.db.query("DELETE FROM runs WHERE id = $1", [id]);
+    if (result.rowCount === 0) {
+      throw new NotFoundException(`Run ${id} not found`);
+    }
+  }
+
   async update(id: string, dto: UpdateRunDto): Promise<RunRow> {
     const sets: string[] = [];
     const values: unknown[] = [];

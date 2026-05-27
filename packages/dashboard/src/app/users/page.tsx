@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 const ROLES = ["admin", "editor", "viewer"] as const;
 const ROLE_COLORS: Record<string, string> = {
@@ -11,12 +12,22 @@ const ROLE_COLORS: Record<string, string> = {
   viewer: "bg-gray-500/20 text-gray-300",
 };
 
+type UserSortKey = "display_name" | "email" | "role" | "is_active" | "last_login_at";
+
 export default function UsersPage() {
+  const { isAdmin } = useCurrentUser();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ email: "", display_name: "", role: "viewer" as string });
+  const [form, setForm] = useState({ email: "", display_name: "", role: "viewer" as string, password: "" });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ display_name: "", role: "" });
+  const [userSort, setUserSort] = useState<{ key: UserSortKey; dir: "asc" | "desc" }>({ key: "display_name", dir: "asc" });
+
+  const toggleUserSort = (key: UserSortKey) => {
+    setUserSort((prev) =>
+      prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }
+    );
+  };
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
@@ -24,12 +35,12 @@ export default function UsersPage() {
   });
 
   const createMut = useMutation({
-    mutationFn: (data: { email: string; display_name: string; role?: string }) =>
+    mutationFn: (data: { email: string; display_name: string; role?: string; password?: string }) =>
       api.rbac.users.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
       setShowCreate(false);
-      setForm({ email: "", display_name: "", role: "viewer" });
+      setForm({ email: "", display_name: "", role: "viewer", password: "" });
     },
   });
 
@@ -51,6 +62,17 @@ export default function UsersPage() {
     setEditingId(user.id);
     setEditForm({ display_name: user.display_name, role: user.role });
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center space-y-2">
+          <p className="text-lg font-semibold text-gray-300">Access Denied</p>
+          <p className="text-sm text-gray-500">Only admin users can access user management.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -85,6 +107,15 @@ export default function UsersPage() {
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
               className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
             />
+            <input
+              placeholder="Password (optional)"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
@@ -96,7 +127,11 @@ export default function UsersPage() {
             </select>
           </div>
           <button
-            onClick={() => createMut.mutate(form)}
+            onClick={() => {
+              const payload: any = { email: form.email, display_name: form.display_name, role: form.role };
+              if (form.password) payload.password = form.password;
+              createMut.mutate(payload);
+            }}
             disabled={!form.email || !form.display_name || createMut.isPending}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >
@@ -119,16 +154,27 @@ export default function UsersPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-800/50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">Name</th>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">Email</th>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">Role</th>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">Status</th>
-                <th className="px-4 py-2 text-left text-xs text-gray-400">Last Login</th>
+                {([["display_name", "Name"], ["email", "Email"], ["role", "Role"], ["is_active", "Status"], ["last_login_at", "Last Login"]] as [UserSortKey, string][]).map(([key, label]) => (
+                  <th
+                    key={key}
+                    onClick={() => toggleUserSort(key)}
+                    className="px-4 py-2 text-left text-xs text-gray-400 cursor-pointer hover:text-gray-200 select-none"
+                  >
+                    {label} {userSort.key === key ? (userSort.dir === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                ))}
                 <th className="px-4 py-2 text-right text-xs text-gray-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {users.map((u: any) => (
+              {[...users].sort((a: any, b: any) => {
+                let aVal = a[userSort.key] ?? "";
+                let bVal = b[userSort.key] ?? "";
+                if (typeof aVal === "boolean") { aVal = aVal ? 1 : 0; bVal = bVal ? 1 : 0; }
+                if (typeof aVal === "string") { aVal = aVal.toLowerCase(); bVal = (bVal as string).toLowerCase(); }
+                const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+                return userSort.dir === "asc" ? cmp : -cmp;
+              }).map((u: any) => (
                 <tr key={u.id} className="hover:bg-gray-800/30">
                   <td className="px-4 py-2 text-gray-200">
                     {editingId === u.id ? (
