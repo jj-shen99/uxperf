@@ -278,7 +278,7 @@ export const api = {
     get: (id: string) => request<any>(`/budgets/${id}`),
     create: (data: any) => request<any>("/budgets", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
-      request<any>(`/budgets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      request<any>(`/budgets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/budgets/${id}`, { method: "DELETE" }),
     evaluate: (projectId: string, route: string, metrics: Record<string, number>, deviceClass?: string) =>
       request<any>(`/budgets/evaluate/${encodeURIComponent(projectId)}?route=${encodeURIComponent(route)}${deviceClass ? `&device_class=${deviceClass}` : ""}`, {

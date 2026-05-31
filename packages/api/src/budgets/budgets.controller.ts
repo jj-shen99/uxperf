@@ -30,22 +30,27 @@ export class BudgetsController {
     return this.budgetsService.delete(id);
   }
 
-  @Post("evaluate")
+  @Post("evaluate/:projectId")
   evaluateRoute(
+    @Param("projectId") projectId: string,
     @Body() body: {
-      project_id: string;
-      route: string;
+      route?: string;
       metrics: Record<string, number>;
       device_class?: DeviceClass;
     },
+    @Query("route") queryRoute?: string,
+    @Query("device_class") queryDeviceClass?: string,
   ) {
     return this.budgetsService.evaluateRoute(
-      body.project_id, body.route, body.metrics, body.device_class,
+      projectId,
+      body.route ?? queryRoute ?? "/",
+      body.metrics,
+      (body.device_class ?? queryDeviceClass) as DeviceClass | undefined,
     );
   }
 
-  @Post("ratchet")
-  ratchet(@Body() body: { project_id: string }) {
-    return this.budgetsService.ratchetBudgets(body.project_id);
+  @Post("ratchet/:projectId")
+  ratchet(@Param("projectId") projectId: string) {
+    return this.budgetsService.ratchetBudgets(projectId);
   }
 }
