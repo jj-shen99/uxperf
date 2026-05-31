@@ -21,6 +21,16 @@ export interface GateDefinition {
   // E-13: capacity floor fields
   capacity_metric?: "rps" | "concurrent_users" | "throughput_mbps";
   min_capacity?: number;     // required minimum capacity
+  // E-47: Per-severity quorum configuration
+  quorum?: QuorumConfig;
+}
+
+// E-47: Per-severity quorum thresholds
+// Book Ch 14, p240–241: "advisory gates can be 1-of-N, blocking gates
+// require high quorum, paging gates require the highest bar."
+export interface QuorumConfig {
+  window_size?: number;       // how many recent runs to consider (default 5)
+  required_failures?: number; // failures required to trigger (default varies by policy)
 }
 
 // E-11: VU tier configuration
@@ -291,35 +301,64 @@ export class GatesService {
   }
 
   /**
-   * 3-of-5 quorum: check if a gate has failed in at least 3 of the last 5 runs.
-   * §10.2: "a regression must appear in at least three of the last five runs
-   * to fail a gate."
+   * E-47: Per-severity quorum check.
+   *
+   * Book Ch 14, p240–241: quorum thresholds tighten with severity:
+   *   - advisory/warn:  1-of-3 (any failure triggers warning)
+   *   - block:          3-of-5 (high confidence before blocking a deploy)
+   *   - page:           4-of-5 (highest bar for paging on-call)
+   *
+   * Gate-level overrides via definition.quorum take precedence over
+   * policy defaults.
    */
   async checkQuorum(
     gateId: string,
     projectId: string,
-    currentRunFailed: boolean
-  ): Promise<{ shouldFail: boolean; recentFailures: number }> {
-    // Get the last 4 gate results (we'll add the current as the 5th)
+    currentRunFailed: boolean,
+    policy?: string,
+    quorumConfig?: QuorumConfig,
+  ): Promise<{ shouldFail: boolean; recentFailures: number; requiredFailures: number; windowSize: number }> {
+    // E-47: Determine quorum thresholds based on policy severity
+    const defaults = this.getQuorumDefaults(policy ?? "block");
+    const windowSize = quorumConfig?.window_size ?? defaults.windowSize;
+    const requiredFailures = quorumConfig?.required_failures ?? defaults.requiredFailures;
+
+    // Get the last (windowSize - 1) gate results (current run is the Nth)
     const result = await this.db.query<GateResultRow>(
       `SELECT gr.* FROM gate_results gr
        JOIN runs r ON r.id = gr.run_id
        WHERE gr.gate_id = $1 AND r.project_id = $2
        ORDER BY gr.evaluated_at DESC
-       LIMIT 4`,
-      [gateId, projectId]
+       LIMIT $3`,
+      [gateId, projectId, windowSize - 1]
     );
 
     const recentStatuses = result.rows.map((r) => r.status);
     const pastFailures = recentStatuses.filter((s) => s === "failed").length;
     const totalFailures = pastFailures + (currentRunFailed ? 1 : 0);
-    const windowSize = Math.min(recentStatuses.length + 1, 5);
-    const requiredFailures = 3;
 
     return {
       shouldFail: totalFailures >= requiredFailures,
       recentFailures: totalFailures,
+      requiredFailures,
+      windowSize,
     };
+  }
+
+  /**
+   * E-47: Default quorum thresholds per gate policy.
+   */
+  private getQuorumDefaults(policy: string): { windowSize: number; requiredFailures: number } {
+    switch (policy) {
+      case "warn":
+      case "advisory":
+        return { windowSize: 3, requiredFailures: 1 };
+      case "page":
+        return { windowSize: 5, requiredFailures: 4 };
+      case "block":
+      default:
+        return { windowSize: 5, requiredFailures: 3 };
+    }
   }
 
   /**
@@ -409,8 +448,8 @@ export class GatesService {
           continue;
       }
 
-      // Apply 3-of-5 quorum
-      const quorum = await this.checkQuorum(gate.id, projectId, !passed);
+      // E-47: Apply per-severity quorum
+      const quorum = await this.checkQuorum(gate.id, projectId, !passed, gate.policy, def.quorum);
 
       const finalStatus: "passed" | "failed" | "skipped" =
         actualValue === undefined
@@ -437,8 +476,8 @@ export class GatesService {
             regression_pct: def.regression_pct,
             single_run_passed: passed,
             quorum_failures: quorum.recentFailures,
-            quorum_required: 3,
-            quorum_window: 5,
+            quorum_required: quorum.requiredFailures,
+            quorum_window: quorum.windowSize,
           }),
         ]
       );
@@ -459,8 +498,8 @@ export class GatesService {
         ci_reliable: ciReliable,
         quorum_detail: {
           recent_failures: quorum.recentFailures,
-          required_failures: 3,
-          window_size: 5,
+          required_failures: quorum.requiredFailures,
+          window_size: quorum.windowSize,
         },
       });
     }

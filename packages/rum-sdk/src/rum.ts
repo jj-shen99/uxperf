@@ -268,8 +268,10 @@ function scheduleFlush(): void {
   if (_flushTimer) return;
   const interval = _config?.batchInterval ?? 5000;
   _flushTimer = setTimeout(() => {
-    flush();
     _flushTimer = null;
+    flush();
+    // Re-schedule if SDK is still active and queue may accumulate
+    if (_config) scheduleFlush();
   }, interval);
 }
 

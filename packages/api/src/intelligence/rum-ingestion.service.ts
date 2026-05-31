@@ -25,6 +25,8 @@ export interface RumEvent {
   sample_rate?: number;
   labels?: Record<string, string>;
   recorded_at?: string;
+  custom_metrics?: Record<string, number>;
+  build_hash?: string;
 }
 
 export interface RumSummary {
@@ -54,8 +56,9 @@ export class RumIngestionService {
          lcp_ms, fcp_ms, inp_ms, cls, ttfb_ms,
          dom_interactive_ms, dom_complete_ms, load_event_ms,
          total_transfer_bytes, resource_count,
-         user_agent, session_id, nav_type, sample_rate, labels, recorded_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         user_agent, session_id, nav_type, sample_rate, labels, recorded_at,
+         custom_metrics, build_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        RETURNING id`,
       [
         event.project_id, event.page_url, event.origin,
@@ -70,6 +73,8 @@ export class RumIngestionService {
         event.nav_type ?? "navigate", event.sample_rate ?? 1.0,
         JSON.stringify(event.labels ?? {}),
         event.recorded_at ?? new Date().toISOString(),
+        event.custom_metrics ? JSON.stringify(event.custom_metrics) : null,
+        event.build_hash ?? null,
       ],
     );
     return result.rows[0];

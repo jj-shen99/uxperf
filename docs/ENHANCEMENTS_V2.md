@@ -30,7 +30,7 @@ The book emphasizes that comparing two point estimates without confidence interv
 |---|-------------|--------|----------|-------------|
 | E-42 | **Percentile confidence intervals** | � | App G, p233–235 | Binomial rank CI method in `percentile-ci.ts`. CI stored in baselines (`ci_p75_lower/upper/reliable`). Gate evaluation uses CI upper bound to prevent false positives. `ConfidenceIntervalBar` + `GateResultCI` UI components. 22 CI tests + 20 gate-CI tests. |
 | E-43 | **Variance-aware run aggregation** | � | Ch 5, p82–85; Ch 12, p149 | `varianceStats()` (median/IQR/mean/stddev/min/max) and `compareMetric()` (IQR overlap significance test) in worker stats. `percentile()` function. 19 tests covering stats, comparison, and significance detection. |
-| E-44 | **Seasonality-aware baselines** | 🔴 | Ch 14, p238; App G, p237 | Baselines should be computed per time-of-day/day-of-week bucket to avoid flagging normal daily traffic patterns as regressions. The `seasonality_profile` column exists but is unused. |
+| E-44 | **Seasonality-aware baselines** | � | Ch 14, p238; App G, p237 | `computeSeasonalBaselines()` generates baselines per DOW (0–6) and optional hour bucket (morning/afternoon/evening/night). `computeBaseline()` adds `EXTRACT(DOW/HOUR)` filters when `day_of_week`/`hour_bucket` provided. `findActive()` prefers seasonal matches over global. 10 seasonality tests. |
 
 ## Priority 3 — Gate Enrichment (Ch 12–14)
 
@@ -40,15 +40,15 @@ The book describes a family of gate types; several are missing or only partially
 |---|-------------|--------|----------|-------------|
 | E-45 | **Baseline-relative gates** | � | Ch 14, p239 | CI-aware `evaluateBaselineRelative()` in gates service. Uses CI upper bound + regression_pct when reliable. Supports `baseline_stat` (p50/p75/p95/mean) and configurable `regression_pct`. 9 baseline gate tests. |
 | E-46 | **Statistical gates (rolling median ± Nσ)** | � | Ch 14, p239 | CI-aware `evaluateStatistical()` in gates service. Fires when metric > mean + N*stddev (default N=2). Propagates CI info from baselines. Wired into gate evaluation pipeline with quorum. 7 statistical gate tests. |
-| E-47 | **Per-severity quorum configuration** | 🟡 | Ch 14, p240–241 | The book prescribes quorum thresholds that tighten with severity: advisory gates can be 1-of-N, blocking gates require high quorum, paging gates require the highest bar. Current quorum is 3-of-5 globally. |
-| E-48 | **Gate YAML config file** | 🔴 | Ch 15, p258–259 | Gates configurable via a single YAML file (name, source, metric, type, threshold, severity, quorum block). Currently gates are DB-only; a YAML-based config would enable version-controlled gate definitions. |
+| E-47 | **Per-severity quorum configuration** | � | Ch 14, p240–241 | `checkQuorum()` now uses policy-driven defaults: warn/advisory=1-of-3, block=3-of-5, page=4-of-5. `QuorumConfig` interface for gate-level `window_size`/`required_failures` overrides. `getQuorumDefaults()` maps policy→thresholds. 6 quorum tests. |
+| E-48 | **Gate YAML config file** | � | Ch 15, p258–259 | `GateYamlConfigService` with `parseYaml()` (built-in parser, no ext dep), `toCreateDto()`, and `syncFromYaml()` (create/update/disable gates from YAML). Supports all gate types, quorum config, VU tiers. 10 YAML config tests. |
 
 ## Priority 4 — CI/CD Integration (Ch 13, 15)
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-49 | **PR comment — single-comment gate summary** | 🟡 | Ch 13, p167; Ch 15, p260 | Exists (`upsertPrComment`), but doesn't include collapsible regression detail, baseline comparison, or run-to-run deltas. Needs `<details>` sections for blocking/warnings/passed. |
-| E-50 | **Commit status on production deploys** | 🔴 | Ch 14, p244; Ch 15, p260 | After code merges and deploys, the platform watches RUM for the new build hash, compares against baseline, and posts pass/fail back to the deploy system. Currently no build-hash tracking in RUM or automatic post-deploy gate evaluation. |
+| E-49 | **PR comment — single-comment gate summary** | � | Ch 13, p167; Ch 15, p260 | Enhanced `buildDetailsTable()` with baseline comparison, delta-from-baseline (%), CI info, computed thresholds, and per-severity quorum detail. Fixed bug showing `undefined` for baseline/statistical gates. `fmtNum()` helper. |
+| E-50 | **Commit status on production deploys** | � | Ch 14, p244; Ch 15, p260 | `DeployWatchService` with `registerDeploy()`, `evaluateDeploy()` (compare RUM p75 vs baseline), `evaluateAllPending()`. Posts GitHub commit status via `reportCommitStatus()`. Expiry at 48h, min 30 RUM samples, 15% regression threshold. Migration 014 for `deploy_watches` table. 9 deploy watch tests. |
 | E-51 | **Pre-commit bundle-size check** | 🔴 | Ch 13, p211–212 | Lint-level check: if `package.json` adds a dependency, estimate the bundle-size impact and warn before commit. Not a full gate — a fast pre-commit sanity check. |
 | E-52 | **Staging smoke-test gate** | 🔴 | Ch 13, p215 | Run a reduced synthetic suite against staging per deploy (not per PR). Separate from PR gates — this is the "staging as sanity check" pattern. |
 
@@ -105,4 +105,4 @@ The book describes a family of gate types; several are missing or only partially
 
 ---
 
-_Last updated: 2026-05-30. E-38–43, E-45–46, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-43, E-45–46, E-56, E-59, E-72 completed)._
+_Last updated: 2026-05-31. E-38–50, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-50, E-56, E-59, E-72 completed). Bug fixes: RUM ingestion missing custom_metrics/build_hash columns; scheduleFlush one-shot bug; aggregateResults double-pick; SQL interval string interpolation → MAKE_INTERVAL._

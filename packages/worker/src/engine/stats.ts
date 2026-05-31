@@ -155,55 +155,19 @@ export function aggregateResults(runs: SingleRunResult[]): AggregatedMetrics {
   return {
     lcp_ms: lcpValues.length > 0 ? median(lcpValues) : undefined,
     fcp_ms: fcpValues.length > 0 ? median(fcpValues) : undefined,
-    inp_ms:
-      pick((r) => r.web_vitals.inp_ms).length > 0
-        ? median(pick((r) => r.web_vitals.inp_ms))
-        : undefined,
+    inp_ms: (() => { const v = pick((r) => r.web_vitals.inp_ms); return v.length > 0 ? median(v) : undefined; })(),
     cls: clsValues.length > 0 ? median(clsValues) : undefined,
     ttfb_ms: ttfbValues.length > 0 ? median(ttfbValues) : undefined,
-    si_ms:
-      pick((r) => r.lighthouse_timings.si_ms).length > 0
-        ? median(pick((r) => r.lighthouse_timings.si_ms))
-        : undefined,
-    tti_ms:
-      pick((r) => r.lighthouse_timings.tti_ms).length > 0
-        ? median(pick((r) => r.lighthouse_timings.tti_ms))
-        : undefined,
-    tbt_ms:
-      pick((r) => r.lighthouse_timings.tbt_ms).length > 0
-        ? median(pick((r) => r.lighthouse_timings.tbt_ms))
-        : undefined,
-    lighthouse_performance_score:
-      pick((r) => r.lighthouse_scores.performance).length > 0
-        ? median(pick((r) => r.lighthouse_scores.performance))
-        : undefined,
-    lighthouse_accessibility_score:
-      pick((r) => r.lighthouse_scores.accessibility).length > 0
-        ? median(pick((r) => r.lighthouse_scores.accessibility))
-        : undefined,
-    lighthouse_best_practices_score:
-      pick((r) => r.lighthouse_scores.best_practices).length > 0
-        ? median(pick((r) => r.lighthouse_scores.best_practices))
-        : undefined,
-    lighthouse_seo_score:
-      pick((r) => r.lighthouse_scores.seo).length > 0
-        ? median(pick((r) => r.lighthouse_scores.seo))
-        : undefined,
-    total_requests:
-      pick((r) => r.total_requests).length > 0
-        ? median(pick((r) => r.total_requests))
-        : undefined,
-    total_transfer_size_bytes:
-      pick((r) => r.total_transfer_size_bytes).length > 0
-        ? median(pick((r) => r.total_transfer_size_bytes))
-        : undefined,
-    dom_content_loaded_ms:
-      pick((r) => r.dom_content_loaded_ms).length > 0
-        ? median(pick((r) => r.dom_content_loaded_ms))
-        : undefined,
-    load_event_ms:
-      pick((r) => r.load_event_ms).length > 0
-        ? median(pick((r) => r.load_event_ms))
-        : undefined,
+    si_ms: (() => { const v = pick((r) => r.lighthouse_timings.si_ms); return v.length > 0 ? median(v) : undefined; })(),
+    tti_ms: (() => { const v = pick((r) => r.lighthouse_timings.tti_ms); return v.length > 0 ? median(v) : undefined; })(),
+    tbt_ms: (() => { const v = pick((r) => r.lighthouse_timings.tbt_ms); return v.length > 0 ? median(v) : undefined; })(),
+    lighthouse_performance_score: (() => { const v = pick((r) => r.lighthouse_scores.performance); return v.length > 0 ? median(v) : undefined; })(),
+    lighthouse_accessibility_score: (() => { const v = pick((r) => r.lighthouse_scores.accessibility); return v.length > 0 ? median(v) : undefined; })(),
+    lighthouse_best_practices_score: (() => { const v = pick((r) => r.lighthouse_scores.best_practices); return v.length > 0 ? median(v) : undefined; })(),
+    lighthouse_seo_score: (() => { const v = pick((r) => r.lighthouse_scores.seo); return v.length > 0 ? median(v) : undefined; })(),
+    total_requests: (() => { const v = pick((r) => r.total_requests); return v.length > 0 ? median(v) : undefined; })(),
+    total_transfer_size_bytes: (() => { const v = pick((r) => r.total_transfer_size_bytes); return v.length > 0 ? median(v) : undefined; })(),
+    dom_content_loaded_ms: (() => { const v = pick((r) => r.dom_content_loaded_ms); return v.length > 0 ? median(v) : undefined; })(),
+    load_event_ms: (() => { const v = pick((r) => r.load_event_ms); return v.length > 0 ? median(v) : undefined; })(),
   };
 }

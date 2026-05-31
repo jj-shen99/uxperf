@@ -351,23 +351,53 @@ export class GitHubCheckService {
     if (outcomes.length === 0) return "No gates evaluated.";
 
     const lines: string[] = [
-      "| Gate | Metric | Threshold | Actual | Status | Quorum |",
-      "|------|--------|-----------|--------|--------|--------|",
+      "| Gate | Metric | Threshold | Baseline | Actual | Delta | CI | Status | Quorum |",
+      "|------|--------|-----------|----------|--------|-------|-----|--------|--------|",
     ];
 
     for (const o of outcomes) {
       const statusIcon =
         o.status === "passed" ? "✅" : o.status === "failed" ? "❌" : "⏭";
-      const actual = o.actual_value !== undefined ? String(o.actual_value) : "N/A";
+      const actual = o.actual_value !== undefined ? this.fmtNum(o.actual_value) : "N/A";
+
+      // E-49: Show computed_threshold for baseline/statistical, raw threshold for others
+      const threshold = o.computed_threshold != null
+        ? this.fmtNum(o.computed_threshold)
+        : o.threshold != null
+          ? `${o.operator ?? "≤"} ${this.fmtNum(o.threshold)}`
+          : "—";
+
+      // E-49: Baseline comparison
+      const baseline = o.baseline_value != null ? this.fmtNum(o.baseline_value) : "—";
+
+      // E-49: Delta from baseline
+      let delta = "—";
+      if (o.actual_value != null && o.baseline_value != null && o.baseline_value !== 0) {
+        const diff = o.actual_value - o.baseline_value;
+        const pct = (diff / o.baseline_value) * 100;
+        const sign = diff >= 0 ? "+" : "";
+        delta = `${sign}${pct.toFixed(1)}%`;
+      }
+
+      // E-49: CI info
+      const ci = o.ci_reliable && o.ci_lower != null && o.ci_upper != null
+        ? `[${this.fmtNum(o.ci_lower)}–${this.fmtNum(o.ci_upper)}]`
+        : o.ci_reliable === false ? "⚠ low-n" : "—";
+
+      // Quorum detail
       const quorum = o.quorum_detail
-        ? `${o.quorum_detail.recent_failures}/${o.quorum_detail.window_size}`
+        ? `${o.quorum_detail.recent_failures}/${o.quorum_detail.required_failures} of ${o.quorum_detail.window_size}`
         : "—";
 
       lines.push(
-        `| ${o.gate_name} | ${o.metric} | ${o.operator} ${o.threshold} | ${actual} | ${statusIcon} ${o.status} | ${quorum} |`
+        `| ${o.gate_name} | ${o.metric} | ${threshold} | ${baseline} | ${actual} | ${delta} | ${ci} | ${statusIcon} | ${quorum} |`
       );
     }
 
     return lines.join("\n");
+  }
+
+  private fmtNum(v: number): string {
+    return v % 1 === 0 ? String(v) : v < 1 ? v.toFixed(3) : v.toFixed(1);
   }
 }

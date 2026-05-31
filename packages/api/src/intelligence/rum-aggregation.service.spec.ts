@@ -47,13 +47,13 @@ describe("RumAggregationService (E-39)", () => {
     it("uses provided hoursBack parameter", async () => {
       await service.aggregateHourly("proj-1", 24);
       const call = mockDb.query.mock.calls[0];
-      expect(call[1][2]).toBe("24");
+      expect(call[1][2]).toBe(24);
     });
 
     it("defaults hoursBack to 2", async () => {
       await service.aggregateHourly("proj-1");
       const call = mockDb.query.mock.calls[0];
-      expect(call[1][2]).toBe("2");
+      expect(call[1][2]).toBe(2);
     });
 
     it("reports correct rows_created from DB response", async () => {
@@ -126,13 +126,13 @@ describe("RumAggregationService (E-39)", () => {
     it("uses default retention of 14 days", async () => {
       mockDb.query.mockResolvedValueOnce({ rowCount: 0 });
       await service.purgeRawEvents("proj-1");
-      expect(mockDb.query.mock.calls[0][1][1]).toBe("14");
+      expect(mockDb.query.mock.calls[0][1][1]).toBe(14);
     });
 
     it("uses custom retention days", async () => {
       mockDb.query.mockResolvedValueOnce({ rowCount: 0 });
       await service.purgeRawEvents("proj-1", 7);
-      expect(mockDb.query.mock.calls[0][1][1]).toBe("7");
+      expect(mockDb.query.mock.calls[0][1][1]).toBe(7);
     });
   });
 });

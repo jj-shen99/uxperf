@@ -101,7 +101,7 @@ export class RumAggregationService {
        FROM rum_events
        WHERE project_id = $1
          AND ${metric} IS NOT NULL
-         AND recorded_at >= NOW() - ($3 || ' hours')::interval
+         AND recorded_at >= NOW() - MAKE_INTERVAL(hours => $3::int)
        GROUP BY project_id, origin, page_url, device_type, country_code,
                 date_trunc('hour', recorded_at)
        HAVING COUNT(*) >= 5
@@ -116,7 +116,7 @@ export class RumAggregationService {
          mean = EXCLUDED.mean,
          min_val = EXCLUDED.min_val,
          max_val = EXCLUDED.max_val`,
-      [projectId, metric, hoursBack.toString()],
+      [projectId, metric, hoursBack],
     );
 
     const rowsCreated = result.rowCount ?? 0;
@@ -138,7 +138,7 @@ export class RumAggregationService {
     deviceType?: string,
   ): Promise<RumHourlyRow[]> {
     const params: unknown[] = [projectId, metric, days];
-    let where = `project_id = $1 AND metric = $2 AND hour_bucket >= NOW() - ($3 || ' days')::interval`;
+    let where = `project_id = $1 AND metric = $2 AND hour_bucket >= NOW() - MAKE_INTERVAL(days => $3::int)`;
     if (origin) {
       params.push(origin);
       where += ` AND origin = $${params.length}`;
@@ -168,8 +168,8 @@ export class RumAggregationService {
   ): Promise<{ deleted: number }> {
     const result = await this.db.query(
       `DELETE FROM rum_events
-       WHERE project_id = $1 AND recorded_at < NOW() - ($2 || ' days')::interval`,
-      [projectId, retentionDays.toString()],
+       WHERE project_id = $1 AND recorded_at < NOW() - MAKE_INTERVAL(days => $2::int)`,
+      [projectId, retentionDays],
     );
     const deleted = result.rowCount ?? 0;
     this.logger.log(
@@ -188,7 +188,7 @@ export class RumAggregationService {
     origin?: string,
   ): Promise<{ date: string; p50: number; p75: number; p90: number; p95: number; p99: number; count: number }[]> {
     const params: unknown[] = [projectId, metric, days];
-    let where = `project_id = $1 AND metric = $2 AND hour_bucket >= NOW() - ($3 || ' days')::interval`;
+    let where = `project_id = $1 AND metric = $2 AND hour_bucket >= NOW() - MAKE_INTERVAL(days => $3::int)`;
     if (origin) {
       params.push(origin);
       where += ` AND origin = $${params.length}`;

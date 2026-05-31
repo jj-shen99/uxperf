@@ -141,6 +141,19 @@ export class BaselinesService {
 
     const metricKey = METRIC_KEYS[metric] ?? metric;
 
+    // E-44: When seasonality bucket is requested, filter by day_of_week/hour
+    let seasonalFilter = "";
+    const queryParams: unknown[] = [project_id, script_id ?? null, environment, window_size];
+
+    if (opts.day_of_week != null) {
+      queryParams.push(opts.day_of_week);
+      seasonalFilter += ` AND EXTRACT(DOW FROM finished_at) = $${queryParams.length}`;
+    }
+    if (opts.hour_bucket != null) {
+      queryParams.push(opts.hour_bucket);
+      seasonalFilter += ` AND EXTRACT(HOUR FROM finished_at) = $${queryParams.length}`;
+    }
+
     // Fetch metric values from the last N completed runs
     const result = await this.db.query<{ metrics: Record<string, unknown> }>(
       `SELECT metrics FROM runs
@@ -149,9 +162,10 @@ export class BaselinesService {
          AND environment = $3
          AND status = 'completed'
          AND metrics IS NOT NULL
+         ${seasonalFilter}
        ORDER BY finished_at DESC
        LIMIT $4`,
-      [project_id, script_id ?? null, environment, window_size]
+      queryParams
     );
 
     const values: number[] = [];
@@ -257,6 +271,59 @@ export class BaselinesService {
       if (baseline) results.push(baseline);
     }
 
+    return results;
+  }
+
+  /**
+   * E-44: Compute seasonality-aware baselines.
+   *
+   * Book Ch 14, p238: "Baselines should be computed per time-of-day/day-of-week
+   * bucket to avoid flagging normal daily traffic patterns as regressions."
+   *
+   * Generates baselines for each day-of-week (0-6) and optionally each
+   * hour bucket (morning/afternoon/evening/night).
+   */
+  async computeSeasonalBaselines(
+    projectId: string,
+    environment: string = "staging",
+    scriptId?: string,
+    options?: { includeHourly?: boolean; windowSize?: number },
+  ): Promise<BaselineRow[]> {
+    const metrics = Object.keys(METRIC_KEYS);
+    const results: BaselineRow[] = [];
+    const windowSize = options?.windowSize ?? 20;
+    const hourBuckets = options?.includeHourly
+      ? [0, 6, 12, 18] // night, morning, afternoon, evening
+      : [undefined];
+
+    const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const HOUR_NAMES: Record<number, string> = { 0: "night", 6: "morning", 12: "afternoon", 18: "evening" };
+
+    for (const metric of metrics) {
+      for (let dow = 0; dow <= 6; dow++) {
+        for (const hour of hourBuckets) {
+          const bucketLabel = hour != null
+            ? `${DAY_NAMES[dow]}-${HOUR_NAMES[hour]}`
+            : DAY_NAMES[dow];
+
+          const baseline = await this.computeBaseline({
+            project_id: projectId,
+            script_id: scriptId,
+            metric,
+            environment,
+            window_size: windowSize,
+            day_of_week: dow,
+            hour_bucket: hour,
+            seasonality_bucket: bucketLabel,
+          });
+          if (baseline) results.push(baseline);
+        }
+      }
+    }
+
+    this.logger.log(
+      `Computed ${results.length} seasonal baselines for project ${projectId} (${environment})`,
+    );
     return results;
   }
 
