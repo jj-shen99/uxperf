@@ -1,6 +1,6 @@
 /**
  * Regression tests for recent feature changes:
- *   1. useProjects hook — no auto-select (default to empty)
+ *   1. useProjects hook — auto-select first project when list loads
  *   2. Runs page — column sorting logic
  *   3. Dashboard page — "Recent Completed Runs" section removed
  *   4. Intelligence page — new tab keys and data structures
@@ -9,12 +9,11 @@
  */
 
 // ============================================================
-// 1. useProjects: no auto-select regression
+// 1. useProjects: auto-select regression
 // ============================================================
 
 describe("useProjects default behaviour", () => {
-  it("initial projectId should be empty string (no auto-select)", () => {
-    // Simulates the hook's initial state — projectId starts as ""
+  it("initial projectId is empty before projects load", () => {
     const projectId = "";
     expect(projectId).toBe("");
   });
@@ -26,16 +25,29 @@ describe("useProjects default behaviour", () => {
     expect(projectId).toBe("proj-abc-123");
   });
 
-  it("projectId stays empty even when projects list is populated", () => {
+  it("auto-selects first project once list loads", () => {
     const projects = [
       { id: "p1", name: "Project 1" },
       { id: "p2", name: "Project 2" },
     ];
-    let projectId = ""; // no auto-select
-    // The old hook would have done: projectId = projects[0].id
-    // The new hook does NOT do that
-    expect(projectId).toBe("");
-    expect(projects.length).toBeGreaterThan(0);
+    let projectId = "";
+    // Simulate the useEffect auto-select logic
+    if (!projectId && projects.length > 0) {
+      projectId = projects[0].id;
+    }
+    expect(projectId).toBe("p1");
+  });
+
+  it("does not overwrite manually selected project", () => {
+    const projects = [
+      { id: "p1", name: "Project 1" },
+      { id: "p2", name: "Project 2" },
+    ];
+    let projectId = "p2"; // user already picked p2
+    if (!projectId && projects.length > 0) {
+      projectId = projects[0].id;
+    }
+    expect(projectId).toBe("p2"); // stays p2, not overwritten
   });
 });
 

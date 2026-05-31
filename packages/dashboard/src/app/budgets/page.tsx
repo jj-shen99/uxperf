@@ -126,8 +126,9 @@ export default function BudgetsPage() {
     if (!selectedProject) return;
     setRatchetLoading(true);
     try {
-      const result = await api.budgets.ratchet(selectedProject);
-      alert(`Ratcheted ${result.ratcheted_count ?? 0} budget(s)`);
+      const results = await api.budgets.ratchet(selectedProject);
+      const ratcheted = Array.isArray(results) ? results.filter((r: any) => r.ratcheted).length : 0;
+      alert(`Ratcheted ${ratcheted} budget(s)`);
       load();
     } catch (e: any) {
       alert(e.message);

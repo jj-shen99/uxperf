@@ -75,6 +75,8 @@ export async function executeJourney(
     : null;
   harCollector?.start();
 
+  let harResult: HarResult | undefined;
+
   try {
     for (const step of steps) {
       const stepStart = new Date();
@@ -147,7 +149,6 @@ export async function executeJourney(
     }
   } finally {
     // E-06: Stop HAR collector and capture results
-    var harResult: HarResult | undefined;
     if (harCollector) {
       try {
         harResult = await harCollector.stop();
