@@ -1,0 +1,23 @@
+{
+  "name": "@perf-platform/rum-sdk",
+  "version": "0.1.0",
+  "description": "Lightweight RUM SDK for collecting Core Web Vitals and custom metrics via sendBeacon",
+  "main": "dist/rum.js",
+  "module": "dist/rum.mjs",
+  "types": "dist/rum.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/rum.ts --format cjs,esm --dts",
+    "test": "jest --no-coverage"
+  },
+  "dependencies": {
+    "web-vitals": "^3.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsup": "^8.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "@types/jest": "^29.5.0"
+  }
+}

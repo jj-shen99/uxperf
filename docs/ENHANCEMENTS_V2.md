@@ -17,10 +17,10 @@ The book's strongest architectural argument is that RUM is one of four essential
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-38 | **RUM SDK (client-side beacon script)** | 🔴 | Ch 6, p93–97; Ch 15, p253 | A lightweight JS snippet (`rum.js`) using `web-vitals` + `navigator.sendBeacon` to collect LCP/FCP/INP/CLS/TTFB from real users. Configurable sampling rate, session ID, device class, route, build hash, feature-flag exposure. Ships as `packages/rum-sdk`. |
-| E-39 | **RUM hourly aggregation (distribution storage)** | 🔴 | Ch 14, p236–237 | Backend job to roll up raw `rum_events` into hourly/daily pre-aggregated distributions (p50/p75/p90/p95/p99 per route × device × geo). Short retention for raw events, long retention for sketches. |
-| E-40 | **RUM dashboard — synthetic vs. field side-by-side** | 🔴 | Ch 14, p240; Ch 15, p254 | Dashboard view showing synthetic and RUM metrics for the same route side-by-side, with disagreement highlighting ("synthetic flat, RUM rising → investigate segment"). |
-| E-41 | **Custom journey metrics (mark/measure)** | 🔴 | Ch 6, p98–100 | Support `performance.mark()` / `performance.measure()` in the RUM SDK for user-defined journey metrics (e.g. `time-to-cart-confirmation`), shipped alongside standard Vitals. |
+| E-38 | **RUM SDK (client-side beacon script)** | � | Ch 6, p93–97; Ch 15, p253 | `packages/rum-sdk` with `initRum()`, sendBeacon/fetch transport, sampling, session tracking, build hash, feature flags, batch queue. `web-vitals` integration for LCP/FCP/INP/CLS/TTFB. 17 SDK tests. |
+| E-39 | **RUM hourly aggregation (distribution storage)** | � | Ch 14, p236–237 | `RumAggregationService` rolls up raw events into `rum_hourly_aggregates` (p50/p75/p90/p95/p99 per route × device × geo). `purgeRawEvents()` for short retention. Migration 013. API endpoints for hourly/daily trends. 13 tests. |
+| E-40 | **RUM dashboard — synthetic vs. field side-by-side** | � | Ch 14, p240; Ch 15, p254 | `SyntheticVsField` component showing lab median vs RUM p75 side-by-side with disagreement highlighting (none/mild/severe). Delta and agreement columns. |
+| E-41 | **Custom journey metrics (mark/measure)** | � | Ch 6, p98–100 | `collectCustomMetrics()` and `rumMark()` helper in RUM SDK. Collects `performance.measure()` entries and ships them as `custom_metrics` JSONB in beacons. `build_hash` + `custom_metrics` columns added to `rum_events`. 5 custom metric tests. |
 
 ## Priority 2 — Statistical Rigor (Ch 5, 12, Appendix G)
 
@@ -29,7 +29,7 @@ The book emphasizes that comparing two point estimates without confidence interv
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
 | E-42 | **Percentile confidence intervals** | � | App G, p233–235 | Binomial rank CI method in `percentile-ci.ts`. CI stored in baselines (`ci_p75_lower/upper/reliable`). Gate evaluation uses CI upper bound to prevent false positives. `ConfidenceIntervalBar` + `GateResultCI` UI components. 22 CI tests + 20 gate-CI tests. |
-| E-43 | **Variance-aware run aggregation** | 🟡 | Ch 5, p82–85; Ch 12, p149 | Synthetic tests should report median + IQR from N runs (currently single-run). The compare page should show whether the difference is statistically significant, not just the raw delta. Partial: `variance_tolerance` exists in budgets but not in the compare view. |
+| E-43 | **Variance-aware run aggregation** | � | Ch 5, p82–85; Ch 12, p149 | `varianceStats()` (median/IQR/mean/stddev/min/max) and `compareMetric()` (IQR overlap significance test) in worker stats. `percentile()` function. 19 tests covering stats, comparison, and significance detection. |
 | E-44 | **Seasonality-aware baselines** | 🔴 | Ch 14, p238; App G, p237 | Baselines should be computed per time-of-day/day-of-week bucket to avoid flagging normal daily traffic patterns as regressions. The `seasonality_profile` column exists but is unused. |
 
 ## Priority 3 — Gate Enrichment (Ch 12–14)
@@ -105,4 +105,4 @@ The book describes a family of gate types; several are missing or only partially
 
 ---
 
-_Last updated: 2026-05-30. E-42, E-45, E-46, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-37, E-42, E-45–46, E-56, E-59, E-72 completed)._
+_Last updated: 2026-05-30. E-38–43, E-45–46, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-43, E-45–46, E-56, E-59, E-72 completed)._

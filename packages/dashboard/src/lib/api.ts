@@ -209,6 +209,14 @@ export const api = {
         request<any[]>(`/intelligence/rum/summary?project_id=${encodeURIComponent(projectId)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
       trend: (projectId: string, metric: string, days?: number) =>
         request<any[]>(`/intelligence/rum/trend?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}${days ? `&days=${days}` : ""}`),
+      aggregate: (projectId: string, hoursBack?: number) =>
+        request<any[]>("/intelligence/rum/aggregate", { method: "POST", body: JSON.stringify({ project_id: projectId, hours_back: hoursBack }) }),
+      hourly: (projectId: string, metric: string, days?: number, origin?: string, deviceType?: string) =>
+        request<any[]>(`/intelligence/rum/hourly?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}${deviceType ? `&device_type=${encodeURIComponent(deviceType)}` : ""}`),
+      daily: (projectId: string, metric: string, days?: number, origin?: string) =>
+        request<any[]>(`/intelligence/rum/daily?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
+      purge: (projectId: string, retentionDays?: number) =>
+        request<any>("/intelligence/rum/purge", { method: "POST", body: JSON.stringify({ project_id: projectId, retention_days: retentionDays }) }),
     },
     crux: {
       fetch: (data: any) => request<any>("/intelligence/crux/fetch", { method: "POST", body: JSON.stringify(data) }),

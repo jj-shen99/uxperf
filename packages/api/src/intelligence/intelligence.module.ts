@@ -8,6 +8,7 @@ import { CapacityPlanningService } from "./capacity-planning.service";
 import { AuditService } from "./audit.service";
 import { ApiKeysService } from "./api-keys.service";
 import { MultiGeoService } from "./multi-geo.service";
+import { RumAggregationService } from "./rum-aggregation.service";
 import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
@@ -22,6 +23,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     AuditService,
     ApiKeysService,
     MultiGeoService,
+    RumAggregationService,
   ],
   exports: [
     ShapAttributionService,
@@ -32,6 +34,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     AuditService,
     ApiKeysService,
     MultiGeoService,
+    RumAggregationService,
   ],
 })
 export class IntelligenceModule {}

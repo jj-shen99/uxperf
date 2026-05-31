@@ -15,6 +15,7 @@ import { CapacityPlanningService } from "./capacity-planning.service";
 import { AuditService } from "./audit.service";
 import { ApiKeysService } from "./api-keys.service";
 import { MultiGeoService } from "./multi-geo.service";
+import { RumAggregationService } from "./rum-aggregation.service";
 
 @Controller("intelligence")
 export class IntelligenceController {
@@ -27,6 +28,7 @@ export class IntelligenceController {
     private readonly audit: AuditService,
     private readonly apiKeys: ApiKeysService,
     private readonly multiGeo: MultiGeoService,
+    private readonly rumAggregation: RumAggregationService,
   ) {}
 
   // -- SHAP Attribution --
@@ -118,6 +120,39 @@ export class IntelligenceController {
     @Query("origin") origin?: string,
   ) {
     return this.rum.getTrend(projectId, metric, days ? parseInt(days, 10) : undefined, origin);
+  }
+
+  // -- RUM Aggregation (E-39) --
+
+  @Post("rum/aggregate")
+  aggregateRum(@Body() body: { project_id: string; hours_back?: number }) {
+    return this.rumAggregation.aggregateHourly(body.project_id, body.hours_back);
+  }
+
+  @Get("rum/hourly")
+  rumHourly(
+    @Query("project_id") projectId: string,
+    @Query("metric") metric: string,
+    @Query("days") days?: string,
+    @Query("origin") origin?: string,
+    @Query("device_type") deviceType?: string,
+  ) {
+    return this.rumAggregation.getHourlyTrend(projectId, metric, days ? parseInt(days, 10) : undefined, origin, deviceType);
+  }
+
+  @Get("rum/daily")
+  rumDaily(
+    @Query("project_id") projectId: string,
+    @Query("metric") metric: string,
+    @Query("days") days?: string,
+    @Query("origin") origin?: string,
+  ) {
+    return this.rumAggregation.getDailySummary(projectId, metric, days ? parseInt(days, 10) : undefined, origin);
+  }
+
+  @Post("rum/purge")
+  purgeRum(@Body() body: { project_id: string; retention_days?: number }) {
+    return this.rumAggregation.purgeRawEvents(body.project_id, body.retention_days);
   }
 
   // -- CrUX --

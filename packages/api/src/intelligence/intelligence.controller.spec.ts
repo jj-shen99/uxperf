@@ -8,6 +8,7 @@ import { CapacityPlanningService } from "./capacity-planning.service";
 import { AuditService } from "./audit.service";
 import { ApiKeysService } from "./api-keys.service";
 import { MultiGeoService } from "./multi-geo.service";
+import { RumAggregationService } from "./rum-aggregation.service";
 
 describe("IntelligenceController", () => {
   let controller: IntelligenceController;
@@ -19,6 +20,7 @@ describe("IntelligenceController", () => {
   const mockAudit = { query: jest.fn().mockResolvedValue([]), summary: jest.fn().mockResolvedValue([]) };
   const mockApiKeys = { create: jest.fn().mockResolvedValue({ key: "pfk_test" }), list: jest.fn().mockResolvedValue([]), revoke: jest.fn(), delete: jest.fn() };
   const mockGeo = { listLocations: jest.fn().mockReturnValue([]), dispatch: jest.fn().mockResolvedValue({ locations: [] }), getComparison: jest.fn().mockResolvedValue({ locations: [], comparison: [] }) };
+  const mockRumAggregation = { aggregateHourly: jest.fn().mockResolvedValue([]), getHourlyTrend: jest.fn().mockResolvedValue([]), getDailySummary: jest.fn().mockResolvedValue([]), purgeRawEvents: jest.fn().mockResolvedValue({ deleted: 0 }) };
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -32,6 +34,7 @@ describe("IntelligenceController", () => {
         { provide: AuditService, useValue: mockAudit },
         { provide: ApiKeysService, useValue: mockApiKeys },
         { provide: MultiGeoService, useValue: mockGeo },
+        { provide: RumAggregationService, useValue: mockRumAggregation },
       ],
     }).compile();
     controller = module.get(IntelligenceController);
