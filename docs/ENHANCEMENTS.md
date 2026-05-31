@@ -73,11 +73,11 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 | E-21 | Environments module tests | � | 6 tests added. |
 | E-22 | Database module tests | � | 10 tests: Pool construction, query delegation, param passing, error propagation, generic types, module destroy, module export. |
 | E-23 | Worker metrics-collector tests | � | 7 tests added. |
-| E-24 | Dashboard page-level tests | 🟡 | Logic tests exist, no component tests. |
+| E-24 | Dashboard page-level tests | � | 74 page-logic tests: anomalies detection/severity/trend, trends stats/filtering/toggle, schedules cron/form/script-filter, author pipeline/form/device, reports direction/CWV, users role/sort, intelligence tabs/forecast, time range. |
 | E-25 | Docker Compose orchestration | � | Full compose with migrate service, healthchecks, restart policies, resource limits, networks, env var defaults, Redis (opt-in), profiles. 16 infra tests. |
 | E-26 | CI pipeline (GitHub Actions) | � | Enabled push/PR triggers, split into parallel jobs (test-api, test-worker, test-dashboard, test-shared, lint-and-build, db-migration-test), concurrency control, migration idempotency check. 14 infra tests. |
-| E-27 | Database migrations versioning | 🟡 | Need idempotency verification. |
+| E-27 | Database migrations versioning | � | All 11 migrations made idempotent (IF NOT EXISTS for tables/indexes/types/columns, DROP IF EXISTS guards for triggers). 56 idempotency verification tests scanning every .up.sql and .down.sql file. |
 
 ---
 
-_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-18–E-19, E-20–E-23, E-25–E-26, E-28–E-37 implemented)_
+_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-18–E-27, E-28–E-37 implemented)_

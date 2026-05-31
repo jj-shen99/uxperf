@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ============================================================
 -- projects
 -- ============================================================
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL UNIQUE,
     owner_team      TEXT NOT NULL,
@@ -30,9 +30,11 @@ CREATE TABLE projects (
 -- ============================================================
 -- scripts
 -- ============================================================
-CREATE TYPE authoring_mode AS ENUM ('record', 'template', 'describe', 'manual');
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'authoring_mode') THEN CREATE TYPE authoring_mode AS ENUM ('record', 'template', 'describe', 'manual');
 
-CREATE TABLE scripts (
+END IF; END $$;
+
+CREATE TABLE IF NOT EXISTS scripts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name            TEXT NOT NULL,
@@ -48,16 +50,16 @@ CREATE TABLE scripts (
     UNIQUE (project_id, name)
 );
 
-CREATE INDEX idx_scripts_project ON scripts(project_id);
+CREATE INDEX IF NOT EXISTS idx_scripts_project ON scripts(project_id);
 
 -- ============================================================
 -- runs
 -- ============================================================
-CREATE TYPE run_mode AS ENUM ('stability', 'load', 'deep', 'scheduled');
-CREATE TYPE run_engine AS ENUM ('playwright_lighthouse', 'k6_browser', 'wpt', 'sitespeed');
-CREATE TYPE run_status AS ENUM ('queued', 'running', 'completed', 'failed', 'cancelled');
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'run_mode') THEN CREATE TYPE run_mode AS ENUM ('stability', 'load', 'deep', 'scheduled'); END IF; END $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'run_engine') THEN CREATE TYPE run_engine AS ENUM ('playwright_lighthouse', 'k6_browser', 'wpt', 'sitespeed'); END IF; END $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'run_status') THEN CREATE TYPE run_status AS ENUM ('queued', 'running', 'completed', 'failed', 'cancelled'); END IF; END $$;
 
-CREATE TABLE runs (
+CREATE TABLE IF NOT EXISTS runs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     script_id       UUID REFERENCES scripts(id) ON DELETE SET NULL,
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -87,15 +89,15 @@ CREATE TABLE runs (
     error           TEXT
 );
 
-CREATE INDEX idx_runs_project ON runs(project_id);
-CREATE INDEX idx_runs_script ON runs(script_id);
-CREATE INDEX idx_runs_status ON runs(status);
-CREATE INDEX idx_runs_created ON runs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_runs_script ON runs(script_id);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at DESC);
 
 -- ============================================================
 -- baselines (§11.4)
 -- ============================================================
-CREATE TABLE baselines (
+CREATE TABLE IF NOT EXISTS baselines (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id          UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     script_id           UUID REFERENCES scripts(id) ON DELETE CASCADE,
@@ -121,14 +123,14 @@ CREATE TABLE baselines (
     is_active           BOOLEAN NOT NULL DEFAULT true
 );
 
-CREATE INDEX idx_baselines_scope ON baselines(project_id, script_id, metric, environment);
+CREATE INDEX IF NOT EXISTS idx_baselines_scope ON baselines(project_id, script_id, metric, environment);
 
 -- ============================================================
 -- gates (§10)
 -- ============================================================
-CREATE TYPE gate_policy AS ENUM ('block', 'warn', 'page');
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'gate_policy') THEN CREATE TYPE gate_policy AS ENUM ('block', 'warn', 'page'); END IF; END $$;
 
-CREATE TABLE gates (
+CREATE TABLE IF NOT EXISTS gates (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name            TEXT NOT NULL,
@@ -141,14 +143,14 @@ CREATE TABLE gates (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_gates_project ON gates(project_id);
+CREATE INDEX IF NOT EXISTS idx_gates_project ON gates(project_id);
 
 -- ============================================================
 -- gate_results
 -- ============================================================
-CREATE TYPE gate_result_status AS ENUM ('passed', 'failed', 'skipped', 'overridden');
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'gate_result_status') THEN CREATE TYPE gate_result_status AS ENUM ('passed', 'failed', 'skipped', 'overridden'); END IF; END $$;
 
-CREATE TABLE gate_results (
+CREATE TABLE IF NOT EXISTS gate_results (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     gate_id         UUID NOT NULL REFERENCES gates(id) ON DELETE CASCADE,
     run_id          UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -158,12 +160,12 @@ CREATE TABLE gate_results (
     evaluated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_gate_results_run ON gate_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_gate_results_run ON gate_results(run_id);
 
 -- ============================================================
 -- audit_log
 -- ============================================================
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     id              BIGSERIAL PRIMARY KEY,
     actor           TEXT NOT NULL,
     action          TEXT NOT NULL,
@@ -173,8 +175,8 @@ CREATE TABLE audit_log (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_audit_log_target ON audit_log(target_type, target_id);
-CREATE INDEX idx_audit_log_created ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
 
 -- ============================================================
 -- Trigger: auto-update updated_at
@@ -187,11 +189,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_projects_updated_at ON projects;
 CREATE TRIGGER trg_projects_updated_at BEFORE UPDATE ON projects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_scripts_updated_at ON scripts;
 CREATE TRIGGER trg_scripts_updated_at BEFORE UPDATE ON scripts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_gates_updated_at ON gates;
 CREATE TRIGGER trg_gates_updated_at BEFORE UPDATE ON gates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();

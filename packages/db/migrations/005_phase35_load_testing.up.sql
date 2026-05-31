@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS load_profiles (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_load_profiles_project ON load_profiles(project_id);
+CREATE INDEX IF NOT EXISTS idx_load_profiles_project ON load_profiles(project_id);
 
 -- Load runs: metadata for each load test execution
 CREATE TABLE IF NOT EXISTS load_runs (
@@ -53,10 +53,10 @@ CREATE TABLE IF NOT EXISTS load_runs (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_load_runs_project ON load_runs(project_id);
-CREATE INDEX idx_load_runs_status ON load_runs(status);
-CREATE INDEX idx_load_runs_profile ON load_runs(load_profile_id);
-CREATE INDEX idx_load_runs_run ON load_runs(run_id);
+CREATE INDEX IF NOT EXISTS idx_load_runs_project ON load_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_load_runs_status ON load_runs(status);
+CREATE INDEX IF NOT EXISTS idx_load_runs_profile ON load_runs(load_profile_id);
+CREATE INDEX IF NOT EXISTS idx_load_runs_run ON load_runs(run_id);
 
 -- Server resource snapshots: telemetry captured during load runs
 CREATE TABLE IF NOT EXISTS server_resource_snapshots (
@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS server_resource_snapshots (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_server_snapshots_load_run ON server_resource_snapshots(load_run_id);
-CREATE INDEX idx_server_snapshots_ts ON server_resource_snapshots(load_run_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_server_snapshots_load_run ON server_resource_snapshots(load_run_id);
+CREATE INDEX IF NOT EXISTS idx_server_snapshots_ts ON server_resource_snapshots(load_run_id, timestamp);
 
 -- Load-aware gates: extend gates with VU-parameterized thresholds
 ALTER TABLE gates ADD COLUMN IF NOT EXISTS load_profile_id UUID REFERENCES load_profiles(id) ON DELETE SET NULL;
@@ -97,8 +97,10 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS load_quota JSONB DEFAULT '{"max_vu
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS engine_concurrency_caps JSONB DEFAULT '{"k6_browser": 5, "playwright_lighthouse": 10, "wpt": 3}';
 
 -- Triggers
+DROP TRIGGER IF EXISTS set_load_profiles_updated_at ON load_profiles;
 CREATE TRIGGER set_load_profiles_updated_at BEFORE UPDATE ON load_profiles
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS set_load_runs_updated_at ON load_runs;
 CREATE TRIGGER set_load_runs_updated_at BEFORE UPDATE ON load_runs
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

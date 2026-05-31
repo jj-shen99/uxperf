@@ -101,10 +101,12 @@ CREATE INDEX IF NOT EXISTS idx_per_request_data_run ON per_request_data(run_id);
 CREATE INDEX IF NOT EXISTS idx_per_request_data_type ON per_request_data(resource_type);
 
 -- triggers
+DROP TRIGGER IF EXISTS set_updated_at_users ON users;
 CREATE TRIGGER set_updated_at_users
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS set_updated_at_notification_channels ON notification_channels;
 CREATE TRIGGER set_updated_at_notification_channels
     BEFORE UPDATE ON notification_channels
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();

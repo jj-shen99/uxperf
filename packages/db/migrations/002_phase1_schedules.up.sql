@@ -1,7 +1,7 @@
 -- Phase 1: Add schedules table for cron-based run scheduling
 -- Also add a scheduled_by field on runs to trace origin
 
-CREATE TABLE schedules (
+CREATE TABLE IF NOT EXISTS schedules (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     script_id       UUID REFERENCES scripts(id) ON DELETE SET NULL,
@@ -19,13 +19,14 @@ CREATE TABLE schedules (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_schedules_project ON schedules(project_id);
-CREATE INDEX idx_schedules_next_run ON schedules(next_run_at) WHERE enabled = true;
+CREATE INDEX IF NOT EXISTS idx_schedules_project ON schedules(project_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON schedules(next_run_at) WHERE enabled = true;
 
 -- Link runs back to schedules
-ALTER TABLE runs ADD COLUMN schedule_id UUID REFERENCES schedules(id) ON DELETE SET NULL;
-CREATE INDEX idx_runs_schedule ON runs(schedule_id);
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS schedule_id UUID REFERENCES schedules(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_runs_schedule ON runs(schedule_id);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS trg_schedules_updated_at ON schedules;
 CREATE TRIGGER trg_schedules_updated_at BEFORE UPDATE ON schedules
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();

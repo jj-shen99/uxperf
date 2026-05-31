@@ -350,9 +350,12 @@ export default function ReportsPage() {
               const rpt = r.data as any;
               return (
                 <div key={r.id} className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setExpandedReportId(isExpanded ? null : r.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-800/40 transition-colors"
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedReportId(isExpanded ? null : r.id); } }}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-800/40 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-indigo-900/30 px-2 py-0.5 text-[10px] font-medium text-indigo-400">
@@ -381,7 +384,7 @@ export default function ReportsPage() {
                       )}
                       <span className="text-gray-500 text-xs">{isExpanded ? "▲" : "▼"}</span>
                     </div>
-                  </button>
+                  </div>
 
                   {isExpanded && rpt && (
                     <div className="border-t border-gray-800 px-4 py-4 space-y-4">

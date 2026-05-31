@@ -39,6 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_anomalies_project ON anomalies(project_id, status
 CREATE INDEX IF NOT EXISTS idx_anomalies_metric ON anomalies(project_id, metric, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_anomalies_run ON anomalies(run_id);
 
+DROP TRIGGER IF EXISTS set_updated_at_anomalies ON anomalies;
 CREATE TRIGGER set_updated_at_anomalies
     BEFORE UPDATE ON anomalies
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS digest_schedules (
 
 CREATE INDEX IF NOT EXISTS idx_digest_schedules_next ON digest_schedules(next_send_at) WHERE enabled = true;
 
+DROP TRIGGER IF EXISTS set_updated_at_digest_schedules ON digest_schedules;
 CREATE TRIGGER set_updated_at_digest_schedules
     BEFORE UPDATE ON digest_schedules
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
