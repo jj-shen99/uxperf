@@ -1,15 +1,19 @@
 name: CI
 
-# Workflow disabled — uncomment triggers below to re-enable
-# on:
-#   push:
-#     branches: [main, develop]
-#   pull_request:
-#     branches: [main]
-on: workflow_dispatch
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  test-api:
+    name: Test API (Jest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,26 +24,64 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Test API (Jest)
+      - name: Test API
         run: npm test --workspace=packages/api
-      - name: Test Shared (Vitest)
-        run: npm test --workspace=packages/shared
-      - name: Test Worker (Vitest)
+
+  test-worker:
+    name: Test Worker (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test Worker
         run: npm test --workspace=packages/worker
 
-  lint-and-build:
+  test-dashboard:
+    name: Test Dashboard (Jest)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test Dashboard
+        run: npm test --workspace=packages/dashboard
 
+  test-shared:
+    name: Test Shared (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test Shared
+        run: npm test --workspace=packages/shared
+
+  lint-and-build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
           cache: npm
 
       - name: Install dependencies
@@ -61,6 +103,7 @@ jobs:
         run: npm run build --workspace=packages/dashboard
 
   db-migration-test:
+    name: DB Migration Round-Trip
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -96,5 +139,10 @@ jobs:
 
       - name: Run migrations down
         run: npm run db:migrate -- down
+        env:
+          DATABASE_URL: postgresql://perf:perf@localhost:5432/perf_framework
+
+      - name: Re-run migrations up (idempotency check)
+        run: npm run db:migrate
         env:
           DATABASE_URL: postgresql://perf:perf@localhost:5432/perf_framework

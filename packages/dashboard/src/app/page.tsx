@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { MetricRelationshipDiagram } from "@/components/metric-relationship-diagram";
+import { extractSparklineData, sparklinePoints, sparklineTrend } from "@/lib/sparkline-utils";
 
 function scoreColor(score: number) {
   if (score >= 90) return "text-green-400";
@@ -21,6 +23,30 @@ function avgMetric(runs: any[], key: string): number | null {
   return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 }
 
+function Sparkline({ values, lowerIsBetter = true }: { values: number[]; lowerIsBetter?: boolean }) {
+  if (values.length < 2) return null;
+  const W = 80;
+  const H = 24;
+  const points = sparklinePoints(values, W, H);
+  const trend = sparklineTrend(values);
+  const good = lowerIsBetter ? trend === "down" : trend === "up";
+  const bad = lowerIsBetter ? trend === "up" : trend === "down";
+  const color = good ? "#34d399" : bad ? "#f87171" : "#6b7280";
+
+  return (
+    <svg width={W} height={H} className="mt-1">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const { data: runs = [] } = useQuery({ queryKey: ["runs"], queryFn: () => api.runs.list() });
 
@@ -35,6 +61,12 @@ export default function DashboardPage() {
   const avgFcp = avgMetric(completedRuns, "fcp_ms");
   const avgCls = avgMetric(completedRuns, "cls");
   const avgPerf = avgMetric(completedRuns, "lighthouse_performance_score");
+
+  // E-19: Sparkline data
+  const sparkLcp = useMemo(() => extractSparklineData(completedRuns, "lcp_ms"), [completedRuns]);
+  const sparkFcp = useMemo(() => extractSparklineData(completedRuns, "fcp_ms"), [completedRuns]);
+  const sparkCls = useMemo(() => extractSparklineData(completedRuns, "cls"), [completedRuns]);
+  const sparkPerf = useMemo(() => extractSparklineData(completedRuns, "lighthouse_performance_score"), [completedRuns]);
 
   return (
     <div className="space-y-6">
@@ -69,7 +101,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI Averages (all completed runs) */}
+      {/* KPI Averages with Sparklines (E-19) */}
       {completedRuns.length > 0 && (
         <div>
           <h2 className="text-sm font-medium text-gray-400 mb-3">Average KPIs (All Completed Runs)</h2>
@@ -79,24 +111,28 @@ export default function DashboardPage() {
               <p className={`mt-1 text-xl font-bold ${avgLcp != null ? metricColor(avgLcp, 2500, 4000) : "text-gray-600"}`}>
                 {avgLcp != null ? `${Math.round(avgLcp)}` : "—"}<span className="ml-1 text-xs font-normal text-gray-500">ms</span>
               </p>
+              <Sparkline values={sparkLcp} lowerIsBetter />
             </div>
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs text-gray-500">Avg FCP</p>
               <p className={`mt-1 text-xl font-bold ${avgFcp != null ? metricColor(avgFcp, 1800, 3000) : "text-gray-600"}`}>
                 {avgFcp != null ? `${Math.round(avgFcp)}` : "—"}<span className="ml-1 text-xs font-normal text-gray-500">ms</span>
               </p>
+              <Sparkline values={sparkFcp} lowerIsBetter />
             </div>
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs text-gray-500">Avg CLS</p>
               <p className={`mt-1 text-xl font-bold ${avgCls != null ? metricColor(avgCls, 0.1, 0.25) : "text-gray-600"}`}>
                 {avgCls != null ? avgCls.toFixed(3) : "—"}
               </p>
+              <Sparkline values={sparkCls} lowerIsBetter />
             </div>
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs text-gray-500">Avg Lighthouse</p>
               <p className={`mt-1 text-xl font-bold ${avgPerf != null ? scoreColor(Math.round(avgPerf * 100)) : "text-gray-600"}`}>
                 {avgPerf != null ? Math.round(avgPerf * 100) : "—"}<span className="ml-1 text-xs font-normal text-gray-500">/100</span>
               </p>
+              <Sparkline values={sparkPerf} lowerIsBetter={false} />
             </div>
           </div>
         </div>

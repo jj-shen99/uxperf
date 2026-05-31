@@ -62,8 +62,8 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 | E-15 | Knowledge — Browser Rendering tab | 🟢 | Done. |
 | E-16 | Knowledge — Glossary filter | 🟢 | Done. |
 | E-17 | Quorum-saved status in eval UI | 🟢 | Done. |
-| E-18 | Compare page improvements | 🔴 | Side-by-side diff charts. |
-| E-19 | Trend sparklines on dashboard | 🔴 | Mini charts on project overview. |
+| E-18 | Compare page improvements | � | Diff summary badges, regression/improvement indicators, horizontal diff bars, HAR waterfall comparison, `compare-utils.ts` with 21 tests. |
+| E-19 | Trend sparklines on dashboard | � | SVG polyline sparklines on KPI cards, trend detection (up/down/flat), `sparkline-utils.ts` with 19 tests. |
 
 ## Priority 6 — Testing & Infrastructure (E-20–E-27)
 
@@ -71,13 +71,13 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 |---|-------------|--------|-------|
 | E-20 | Gates batch/dedup tests | � | 10 tests added. |
 | E-21 | Environments module tests | � | 6 tests added. |
-| E-22 | Database module tests | 🔴 | 2 source files, 0 tests. |
+| E-22 | Database module tests | � | 10 tests: Pool construction, query delegation, param passing, error propagation, generic types, module destroy, module export. |
 | E-23 | Worker metrics-collector tests | � | 7 tests added. |
 | E-24 | Dashboard page-level tests | 🟡 | Logic tests exist, no component tests. |
-| E-25 | Docker Compose orchestration | 🟡 | Dockerfiles exist, no compose. |
-| E-26 | CI pipeline (GitHub Actions) | 🟡 | Disabled triggers. |
+| E-25 | Docker Compose orchestration | � | Full compose with migrate service, healthchecks, restart policies, resource limits, networks, env var defaults, Redis (opt-in), profiles. 16 infra tests. |
+| E-26 | CI pipeline (GitHub Actions) | � | Enabled push/PR triggers, split into parallel jobs (test-api, test-worker, test-dashboard, test-shared, lint-and-build, db-migration-test), concurrency control, migration idempotency check. 14 infra tests. |
 | E-27 | Database migrations versioning | 🟡 | Need idempotency verification. |
 
 ---
 
-_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-20–E-21, E-23, E-28–E-37 implemented)_
+_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-18–E-19, E-20–E-23, E-25–E-26, E-28–E-37 implemented)_

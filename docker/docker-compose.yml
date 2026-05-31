@@ -1,56 +1,148 @@
 version: "3.9"
 
+# ================================================================
+# UI Performance Testing Framework — Docker Compose Orchestration
+# Usage:
+#   docker compose up                  # API + Dashboard + Postgres
+#   docker compose --profile worker up # Include worker
+#   docker compose --profile full up   # All services including Redis
+# ================================================================
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-perf}:${POSTGRES_PASSWORD:-perf}@postgres:5432/${POSTGRES_DB:-perf_framework}
+  NODE_ENV: ${NODE_ENV:-production}
+
 services:
+  # --- Database ---
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: perf
-      POSTGRES_PASSWORD: perf
-      POSTGRES_DB: perf_framework
+      POSTGRES_USER: ${POSTGRES_USER:-perf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-perf}
+      POSTGRES_DB: ${POSTGRES_DB:-perf_framework}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U perf -d perf_framework"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-perf} -d ${POSTGRES_DB:-perf_framework}"]
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
 
+  # --- Database Migrations ---
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    command: ["node", "packages/db/migrate.mjs"]
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  # --- API Server ---
   api:
     build:
-      context: .
+      context: ..
       dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4000}:4000"
     environment:
-      DATABASE_URL: postgresql://perf:perf@postgres:5432/perf_framework
+      <<: *common-env
       PORT: "4000"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - backend
+      - frontend
 
+  # --- Dashboard ---
   dashboard:
     build:
-      context: .
+      context: ..
       dockerfile: docker/dashboard.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-4000}/api/v1
+    restart: unless-stopped
     ports:
-      - "4200:4200"
+      - "${DASHBOARD_PORT:-4200}:4200"
     environment:
       NEXT_PUBLIC_API_URL: http://api:4000/api/v1
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    networks:
+      - frontend
 
+  # --- Worker (opt-in via --profile worker) ---
   worker:
     build:
-      context: .
+      context: ..
       dockerfile: docker/worker.Dockerfile
+    restart: unless-stopped
     environment:
+      <<: *common-env
       API_URL: http://api:4000/api/v1
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     profiles:
       - worker
+      - full
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - backend
+
+  # --- Redis (opt-in via --profile full) ---
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    profiles:
+      - full
+    networks:
+      - backend
 
 volumes:
   pgdata:
+
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge
