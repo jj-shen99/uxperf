@@ -123,7 +123,7 @@ const METRIC_CATEGORIES = [
   },
 ];
 
-type KnowledgeTab = "metrics" | "lighthouse" | "optimization" | "methodology" | "thresholds" | "network";
+type KnowledgeTab = "metrics" | "lighthouse" | "optimization" | "methodology" | "thresholds" | "network" | "gates" | "rendering";
 
 const TABS: { key: KnowledgeTab; label: string }[] = [
   { key: "metrics", label: "Metrics & Glossary" },
@@ -132,10 +132,13 @@ const TABS: { key: KnowledgeTab; label: string }[] = [
   { key: "methodology", label: "Testing Methodology" },
   { key: "thresholds", label: "Thresholds" },
   { key: "network", label: "Network Fundamentals" },
+  { key: "gates", label: "Quality Gates" },
+  { key: "rendering", label: "Browser Rendering" },
 ];
 
 export default function KnowledgePage() {
   const [tab, setTab] = useState<KnowledgeTab>("metrics");
+  const [glossaryFilter, setGlossaryFilter] = useState("");
 
   return (
     <div className="space-y-6 p-6">
@@ -189,9 +192,24 @@ export default function KnowledgePage() {
 
           {/* Full Glossary */}
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-            <h2 className="text-sm font-medium text-gray-400 mb-4">Performance Metrics Glossary</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-medium text-gray-400">Performance Metrics Glossary</h2>
+              <input
+                type="text"
+                value={glossaryFilter}
+                onChange={(e) => setGlossaryFilter(e.target.value)}
+                placeholder="Filter metrics…"
+                className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 w-48"
+              />
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(METRIC_GLOSSARY).map(([key, info]) => (
+              {Object.entries(METRIC_GLOSSARY)
+                .filter(([, info]) => {
+                  if (!glossaryFilter) return true;
+                  const q = glossaryFilter.toLowerCase();
+                  return info.name.toLowerCase().includes(q) || info.full.toLowerCase().includes(q) || info.description.toLowerCase().includes(q);
+                })
+                .map(([key, info]) => (
                 <div key={key} className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-semibold text-indigo-400">{info.name}</span>
@@ -530,6 +548,241 @@ export default function KnowledgePage() {
             <p className="mt-1 text-xs text-gray-400">
               A good TTFB is under 800 ms. Anything above 1.8 s is considered poor. Use the waterfall chart in browser DevTools (Network tab) to see the exact duration of each phase for your site.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Quality Gates Tab ─── */}
+      {tab === "gates" && (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-6 space-y-6">
+            <div>
+              <h2 className="text-sm font-semibold text-white mb-1">Quality Gates</h2>
+              <p className="text-xs text-gray-500">
+                Quality gates are configurable rules that automatically evaluate performance metrics against thresholds.
+                They enforce performance budgets and prevent regressions from shipping to production.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-indigo-400 mb-2">Threshold Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Static numeric thresholds. The simplest gate type: fail if a metric exceeds a fixed value.
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: LCP &le; 2500ms, CLS &le; 0.1</p>
+                <div className="mt-2 rounded-md bg-gray-800/50 p-2 font-mono text-[10px] text-gray-400">
+                  {`{ "type": "threshold", "metric": "lcp", "operator": "lte", "threshold": 2500 }`}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-purple-400 mb-2">Baseline-Relative Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Compare against your own historical baselines. Fail if the metric regresses by more than a percentage from the baseline percentile (p50, p75, or p95).
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: Fail if LCP &gt; p75 + 10%</p>
+                <div className="mt-2 rounded-md bg-gray-800/50 p-2 font-mono text-[10px] text-gray-400">
+                  {`{ "type": "baseline_relative", "metric": "lcp", "baseline_stat": "p75", "regression_pct": 10 }`}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-cyan-400 mb-2">Statistical Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Use mean &plusmn; N&times;&sigma; from baseline data to set dynamic thresholds. Adapts automatically as your baseline performance improves or degrades.
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: Fail if TBT &gt; mean + 2&sigma;</p>
+                <div className="mt-2 rounded-md bg-gray-800/50 p-2 font-mono text-[10px] text-gray-400">
+                  {`{ "type": "statistical", "metric": "tbt", "sigma_multiplier": 2 }`}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-amber-400 mb-2">VU-Tiered Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Thresholds that scale with concurrency level during load tests. Different VU counts have different acceptable latency ranges.
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: p95 &le; 2s at 10 VUs, &le; 4s at 100 VUs</p>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-rose-400 mb-2">Resource Floor Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Server-side conditions: CPU utilization, memory usage, event-loop lag. Ensures infrastructure headroom exists before declaring a test as passed.
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: CPU &le; 80%, event-loop lag &le; 100ms</p>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-emerald-400 mb-2">Capacity Floor Gates</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Minimum sustainable VUs with headroom calculation. Ensures your system can handle the target concurrent user count before metrics degrade.
+                </p>
+                <p className="mt-2 text-[10px] text-gray-500">Example: Sustain &ge; 50 VUs with 20% headroom</p>
+              </div>
+            </div>
+
+            {/* 3-of-5 Quorum */}
+            <div className="rounded-md border border-indigo-900/40 bg-indigo-900/10 p-4">
+              <h3 className="text-sm font-semibold text-indigo-300 mb-2">3-of-5 Quorum Gating</h3>
+              <p className="text-xs text-gray-400 leading-relaxed mb-3">
+                A single Lighthouse run can fluctuate &plusmn; 5&ndash;10%. To prevent flaky failures from blocking CI, all gates use a <strong className="text-indigo-300">3-of-5 quorum</strong>: a gate only triggers a real failure if the metric has failed in at least 3 of the last 5 runs.
+              </p>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-md bg-gray-800/50 p-2">
+                  <p className="text-lg font-bold text-green-400">2/5</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Still passes &mdash; noise</p>
+                </div>
+                <div className="rounded-md bg-gray-800/50 p-2">
+                  <p className="text-lg font-bold text-yellow-400">3/5</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Triggers failure</p>
+                </div>
+                <div className="rounded-md bg-gray-800/50 p-2">
+                  <p className="text-lg font-bold text-red-400">5/5</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Confirmed regression</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Policies */}
+            <div className="rounded-md border border-gray-800 bg-gray-800/20 p-4">
+              <h3 className="text-sm font-semibold text-gray-200 mb-3">Gate Policies</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-md border border-red-900/40 bg-red-900/10 p-3">
+                  <p className="text-xs font-semibold text-red-400">block</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Fails the CI check and blocks the merge. Use for critical performance budgets that must never regress.</p>
+                </div>
+                <div className="rounded-md border border-yellow-900/40 bg-yellow-900/10 p-3">
+                  <p className="text-xs font-semibold text-yellow-400">warn</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Creates a warning annotation but does not block. Good for metrics you want to track but are not yet ready to enforce.</p>
+                </div>
+                <div className="rounded-md border border-blue-900/40 bg-blue-900/10 p-3">
+                  <p className="text-xs font-semibold text-blue-400">page</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Sends a notification (Slack, webhook) to alert the team. Useful for non-blocking awareness of performance changes.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Check Against Run */}
+            <div className="rounded-md border border-gray-800 bg-gray-800/20 p-4">
+              <h3 className="text-sm font-semibold text-gray-200 mb-2">Check Against Run</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                You can evaluate all enabled gates against any completed run on-demand from the <strong className="text-gray-300">Gates</strong> page. This is useful for retroactively checking if a past run would pass current gate configurations, or for testing new gates before enabling them in CI.
+              </p>
+              <p className="mt-2 text-[10px] text-gray-500">
+                Note: Gates are <strong className="text-gray-400">project-scoped</strong>. The run&apos;s project must have enabled gates for evaluation to return results.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Browser Rendering Tab ─── */}
+      {tab === "rendering" && (
+        <div className="space-y-6">
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-6 space-y-6">
+            <div>
+              <h2 className="text-sm font-semibold text-white mb-1">Critical Rendering Path</h2>
+              <p className="text-xs text-gray-500">
+                The browser transforms HTML, CSS, and JS into pixels through a multi-step pipeline. Understanding this pipeline is key to diagnosing LCP, CLS, and TBT issues.
+              </p>
+            </div>
+
+            {/* Pipeline stages */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {["HTML Parse", "DOM Build", "CSSOM Build", "Render Tree", "Layout", "Paint", "Composite"].map((stage, i) => (
+                <div key={stage} className="flex items-center gap-2">
+                  <span className="rounded-md border border-indigo-800 bg-indigo-900/30 px-2.5 py-1 text-indigo-300 font-medium">{stage}</span>
+                  {i < 6 && <span className="text-gray-600">&rarr;</span>}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-orange-400 mb-2">HTML Parsing &amp; DOM Construction</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  The browser parses the HTML document top-to-bottom, building the DOM tree. When it encounters a <code className="text-orange-300">&lt;script&gt;</code> tag (without <code className="text-gray-300">async</code>/<code className="text-gray-300">defer</code>), parsing <strong className="text-gray-300">blocks</strong> until the script is downloaded and executed. This directly delays FCP.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                  <li className="flex gap-2"><span className="text-orange-500">-</span>Use <code className="text-gray-400">defer</code> for scripts that need DOM access</li>
+                  <li className="flex gap-2"><span className="text-orange-500">-</span>Use <code className="text-gray-400">async</code> for independent analytics scripts</li>
+                  <li className="flex gap-2"><span className="text-orange-500">-</span>Inline critical CSS to avoid render-blocking requests</li>
+                </ul>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-pink-400 mb-2">CSSOM &amp; Render Tree</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  CSS stylesheets are <strong className="text-gray-300">render-blocking</strong> by default. The browser must build the complete CSSOM before constructing the render tree (DOM + CSSOM merged). Large CSS files or many <code className="text-pink-300">@import</code> chains delay first paint.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                  <li className="flex gap-2"><span className="text-pink-500">-</span>Inline above-the-fold CSS; load the rest asynchronously</li>
+                  <li className="flex gap-2"><span className="text-pink-500">-</span>Avoid <code className="text-gray-400">@import</code> &mdash; use <code className="text-gray-400">&lt;link&gt;</code> for parallel loading</li>
+                  <li className="flex gap-2"><span className="text-pink-500">-</span>Remove unused CSS with PurgeCSS or similar tools</li>
+                </ul>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-sky-400 mb-2">Layout &amp; Reflow</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Layout calculates the exact position and size of every element in the render tree. Changing geometric CSS properties (width, height, margin, padding, font-size) forces a <strong className="text-gray-300">reflow</strong>, which is expensive. Frequent reflows cause <strong className="text-sky-300">layout thrashing</strong> and contribute to TBT.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                  <li className="flex gap-2"><span className="text-sky-500">-</span>Batch DOM reads before DOM writes</li>
+                  <li className="flex gap-2"><span className="text-sky-500">-</span>Use <code className="text-gray-400">transform</code> and <code className="text-gray-400">opacity</code> for animations (skip layout)</li>
+                  <li className="flex gap-2"><span className="text-sky-500">-</span>Set explicit width/height on images to prevent CLS</li>
+                </ul>
+              </div>
+
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                <h3 className="text-sm font-semibold text-lime-400 mb-2">Paint &amp; Compositing</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Paint fills in pixels: text, colors, borders, shadows, images. Compositing merges painted layers in GPU-accelerated fashion. Elements with <code className="text-lime-300">will-change</code> or <code className="text-lime-300">transform: translateZ(0)</code> get their own compositor layer, enabling smooth animations without repainting neighbors.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                  <li className="flex gap-2"><span className="text-lime-500">-</span>Minimize paint areas by isolating animations to their own layer</li>
+                  <li className="flex gap-2"><span className="text-lime-500">-</span>Avoid <code className="text-gray-400">box-shadow</code> changes on scroll (triggers repaint)</li>
+                  <li className="flex gap-2"><span className="text-lime-500">-</span>Use <code className="text-gray-400">contain: paint</code> on complex subtrees</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Metric connections */}
+            <div className="rounded-md border border-gray-800 bg-gray-800/20 p-4">
+              <h3 className="text-sm font-semibold text-gray-200 mb-3">How Rendering Connects to Metrics</h3>
+              <div className="overflow-hidden rounded-md border border-gray-800">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-800/50">
+                    <tr>
+                      <th className="px-3 py-1.5 text-left text-gray-400">Pipeline Stage</th>
+                      <th className="px-3 py-1.5 text-left text-gray-400">Affected Metrics</th>
+                      <th className="px-3 py-1.5 text-left text-gray-400">Common Bottleneck</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800 text-gray-400">
+                    <tr><td className="px-3 py-1.5 text-gray-200">HTML Parse</td><td className="px-3 py-1.5">FCP, LCP</td><td className="px-3 py-1.5">Render-blocking &lt;script&gt; tags</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-200">CSSOM Build</td><td className="px-3 py-1.5">FCP, SI</td><td className="px-3 py-1.5">Large CSS files, @import chains</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-200">JavaScript Execution</td><td className="px-3 py-1.5">TBT, INP, TTI</td><td className="px-3 py-1.5">Long tasks (&gt; 50ms) on main thread</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-200">Layout</td><td className="px-3 py-1.5">CLS, TBT</td><td className="px-3 py-1.5">Dynamic content insertion, missing dimensions</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-200">Paint</td><td className="px-3 py-1.5">FCP, LCP</td><td className="px-3 py-1.5">Large paint areas, complex visual effects</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-200">Composite</td><td className="px-3 py-1.5">INP (visual)</td><td className="px-3 py-1.5">Too many compositor layers</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Main thread */}
+            <div className="rounded-md border border-amber-900/40 bg-amber-900/10 p-4">
+              <h3 className="text-sm font-semibold text-amber-300 mb-2">The Main Thread Problem</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                The browser&apos;s main thread handles HTML parsing, JS execution, layout, and paint. Only <strong className="text-amber-300">one task runs at a time</strong>. A long JavaScript task (&gt; 50ms) blocks everything else: the user can&apos;t click, scroll, or type. This is why <strong className="text-gray-300">TBT</strong> (Total Blocking Time) measures the sum of blocking portions of all long tasks between FCP and TTI, and why <strong className="text-gray-300">INP</strong> captures the worst interaction delay.
+              </p>
+              <p className="mt-2 text-xs text-gray-400">
+                To keep the main thread responsive: break long tasks with <code className="text-amber-300">scheduler.yield()</code>, move computation to Web Workers, and use <code className="text-amber-300">requestIdleCallback</code> for non-urgent work.
+              </p>
+            </div>
           </div>
         </div>
       )}

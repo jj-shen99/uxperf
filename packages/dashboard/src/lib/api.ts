@@ -61,6 +61,7 @@ export const api = {
     list: (projectId?: string) => request<any[]>(`/gates${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
     get: (id: string) => request<any>(`/gates/${id}`),
     create: (data: any) => request<any>("/gates", { method: "POST", body: JSON.stringify(data) }),
+    batchCreate: (projectId: string, gates: any[]) => request<any>("/gates/batch", { method: "POST", body: JSON.stringify({ project_id: projectId, gates }) }),
     update: (id: string, data: any) => request<any>(`/gates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/gates/${id}`, { method: "DELETE" }),
     evaluate: (runId: string) => request<any[]>("/gates/evaluate", { method: "POST", body: JSON.stringify({ run_id: runId }) }),

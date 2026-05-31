@@ -43,6 +43,11 @@ export class GatesController {
     return this.gatesService.delete(id);
   }
 
+  @Post("batch")
+  batchCreate(@Body() body: { project_id: string; gates: any[] }) {
+    return this.gatesService.batchCreate(body.project_id, body.gates);
+  }
+
   @Post("evaluate")
   evaluate(@Body() body: { run_id: string }) {
     return this.gatesService.evaluateAgainstRun(body.run_id);

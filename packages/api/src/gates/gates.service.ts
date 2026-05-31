@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, Optional, Logger } from "@nestjs/common";
+import { Injectable, Inject, NotFoundException, ConflictException, Optional, Logger } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { BaselinesService, BaselineRow } from "../baselines/baselines.service";
 
@@ -105,6 +105,16 @@ export class GatesService {
   }
 
   async create(dto: CreateGateDto): Promise<GateRow> {
+    const dup = await this.db.query<{ id: string }>(
+      "SELECT id FROM gates WHERE project_id = $1 AND name = $2",
+      [dto.project_id, dto.name],
+    );
+    if (dup.rows.length > 0) {
+      throw new ConflictException(
+        `A gate named "${dto.name}" already exists for this project`,
+      );
+    }
+
     const result = await this.db.query<GateRow>(
       `INSERT INTO gates (project_id, name, definition, policy, enabled)
        VALUES ($1, $2, $3, $4, $5)
@@ -118,6 +128,43 @@ export class GatesService {
       ]
     );
     return result.rows[0];
+  }
+
+  async batchCreate(
+    projectId: string,
+    gates: Omit<CreateGateDto, "project_id">[],
+  ): Promise<{ created: GateRow[]; skipped: string[] }> {
+    const existing = await this.db.query<{ name: string }>(
+      "SELECT name FROM gates WHERE project_id = $1",
+      [projectId],
+    );
+    const existingNames = new Set(existing.rows.map((r) => r.name));
+
+    const created: GateRow[] = [];
+    const skipped: string[] = [];
+
+    for (const g of gates) {
+      if (existingNames.has(g.name)) {
+        skipped.push(g.name);
+        continue;
+      }
+      const result = await this.db.query<GateRow>(
+        `INSERT INTO gates (project_id, name, definition, policy, enabled)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [
+          projectId,
+          g.name,
+          JSON.stringify(g.definition),
+          g.policy ?? "warn",
+          g.enabled ?? true,
+        ],
+      );
+      created.push(result.rows[0]);
+      existingNames.add(g.name);
+    }
+
+    return { created, skipped };
   }
 
   async update(id: string, dto: UpdateGateDto): Promise<GateRow> {
@@ -371,7 +418,12 @@ export class GatesService {
    * Evaluate all gates for a given run_id.
    * Fetches the run from the database, then delegates to evaluateGatesForRun.
    */
-  async evaluateAgainstRun(runId: string): Promise<GateEvaluationOutcome[]> {
+  async evaluateAgainstRun(runId: string): Promise<{
+    outcomes: GateEvaluationOutcome[];
+    project_id: string;
+    project_name?: string;
+    reason?: string;
+  }> {
     const result = await this.db.query<{
       project_id: string;
       metrics: Record<string, unknown> | null;
@@ -384,10 +436,39 @@ export class GatesService {
     if (!run) {
       throw new Error(`Run ${runId} not found`);
     }
+
+    // Fetch project name for UI clarity
+    const projResult = await this.db.query<{ name: string }>(
+      "SELECT name FROM projects WHERE id = $1",
+      [run.project_id],
+    );
+    const projectName = projResult.rows[0]?.name ?? "Unknown";
+
     if (!run.metrics) {
-      return [];
+      return {
+        outcomes: [],
+        project_id: run.project_id,
+        project_name: projectName,
+        reason: "Run has no metrics. Only completed runs with metrics can be evaluated.",
+      };
     }
-    return this.evaluateGatesForRun(run.project_id, runId, run.metrics);
+
+    // Check if any enabled gates exist for the project
+    const gateCount = await this.db.query<{ count: string }>(
+      "SELECT COUNT(*) as count FROM gates WHERE project_id = $1 AND enabled = true",
+      [run.project_id],
+    );
+    if (Number(gateCount.rows[0]?.count) === 0) {
+      return {
+        outcomes: [],
+        project_id: run.project_id,
+        project_name: projectName,
+        reason: `No enabled gates found for project "${projectName}". Create gates for this project first.`,
+      };
+    }
+
+    const outcomes = await this.evaluateGatesForRun(run.project_id, runId, run.metrics);
+    return { outcomes, project_id: run.project_id, project_name: projectName };
   }
 
   /**

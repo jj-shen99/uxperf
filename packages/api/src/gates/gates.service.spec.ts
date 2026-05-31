@@ -1,5 +1,5 @@
 import { Test } from "@nestjs/testing";
-import { NotFoundException } from "@nestjs/common";
+import { NotFoundException, ConflictException } from "@nestjs/common";
 import { GatesService, GateDefinition } from "./gates.service";
 import { DatabaseService } from "../database/database.service";
 
@@ -271,6 +271,7 @@ describe("GatesService", () => {
 
     describe("create", () => {
       it("creates with defaults", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [] });
         mockDb.query.mockResolvedValueOnce({ rows: [mockGate] });
         const result = await service.create({
           project_id: "p-1",
@@ -278,6 +279,82 @@ describe("GatesService", () => {
           definition: { type: "threshold", metric: "lcp", operator: "lte", threshold: 2500 },
         });
         expect(result).toEqual(mockGate);
+      });
+
+      it("throws ConflictException when duplicate name+project exists", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [{ id: "existing-1" }] });
+        await expect(
+          service.create({
+            project_id: "p-1",
+            name: "LCP Gate",
+            definition: { type: "threshold", metric: "lcp", operator: "lte", threshold: 2500 },
+          })
+        ).rejects.toThrow(ConflictException);
+        expect(mockDb.query).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("batchCreate", () => {
+      const baseDef = { type: "threshold" as const, metric: "lcp", operator: "lte" as const, threshold: 2500 };
+      const mockCreated = {
+        id: "new-1", project_id: "p-1", name: "LCP Gate", definition: baseDef,
+        policy: "warn", enabled: true, created_at: new Date(), updated_at: new Date(),
+      };
+
+      it("creates all gates when none exist", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [] });
+        mockDb.query.mockResolvedValueOnce({ rows: [mockCreated] });
+        mockDb.query.mockResolvedValueOnce({ rows: [{ ...mockCreated, id: "new-2", name: "FCP Gate" }] });
+
+        const result = await service.batchCreate("p-1", [
+          { name: "LCP Gate", definition: baseDef },
+          { name: "FCP Gate", definition: { ...baseDef, metric: "fcp" } },
+        ]);
+        expect(result.created).toHaveLength(2);
+        expect(result.skipped).toHaveLength(0);
+      });
+
+      it("skips gates that already exist by name", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [{ name: "LCP Gate" }] });
+        mockDb.query.mockResolvedValueOnce({ rows: [{ ...mockCreated, id: "new-2", name: "FCP Gate" }] });
+
+        const result = await service.batchCreate("p-1", [
+          { name: "LCP Gate", definition: baseDef },
+          { name: "FCP Gate", definition: { ...baseDef, metric: "fcp" } },
+        ]);
+        expect(result.created).toHaveLength(1);
+        expect(result.created[0].name).toBe("FCP Gate");
+        expect(result.skipped).toEqual(["LCP Gate"]);
+      });
+
+      it("skips all when all already exist", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [{ name: "LCP Gate" }, { name: "FCP Gate" }] });
+
+        const result = await service.batchCreate("p-1", [
+          { name: "LCP Gate", definition: baseDef },
+          { name: "FCP Gate", definition: { ...baseDef, metric: "fcp" } },
+        ]);
+        expect(result.created).toHaveLength(0);
+        expect(result.skipped).toEqual(["LCP Gate", "FCP Gate"]);
+      });
+
+      it("deduplicates within the same batch", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [] });
+        mockDb.query.mockResolvedValueOnce({ rows: [mockCreated] });
+
+        const result = await service.batchCreate("p-1", [
+          { name: "LCP Gate", definition: baseDef },
+          { name: "LCP Gate", definition: baseDef },
+        ]);
+        expect(result.created).toHaveLength(1);
+        expect(result.skipped).toEqual(["LCP Gate"]);
+      });
+
+      it("returns empty arrays for empty input", async () => {
+        mockDb.query.mockResolvedValueOnce({ rows: [] });
+        const result = await service.batchCreate("p-1", []);
+        expect(result.created).toHaveLength(0);
+        expect(result.skipped).toHaveLength(0);
       });
     });
 
@@ -310,6 +387,56 @@ describe("GatesService", () => {
         mockDb.query.mockResolvedValueOnce({ rowCount: 0 });
         await expect(service.delete("missing")).rejects.toThrow(NotFoundException);
       });
+    });
+  });
+
+  // ----------------------------------------------------------
+  // evaluateAgainstRun — structured response
+  // ----------------------------------------------------------
+  describe("evaluateAgainstRun", () => {
+    it("throws when run not found", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      await expect(service.evaluateAgainstRun("missing-run")).rejects.toThrow("Run missing-run not found");
+    });
+
+    it("returns reason when run has no metrics", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ project_id: "p-1", metrics: null, status: "completed" }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [{ name: "Demo" }] });
+
+      const result = await service.evaluateAgainstRun("run-1");
+      expect(result.outcomes).toEqual([]);
+      expect(result.project_name).toBe("Demo");
+      expect(result.reason).toContain("no metrics");
+    });
+
+    it("returns reason when no enabled gates for project", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ project_id: "p-1", metrics: { lcp_ms: 1000 }, status: "completed" }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [{ name: "Demo" }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [{ count: "0" }] });
+
+      const result = await service.evaluateAgainstRun("run-1");
+      expect(result.outcomes).toEqual([]);
+      expect(result.project_name).toBe("Demo");
+      expect(result.reason).toContain("No enabled gates");
+    });
+
+    it("returns outcomes when gates exist and run has metrics", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ project_id: "p-1", metrics: { lcp_ms: 1000 }, status: "completed" }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [{ name: "Demo" }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [{ count: "1" }] });
+      // evaluateGatesForRun mocks: gates query, quorum, insert
+      mockDb.query.mockResolvedValueOnce({ rows: [{
+        id: "g-1", project_id: "p-1", name: "LCP Gate",
+        definition: { type: "threshold", metric: "lcp", operator: "lte", threshold: 2500 },
+        policy: "block", enabled: true,
+      }] });
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+
+      const result = await service.evaluateAgainstRun("run-1");
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.project_name).toBe("Demo");
+      expect(result.reason).toBeUndefined();
     });
   });
 

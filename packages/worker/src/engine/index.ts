@@ -3,6 +3,9 @@ export { median, aggregateResults } from "./stats";
 export { registry, TestRunnerRegistry } from "./test-runner";
 export type { TestRunner } from "./test-runner";
 
+// Journey engine (E-01 through E-05)
+export { parseJourney, parseYaml, compileSteps, executeJourney } from "./journey";
+
 // Auto-register engine adapters
 import "./adapters/playwright-adapter";
 import "./adapters/wpt-adapter";
