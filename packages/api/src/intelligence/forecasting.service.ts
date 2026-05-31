@@ -1,5 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, Optional } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 export interface ForecastPoint {
   date: string;
@@ -64,7 +65,10 @@ export interface BreachWarning {
 export class ForecastingService {
   private readonly logger = new Logger(ForecastingService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    @Optional() @Inject(NotificationsService) private readonly notificationsService?: NotificationsService,
+  ) {}
 
   /**
    * Generate a Prophet-style forecast for a metric.
@@ -454,6 +458,54 @@ export class ForecastingService {
 
     // Sort by urgency (closest breach first)
     warnings.sort((a, b) => (a.days_until_breach ?? 999) - (b.days_until_breach ?? 999));
+    return warnings;
+  }
+
+  /**
+   * E-59: Check all budgets and dispatch notifications for imminent breaches.
+   *
+   * Book Ch 14, p179: "If the bundle has grown 3KB a week for the last quarter,
+   * when will it cross the 200KB budget?"
+   *
+   * When a forecast crosses a budget threshold, auto-create a warning
+   * notification ("budget breach in N weeks").
+   */
+  async checkAndNotifyBreaches(
+    projectId: string,
+    budgets: { metric: string; threshold: number }[],
+    environment?: string,
+  ): Promise<BreachWarning[]> {
+    const warnings = await this.checkAllBudgetBreaches(projectId, budgets, environment);
+
+    if (warnings.length > 0 && this.notificationsService) {
+      for (const warning of warnings) {
+        try {
+          await this.notificationsService.dispatch({
+            event: "forecast_breach",
+            project_id: projectId,
+            title: `Forecast breach: ${warning.metric}`,
+            message: warning.reason,
+            details: {
+              metric: warning.metric,
+              budget_threshold: warning.budget_threshold,
+              breach_date: warning.breach_date,
+              days_until_breach: warning.days_until_breach,
+              weeks_until_breach: warning.weeks_until_breach,
+              confidence: warning.confidence,
+              trend_direction: warning.current_trend.direction,
+              slope_per_day: warning.current_trend.slope_per_day,
+            },
+          });
+        } catch (e) {
+          this.logger.error(`Failed to dispatch forecast breach notification for ${warning.metric}: ${e}`);
+        }
+      }
+
+      this.logger.log(
+        `Dispatched ${warnings.length} forecast breach notification(s) for project ${projectId}`,
+      );
+    }
+
     return warnings;
   }
 

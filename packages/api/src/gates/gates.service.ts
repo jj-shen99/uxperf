@@ -76,6 +76,9 @@ export interface GateEvaluationOutcome {
   computed_threshold?: number; // for baseline/statistical gates
   operator?: string;
   baseline_value?: number;
+  ci_lower?: number;  // E-42: confidence interval lower bound
+  ci_upper?: number;  // E-42: confidence interval upper bound
+  ci_reliable?: boolean; // E-42: whether CI has enough samples
   quorum_detail?: {
     recent_failures: number;
     required_failures: number;
@@ -342,6 +345,9 @@ export class GatesService {
       let passed: boolean;
       let computedThreshold: number | undefined;
       let baselineValue: number | undefined;
+      let ciLower: number | undefined;
+      let ciUpper: number | undefined;
+      let ciReliable: boolean | undefined;
 
       switch (def.type) {
         case "threshold":
@@ -355,6 +361,9 @@ export class GatesService {
           passed = result.passed;
           computedThreshold = result.computedThreshold;
           baselineValue = result.baselineValue;
+          ciLower = result.ci_lower;
+          ciUpper = result.ci_upper;
+          ciReliable = result.ci_reliable;
           break;
         }
 
@@ -365,6 +374,9 @@ export class GatesService {
           passed = result.passed;
           computedThreshold = result.computedThreshold;
           baselineValue = result.baselineValue;
+          ciLower = result.ci_lower;
+          ciUpper = result.ci_upper;
+          ciReliable = result.ci_reliable;
           break;
         }
 
@@ -442,6 +454,9 @@ export class GatesService {
         computed_threshold: computedThreshold,
         baseline_value: baselineValue,
         operator: def.operator,
+        ci_lower: ciLower,
+        ci_upper: ciUpper,
+        ci_reliable: ciReliable,
         quorum_detail: {
           recent_failures: quorum.recentFailures,
           required_failures: 3,
@@ -511,15 +526,19 @@ export class GatesService {
   }
 
   /**
-   * Evaluate a metric against a baseline-relative gate.
+   * E-45: Evaluate a metric against a baseline-relative gate.
    * Fails if actual > baseline_stat * (1 + regression_pct/100).
    * Example: if p75=2000 and regression_pct=10, fails if actual > 2200.
+   *
+   * E-42 enhancement: When CI data is available, only fail if the actual
+   * value exceeds the CI upper bound of the computed threshold. This
+   * prevents false positives from normal sampling variance.
    */
   async evaluateBaselineRelative(
     def: GateDefinition,
     actualValue: number | undefined,
     projectId: string,
-  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number }> {
+  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number; ci_lower?: number; ci_upper?: number; ci_reliable?: boolean }> {
     if (actualValue === undefined) return { passed: true };
     if (!this.baselinesService) {
       this.logger.warn("BaselinesService not available; skipping baseline gate");
@@ -542,21 +561,48 @@ export class GatesService {
 
     const regressionPct = def.regression_pct ?? 10;
     const computedThreshold = baselineValue * (1 + regressionPct / 100);
-    const passed = actualValue <= computedThreshold;
 
-    return { passed, computedThreshold, baselineValue };
+    // E-42: If CI data is available and reliable, use CI upper bound
+    // to avoid false positives from sampling noise
+    const ciUpper = baseline.ci_p75_upper;
+    const ciLower = baseline.ci_p75_lower;
+    const ciReliable = baseline.ci_p75_reliable ?? false;
+
+    let effectiveThreshold = computedThreshold;
+    if (ciReliable && ciUpper != null && stat === "p75") {
+      // Use CI upper bound + regression_pct as the threshold
+      effectiveThreshold = ciUpper * (1 + regressionPct / 100);
+    }
+
+    const passed = actualValue <= effectiveThreshold;
+
+    return {
+      passed,
+      computedThreshold: effectiveThreshold,
+      baselineValue,
+      ci_lower: ciLower ?? undefined,
+      ci_upper: ciUpper ?? undefined,
+      ci_reliable: ciReliable,
+    };
   }
 
   /**
-   * Evaluate a metric against a statistical gate.
+   * E-46: Evaluate a metric against a statistical gate.
    * Fails if actual > mean + stddev_multiplier * stddev.
    * Default multiplier is 2 (≈95% confidence interval).
+   *
+   * Book Ch 14, p239: "The statistical gate fires if mobile-segment
+   * RUM data shows LCP more than 2 standard deviations above the
+   * rolling 24-hour median."
+   *
+   * E-42 enhancement: Uses CI from baseline when available to
+   * determine the effective control limit.
    */
   async evaluateStatistical(
     def: GateDefinition,
     actualValue: number | undefined,
     projectId: string,
-  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number }> {
+  ): Promise<{ passed: boolean; computedThreshold?: number; baselineValue?: number; ci_lower?: number; ci_upper?: number; ci_reliable?: boolean }> {
     if (actualValue === undefined) return { passed: true };
     if (!this.baselinesService) {
       this.logger.warn("BaselinesService not available; skipping statistical gate");
@@ -574,7 +620,14 @@ export class GatesService {
     const computedThreshold = baseline.mean! + multiplier * baseline.stddev!;
     const passed = actualValue <= computedThreshold;
 
-    return { passed, computedThreshold, baselineValue: baseline.mean! };
+    return {
+      passed,
+      computedThreshold,
+      baselineValue: baseline.mean!,
+      ci_lower: baseline.ci_p75_lower ?? undefined,
+      ci_upper: baseline.ci_p75_upper ?? undefined,
+      ci_reliable: baseline.ci_p75_reliable ?? false,
+    };
   }
 
   /**

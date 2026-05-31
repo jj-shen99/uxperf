@@ -76,6 +76,19 @@ export class IntelligenceController {
     );
   }
 
+  @Post("forecast/breach-notify")
+  checkAndNotifyBreaches(
+    @Body() body: {
+      project_id: string;
+      budgets: { metric: string; threshold: number }[];
+      environment?: string;
+    },
+  ) {
+    return this.forecasting.checkAndNotifyBreaches(
+      body.project_id, body.budgets, body.environment,
+    );
+  }
+
   // -- RUM --
 
   @Post("rum/ingest")

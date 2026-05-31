@@ -28,7 +28,7 @@ The book emphasizes that comparing two point estimates without confidence interv
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-42 | **Percentile confidence intervals** | 🔴 | App G, p233–235 | Implement distribution-free CI on percentiles (binomial rank method). Display error bars on dashboard charts. Gate evaluation should only fire when CIs separate, not when point estimates cross. |
+| E-42 | **Percentile confidence intervals** | � | App G, p233–235 | Binomial rank CI method in `percentile-ci.ts`. CI stored in baselines (`ci_p75_lower/upper/reliable`). Gate evaluation uses CI upper bound to prevent false positives. `ConfidenceIntervalBar` + `GateResultCI` UI components. 22 CI tests + 20 gate-CI tests. |
 | E-43 | **Variance-aware run aggregation** | 🟡 | Ch 5, p82–85; Ch 12, p149 | Synthetic tests should report median + IQR from N runs (currently single-run). The compare page should show whether the difference is statistically significant, not just the raw delta. Partial: `variance_tolerance` exists in budgets but not in the compare view. |
 | E-44 | **Seasonality-aware baselines** | 🔴 | Ch 14, p238; App G, p237 | Baselines should be computed per time-of-day/day-of-week bucket to avoid flagging normal daily traffic patterns as regressions. The `seasonality_profile` column exists but is unused. |
 
@@ -38,8 +38,8 @@ The book describes a family of gate types; several are missing or only partially
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-45 | **Baseline-relative gates** | 🔴 | Ch 14, p239 | "If LCP at p75 is more than N% worse than baseline, fail." Implements the ratchet pattern — budget moves with the codebase. Distinct from the static threshold gate. |
-| E-46 | **Statistical gates (rolling median ± Nσ)** | 🔴 | Ch 14, p239 | "If metric is more than 2σ above the rolling 24h median, fail." Fire on real regressions, not noise. Requires the EWMA/CUSUM infrastructure (exists in `change-point.service.ts`) wired into the gate evaluation pipeline. |
+| E-45 | **Baseline-relative gates** | � | Ch 14, p239 | CI-aware `evaluateBaselineRelative()` in gates service. Uses CI upper bound + regression_pct when reliable. Supports `baseline_stat` (p50/p75/p95/mean) and configurable `regression_pct`. 9 baseline gate tests. |
+| E-46 | **Statistical gates (rolling median ± Nσ)** | � | Ch 14, p239 | CI-aware `evaluateStatistical()` in gates service. Fires when metric > mean + N*stddev (default N=2). Propagates CI info from baselines. Wired into gate evaluation pipeline with quorum. 7 statistical gate tests. |
 | E-47 | **Per-severity quorum configuration** | 🟡 | Ch 14, p240–241 | The book prescribes quorum thresholds that tighten with severity: advisory gates can be 1-of-N, blocking gates require high quorum, paging gates require the highest bar. Current quorum is 3-of-5 globally. |
 | E-48 | **Gate YAML config file** | 🔴 | Ch 15, p258–259 | Gates configurable via a single YAML file (name, source, metric, type, threshold, severity, quorum block). Currently gates are DB-only; a YAML-based config would enable version-controlled gate definitions. |
 
@@ -64,10 +64,10 @@ The book describes a family of gate types; several are missing or only partially
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-56 | **Change-point → anomaly auto-creation** | 🟡 | Ch 14, p243 | When CUSUM/EWMA detects a change point, auto-create an `anomaly` row and trigger notifications. Currently change-point detection and anomaly creation are separate flows. |
+| E-56 | **Change-point → anomaly auto-creation** | � | Ch 14, p243 | `RunOrchestratorService` calls `AnomaliesService.analyzeProject()` after each successful run. Change-point detection → anomaly creation → notification dispatch fully wired. 6 orchestrator tests. |
 | E-57 | **Attribution panel (SHAP + deploy correlation)** | 🟡 | Ch 14, p243–244; Ch 15, p261 | When a regression fires, show a ranked list of changes within the change-point window (PRs, dependency updates, infra changes). SHAP service exists but isn't wired to the anomaly investigation UI. |
 | E-58 | **Investigation view (regression timeline)** | 🔴 | Ch 15, p260–261 | A dedicated dashboard page for investigating a regression: change-point timeline, attribution panel, bundle diff, gate status, baseline comparison — all in one view instead of separate tabs. |
-| E-59 | **Forecast breach → notification wiring** | 🟡 | Ch 14, p179, 244 | When a forecast crosses a budget threshold, auto-create a warning notification ("budget breach in N weeks"). `projectBreach()` exists but isn't wired to the notification dispatcher. |
+| E-59 | **Forecast breach → notification wiring** | � | Ch 14, p179, 244 | `checkAndNotifyBreaches()` in ForecastingService dispatches `forecast_breach` events via NotificationsService. API endpoint at `/intelligence/forecast/breach-notify`. `ForecastBreachPanel` UI component. 6 notification tests. |
 
 ## Priority 7 — Dashboard & UX (Ch 14–16)
 
@@ -100,9 +100,9 @@ The book describes a family of gate types; several are missing or only partially
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
 | E-71 | **End-to-end regression lifecycle test** | 🔴 | Ch 15, p259–262 | Integration test covering the full lifecycle: create test → run → detect regression → fire gate → create anomaly → notify → investigate → fix → baseline update. Currently each piece is tested in isolation. |
-| E-72 | **Statistical gate unit tests** | 🔴 | App G, p233–238 | Tests for percentile CI computation, CUSUM/EWMA false-positive rates, seasonality detection, and the interaction between statistical gates and quorum. |
+| E-72 | **Statistical gate unit tests** | � | App G, p233–238 | 22 percentile CI tests, 20 gate enhancement tests (E-42/E-45/E-46), 6 anomaly wiring tests (E-56), 6 forecast notification tests (E-59). 54 new tests total across 4 test files. |
 | E-73 | **Load test correlation tests** | 🔴 | Ch 14, p242 | Tests for Pearson correlation between VU ramp and server metrics, saturation point detection accuracy, and VU-tiered gate evaluation under simulated load curves. |
 
 ---
 
-_Generated: 2026-05-30 from full-book audit of "Measured" v4. Cross-referenced against existing codebase (E-01–E-37 completed)._
+_Last updated: 2026-05-30. E-42, E-45, E-46, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-37, E-42, E-45–46, E-56, E-59, E-72 completed)._

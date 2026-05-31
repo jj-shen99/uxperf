@@ -303,6 +303,7 @@ export const api = {
   forecastBreach: {
     check: (data: any) => request<any>("/intelligence/forecast/breach", { method: "POST", body: JSON.stringify(data) }),
     checkAll: (data: any) => request<any[]>("/intelligence/forecast/breach-check", { method: "POST", body: JSON.stringify(data) }),
+    checkAndNotify: (data: any) => request<any[]>("/intelligence/forecast/breach-notify", { method: "POST", body: JSON.stringify(data) }),
   },
   environments: {
     list: () => request<any[]>("/environments"),

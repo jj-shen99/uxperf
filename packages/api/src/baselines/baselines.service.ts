@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
+import { percentileCI, PercentileCI } from "../analytics/percentile-ci";
 
 export interface BaselineRow {
   id: string;
@@ -19,6 +20,9 @@ export interface BaselineRow {
   day_of_week: number | null;
   hour_bucket: number | null;
   seasonality_bucket: string | null;
+  ci_p75_lower: number | null;
+  ci_p75_upper: number | null;
+  ci_p75_reliable: boolean;
   computed_at: Date;
   valid_from: Date;
   valid_to: Date | null;
@@ -179,6 +183,9 @@ export class BaselinesService {
     // Confidence: higher sample size → higher confidence (capped at 1.0)
     const confidence = Math.min(n / window_size, 1.0);
 
+    // E-42: Compute percentile confidence interval for p75
+    const ci = percentileCI(values, 0.75);
+
     // Deactivate old baselines for this scope
     await this.db.query(
       `UPDATE baselines SET is_active = false, valid_to = now()
@@ -192,8 +199,9 @@ export class BaselinesService {
     const insertResult = await this.db.query<BaselineRow>(
       `INSERT INTO baselines
          (project_id, script_id, metric, environment, p50, p75, p95, p99, mean, stddev,
-          sample_size, confidence, seasonality_profile, day_of_week, hour_bucket, seasonality_bucket, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true)
+          sample_size, confidence, seasonality_profile, day_of_week, hour_bucket, seasonality_bucket,
+          ci_p75_lower, ci_p75_upper, ci_p75_reliable, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, true)
        RETURNING *`,
       [
         project_id,
@@ -212,6 +220,9 @@ export class BaselinesService {
         opts.day_of_week ?? null,
         opts.hour_bucket ?? null,
         opts.seasonality_bucket ?? null,
+        ci.lower,
+        ci.upper,
+        ci.is_reliable,
       ]
     );
 

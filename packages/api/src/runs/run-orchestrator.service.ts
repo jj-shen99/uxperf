@@ -5,6 +5,7 @@ import { ArtifactsService } from "../artifacts/artifacts.service";
 import { GitHubCheckService } from "../github/github-check.service";
 import { BaselinesService } from "../baselines/baselines.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { AnomaliesService } from "../analytics/anomalies.service";
 import { DatabaseService } from "../database/database.service";
 
 export interface RunCompletionPayload {
@@ -49,6 +50,7 @@ export class RunOrchestratorService {
     private readonly baselinesService: BaselinesService,
     private readonly db: DatabaseService,
     @Optional() @Inject(NotificationsService) private readonly notificationsService?: NotificationsService,
+    @Optional() @Inject(AnomaliesService) private readonly anomaliesService?: AnomaliesService,
   ) {}
 
   /**
@@ -153,6 +155,23 @@ export class RunOrchestratorService {
         );
       } catch (e) {
         this.logger.error(`Baseline refresh failed for run ${run_id}: ${e}`);
+      }
+    }
+
+    // E-56: Run change-point detection and auto-create anomalies
+    if (success && metrics && this.anomaliesService) {
+      try {
+        const anomalies = await this.anomaliesService.analyzeProject(
+          run.project_id,
+          run.environment,
+        );
+        if (anomalies.length > 0) {
+          this.logger.warn(
+            `Run ${run_id}: ${anomalies.length} anomaly(ies) detected: ${anomalies.map((a) => `${a.metric} (${a.severity})`).join(", ")}`,
+          );
+        }
+      } catch (e) {
+        this.logger.error(`Anomaly detection failed for run ${run_id}: ${e}`);
       }
     }
 

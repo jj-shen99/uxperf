@@ -8,8 +8,10 @@ import { CapacityPlanningService } from "./capacity-planning.service";
 import { AuditService } from "./audit.service";
 import { ApiKeysService } from "./api-keys.service";
 import { MultiGeoService } from "./multi-geo.service";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [IntelligenceController],
   providers: [
     ShapAttributionService,
