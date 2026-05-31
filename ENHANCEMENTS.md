@@ -1,5 +1,7 @@
 # Enhancement Backlog
 
+Sourced from: *Measured: A Field Guide to UI Performance Testing and Analysis* (JJ Shen, 2026) — Chapters 12–16 and Appendices.
+
 ## Status Legend
 - **🔴 Not Started** — Feature does not exist in the codebase
 - **🟡 Scaffold** — Partial/stub implementation exists
@@ -7,58 +9,75 @@
 
 ---
 
-## Engine & Runner
+## Priority 1 — Book-Driven (Ch 12–16): Intelligence & Budgets
+
+These are the highest-impact gaps between the book's prescriptions and the current codebase.
+
+| # | Enhancement | Status | Book Ref | Notes |
+|---|-------------|--------|----------|-------|
+| E-28 | **Performance budget service** — route-level budgets with ratcheting | � | Ch 12, p145–156 | `budgets/budgets.service.ts`: full CRUD, per-route budget entity, policy (block/warn/info), REST controller + module. 28 unit tests. |
+| E-29 | **Budget ratchet-on-improvement** — auto-tighten thresholds when wins ship | � | Ch 12, p153 | `ratchetBudgets()`: compares baseline p75 + ratchet_pct cushion; only tightens, never loosens. POST `/budgets/ratchet`. |
+| E-30 | **Variance-aware gate thresholds** — noise-tolerant budget enforcement | � | Ch 12, p149–151 | `evaluate()` with `variance_tolerance * stddev` band. Reports `within_noise_band` when value exceeds raw threshold but is within effective. |
+| E-31 | **Device-class-specific budgets** — separate mobile/desktop thresholds | � | Ch 12, p154–155 | `device_class` column (`desktop`/`mobile`/`all`). Same metric can have separate thresholds per device class. Dedup per route+metric+device. |
+| E-32 | **HAR capture (full network waterfall)** — per-resource timing data | � | Ch 6, 14 | `har-collector.ts`: per-resource entries via `page.on('request'/'response')`, third-party detection, timing estimates, summary with by-type/slowest/largest. 10 tests. |
+
+## Priority 2 — Book-Driven (Ch 13–14): CI/CD & Platform Pattern
+
+| # | Enhancement | Status | Book Ref | Notes |
+|---|-------------|--------|----------|-------|
+| E-33 | **PR bot / GitHub Check Run integration** — single-comment gate summary | 🟡 | Ch 13, p167 | `github-check.service.ts` exists and posts gate results, but lacks "one comment with sections" UX and override-with-audit path. |
+| E-34 | **Gate override with audit trail** — engineer can acknowledge + proceed | 🔴 | Ch 12, p155; Ch 13, p168 | "When a regression is justified, the engineer should be able to acknowledge and proceed without disabling the check." No override entity or audit log. |
+| E-35 | **Canary deployment analysis** — compare canary vs baseline RUM cohorts | 🔴 | Ch 13, p162–164 | "Canary analysis is the integration between your deploy system and your perf platform." No canary-cohort comparison logic. |
+| E-36 | **Anomaly → notification wiring** — auto-dispatch on change-point detection | 🟡 | Ch 14, p181–182 | `anomaliesService.analyzeProject()` finds change-points but doesn't dispatch notifications. Need webhook fan-out on anomaly creation. |
+| E-37 | **Forecasting breach warnings** — "budget breach in N weeks" alerts | 🟡 | Ch 14, p179; App G, p237 | `forecasting.service.ts` has `fitTrend()` and `fitSeasonality()` but no `projectBreach()` method that warns when a metric will cross its budget. |
+
+## Priority 3 — Engine & Runner (E-01–E-07)
 
 | # | Enhancement | Status | Notes |
 |---|-------------|--------|-------|
-| E-01 | YAML test definition format | � | `journey/parser.ts`: built-in YAML parser, `validateDefinition()`, `compileSteps()`. Supports name, target, device, stages. 24 unit tests. |
-| E-02 | Multi-step journey execution | � | `journey/executor.ts`: 9 action types (visit, click, fill, scroll, wait_for, hover, select, press, measure). Smart locator resolution (CSS, text, XPath). 24 unit tests. |
-| E-03 | `measure` directive | � | Captures Web Vitals, page timings, and resource summary on demand. Supports multiple measure points per journey with labels. |
-| E-04 | Per-step screenshots | � | Base64 PNG screenshot after each non-measure step. Configurable via `screenshots: true/false`. Graceful failure handling. |
-| E-05 | Inter-stage timing | � | ISO timestamps (`started_at`, `finished_at`) and `duration_ms` per step. `total_duration_ms` for entire journey. |
-| E-06 | Full network waterfall | 🟡 | Only `total_requests` and `total_transfer_size_bytes`. Need per-resource HAR capture via `page.on('response')`. |
-| E-07 | NL → executable Playwright | 🟡 | `nl-authoring.service.ts` has 6-stage pipeline scaffold but generates JSON script objects, not runnable Playwright code. |
+| E-01 | YAML test definition format | 🟢 | `journey/parser.ts`: YAML parser, validator, step compiler. 24 tests. |
+| E-02 | Multi-step journey execution | � | `journey/executor.ts`: 9 action types, smart locators. 24 tests. |
+| E-03 | `measure` directive | 🟢 | On-demand Web Vitals capture with labels. |
+| E-04 | Per-step screenshots | 🟢 | Base64 PNG, configurable, graceful failure. |
+| E-05 | Inter-stage timing | 🟢 | ISO timestamps + `duration_ms` per step. |
+| E-06 | Full network waterfall | 🟡 | Summary only. See E-32 for full HAR. |
+| E-07 | NL → executable Playwright | 🟡 | 6-stage pipeline scaffold; JSON output, not runnable Playwright. |
 
-## Quality Gates
-
-| # | Enhancement | Status | Notes |
-|---|-------------|--------|-------|
-| E-08 | Duplicate gate prevention | 🟢 | API rejects same name+project with 409. Batch endpoint skips duplicates. |
-| E-09 | Gates grouped by project | 🟢 | UI shows project sections with filter dropdown. |
-| E-10 | Template batch apply with dedup | 🟢 | Select/deselect templates, apply all at once, shows created/skipped feedback. |
-| E-11 | VU-tiered gates | 🟡 | Schema supports `vu_thresholds` column but no evaluation logic. |
-| E-12 | Resource floor gates | 🟡 | Schema supports `resource_floor_conditions` column but no evaluation logic. |
-| E-13 | Capacity floor gates | 🟡 | Schema supports `capacity_floor` column but no evaluation logic. |
-
-## Dashboard & UX
+## Priority 4 — Quality Gates (E-08–E-13)
 
 | # | Enhancement | Status | Notes |
 |---|-------------|--------|-------|
-| E-14 | Knowledge page — Quality Gates tab | 🟢 | Detailed gate type explanations, quorum visual, policy descriptions. |
-| E-15 | Knowledge page — Browser Rendering tab | 🟢 | Critical rendering path, pipeline stages, metric mapping. |
-| E-16 | Knowledge page — Glossary filter | 🟢 | Text search across metric names, descriptions. |
-| E-17 | Quorum-saved status in evaluation UI | 🟢 | Shows "missed" (yellow) when single run fails but quorum not reached. |
-| E-18 | Compare page improvements | 🔴 | Side-by-side run comparison could show diff charts. |
-| E-19 | Trend sparklines on dashboard | 🔴 | Mini charts showing metric trends on project overview. |
+| E-08 | Duplicate gate prevention | 🟢 | 409 on duplicate name+project. Batch skips. |
+| E-09 | Gates grouped by project | 🟢 | UI project sections with filter. |
+| E-10 | Template batch apply with dedup | 🟢 | Batch apply with created/skipped feedback. |
+| E-11 | VU-tiered gates | 🟡 | Schema exists, no evaluation logic. |
+| E-12 | Resource floor gates | 🟡 | Schema exists, no evaluation logic. |
+| E-13 | Capacity floor gates | 🟡 | Schema exists, no evaluation logic. |
 
-## Testing
-
-| # | Enhancement | Status | Notes |
-|---|-------------|--------|-------|
-| E-20 | Gates batch/dedup tests | 🔴 | New `batchCreate` and duplicate rejection in `create` need spec coverage. |
-| E-21 | Environments module tests | 🔴 | 3 source files, 0 test files. |
-| E-22 | Database module tests | 🔴 | 2 source files, 0 test files. |
-| E-23 | Worker metrics-collector tests | 🔴 | `metrics-collector.ts` has no test file. |
-| E-24 | Dashboard page-level tests | 🟡 | 9 test files cover logic/helpers but no page-component tests for gates, knowledge, schedules, etc. |
-
-## Infrastructure
+## Priority 5 — Dashboard & UX (E-14–E-19)
 
 | # | Enhancement | Status | Notes |
 |---|-------------|--------|-------|
-| E-25 | Docker Compose orchestration | 🟡 | Individual Dockerfiles exist but no `docker-compose.yml` for full-stack local dev. |
-| E-26 | CI pipeline (GitHub Actions) | 🟡 | `.github/workflows/ci.yml` exists but triggers are disabled. |
-| E-27 | Database migrations versioning | 🟡 | `db:migrate` script exists; need to verify idempotency and rollback support. |
+| E-14 | Knowledge — Quality Gates tab | 🟢 | Done. |
+| E-15 | Knowledge — Browser Rendering tab | 🟢 | Done. |
+| E-16 | Knowledge — Glossary filter | 🟢 | Done. |
+| E-17 | Quorum-saved status in eval UI | 🟢 | Done. |
+| E-18 | Compare page improvements | 🔴 | Side-by-side diff charts. |
+| E-19 | Trend sparklines on dashboard | 🔴 | Mini charts on project overview. |
+
+## Priority 6 — Testing & Infrastructure (E-20–E-27)
+
+| # | Enhancement | Status | Notes |
+|---|-------------|--------|-------|
+| E-20 | Gates batch/dedup tests | � | 10 tests added. |
+| E-21 | Environments module tests | � | 6 tests added. |
+| E-22 | Database module tests | 🔴 | 2 source files, 0 tests. |
+| E-23 | Worker metrics-collector tests | � | 7 tests added. |
+| E-24 | Dashboard page-level tests | 🟡 | Logic tests exist, no component tests. |
+| E-25 | Docker Compose orchestration | 🟡 | Dockerfiles exist, no compose. |
+| E-26 | CI pipeline (GitHub Actions) | 🟡 | Disabled triggers. |
+| E-27 | Database migrations versioning | 🟡 | Need idempotency verification. |
 
 ---
 
-_Last updated: 2026-05-30 (E-01–E-05 implemented)_
+_Last updated: 2026-05-30 (E-01–E-05, E-20–E-21, E-23, E-28–E-32 implemented; book-derived E-33–E-37 pending)_

@@ -19,6 +19,7 @@ import { LoadModule } from "./load/load.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { AuthModule } from "./auth/auth.module";
 import { EnvironmentsModule } from "./environments/environments.module";
+import { BudgetsModule } from "./budgets/budgets.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -43,6 +44,7 @@ import { HealthController } from "./health.controller";
     IntelligenceModule,
     AuthModule,
     EnvironmentsModule,
+    BudgetsModule,
   ],
   controllers: [HealthController],
 })

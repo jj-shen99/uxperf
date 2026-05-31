@@ -6,6 +6,9 @@ export type { TestRunner } from "./test-runner";
 // Journey engine (E-01 through E-05)
 export { parseJourney, parseYaml, compileSteps, executeJourney } from "./journey";
 
+// HAR collector (E-32)
+export { createHarCollector } from "./har-collector";
+
 // Auto-register engine adapters
 import "./adapters/playwright-adapter";
 import "./adapters/wpt-adapter";
