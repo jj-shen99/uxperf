@@ -21,12 +21,14 @@ import {
   collectPageTimings,
   collectResourceSummary,
 } from "../metrics-collector";
+import { createHarCollector, HarResult } from "../har-collector";
 
 export interface ExecutorOptions {
   screenshots?: boolean;         // default true
   screenshotFullPage?: boolean;  // default false
   stepTimeout?: number;          // ms, default 30000
   settleDelay?: number;          // ms after navigation, default 1000
+  captureHar?: boolean;          // E-06: capture full network waterfall, default true
 }
 
 const DEFAULT_OPTIONS: Required<ExecutorOptions> = {
@@ -34,6 +36,7 @@ const DEFAULT_OPTIONS: Required<ExecutorOptions> = {
   screenshotFullPage: false,
   stepTimeout: 30_000,
   settleDelay: 1_000,
+  captureHar: true,
 };
 
 /**
@@ -65,6 +68,12 @@ export async function executeJourney(
 
   const page: Page = await context.newPage();
   let lastError: string | undefined;
+
+  // E-06: Start HAR collector before navigation
+  const harCollector = opts.captureHar
+    ? createHarCollector(page, definition.target)
+    : null;
+  harCollector?.start();
 
   try {
     for (const step of steps) {
@@ -137,6 +146,15 @@ export async function executeJourney(
       if (error) break;
     }
   } finally {
+    // E-06: Stop HAR collector and capture results
+    var harResult: HarResult | undefined;
+    if (harCollector) {
+      try {
+        harResult = await harCollector.stop();
+      } catch {
+        // HAR collection may fail if context already closed
+      }
+    }
     await context.close();
   }
 
@@ -149,6 +167,7 @@ export async function executeJourney(
     success: !lastError,
     steps: stepResults,
     measurements,
+    har: harResult,
     total_duration_ms: journeyEnd.getTime() - journeyStart.getTime(),
     started_at: journeyStart.toISOString(),
     finished_at: journeyEnd.toISOString(),

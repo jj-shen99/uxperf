@@ -172,6 +172,137 @@ export class NlAuthoringService {
     };
   }
 
+  /**
+   * E-07: Convert generated JSON script into runnable Playwright TypeScript code.
+   * §7.3: "The output should be a real executable Playwright test, not just JSON."
+   */
+  generatePlaywrightCode(script: Record<string, unknown>): string {
+    const steps = (script.steps as { intent: string; locators: any }[]) ?? [];
+    const targetUrl = (script.target_url as string) ?? "https://example.com";
+    const device = (script.device as string) ?? "desktop";
+
+    const lines: string[] = [
+      `import { test, expect } from '@playwright/test';`,
+      ``,
+    ];
+
+    if (device === "mobile") {
+      lines.push(`import { devices } from '@playwright/test';`);
+      lines.push(``);
+      lines.push(`test.use({ ...devices['Pixel 5'] });`);
+      lines.push(``);
+    }
+
+    lines.push(`test('${this.escapeQuotes((script.source_prompt as string) ?? "Generated perf test")}', async ({ page }) => {`);
+    lines.push(`  // Navigate to target`);
+    lines.push(`  await page.goto('${this.escapeQuotes(targetUrl)}');`);
+    lines.push(``);
+
+    for (const step of steps) {
+      const intent = step.intent ?? "";
+      const locator = step.locators?.primary;
+      lines.push(`  // ${intent}`);
+
+      if (this.isNavigationIntent(intent)) {
+        const url = this.extractUrl(intent) ?? targetUrl;
+        lines.push(`  await page.goto('${this.escapeQuotes(url)}');`);
+        lines.push(`  await page.waitForLoadState('networkidle');`);
+      } else if (this.isClickIntent(intent)) {
+        const selector = locator?.selector ?? `getByRole('button', {name: '${this.escapeQuotes(intent)}'})`;
+        if (selector.startsWith("getBy")) {
+          lines.push(`  await page.${selector}.click();`);
+        } else {
+          lines.push(`  await page.locator('${this.escapeQuotes(selector)}').click();`);
+        }
+      } else if (this.isTypeIntent(intent)) {
+        const { selector: sel, value } = this.extractTypeTarget(intent);
+        const s = locator?.selector ?? sel;
+        if (s.startsWith("getBy")) {
+          lines.push(`  await page.${s}.fill('${this.escapeQuotes(value)}');`);
+        } else {
+          lines.push(`  await page.locator('${this.escapeQuotes(s)}').fill('${this.escapeQuotes(value)}');`);
+        }
+      } else if (this.isWaitIntent(intent)) {
+        lines.push(`  await page.waitForLoadState('networkidle');`);
+      } else if (this.isScrollIntent(intent)) {
+        lines.push(`  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));`);
+      } else {
+        // Default: try to click the element
+        const selector = locator?.selector ?? `getByText('${this.escapeQuotes(intent)}')`;
+        if (selector.startsWith("getBy")) {
+          lines.push(`  await page.${selector}.click();`);
+        } else {
+          lines.push(`  await page.locator('${this.escapeQuotes(selector)}').click();`);
+        }
+      }
+      lines.push(``);
+    }
+
+    // Add performance assertions from metrics
+    const assertions = (script as any)?.metrics?.assertions ?? [];
+    if (assertions.length > 0) {
+      lines.push(`  // Performance assertions`);
+      lines.push(`  const timing = await page.evaluate(() => {`);
+      lines.push(`    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;`);
+      lines.push(`    const paint = performance.getEntriesByType('paint');`);
+      lines.push(`    const fcp = paint.find(e => e.name === 'first-contentful-paint');`);
+      lines.push(`    return {`);
+      lines.push(`      ttfb: nav ? nav.responseStart - nav.requestStart : 0,`);
+      lines.push(`      fcp: fcp?.startTime ?? 0,`);
+      lines.push(`      loadEvent: nav ? nav.loadEventEnd - nav.startTime : 0,`);
+      lines.push(`    };`);
+      lines.push(`  });`);
+      for (const a of assertions) {
+        if (a.metric === "lcp" && a.p95_max_ms) {
+          lines.push(`  expect(timing.loadEvent).toBeLessThan(${a.p95_max_ms});`);
+        }
+      }
+    }
+
+    lines.push(`});`);
+    lines.push(``);
+
+    return lines.join("\n");
+  }
+
+  private escapeQuotes(s: string): string {
+    return s.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+  }
+
+  private isNavigationIntent(intent: string): boolean {
+    return /\b(go to|navigate|visit|open|load)\b/i.test(intent);
+  }
+
+  private isClickIntent(intent: string): boolean {
+    return /\b(click|tap|press|submit|select)\b/i.test(intent);
+  }
+
+  private isTypeIntent(intent: string): boolean {
+    return /\b(type|fill|enter|input|write)\b/i.test(intent);
+  }
+
+  private isWaitIntent(intent: string): boolean {
+    return /\b(wait|pause|settle)\b/i.test(intent);
+  }
+
+  private isScrollIntent(intent: string): boolean {
+    return /\b(scroll|swipe)\b/i.test(intent);
+  }
+
+  private extractUrl(intent: string): string | null {
+    const m = intent.match(/https?:\/\/[^\s'"]+/);
+    return m ? m[0] : null;
+  }
+
+  private extractTypeTarget(intent: string): { selector: string; value: string } {
+    // "type 'hello' into #search" or "fill email with test@example.com"
+    const m1 = intent.match(/['"](.+?)['"].*?(?:into|in)\s+(.+)/i);
+    if (m1) return { selector: m1[2].trim(), value: m1[1] };
+    const m2 = intent.match(/(?:fill|type|enter)\s+(.+?)\s+(?:with|=)\s+(.+)/i);
+    if (m2) return { selector: m2[1].trim(), value: m2[2].trim() };
+    return { selector: "input", value: "test" };
+  }
+
   // ---- Pipeline stages (scaffold — pluggable LLM integration) ----
 
   private async parseIntent(

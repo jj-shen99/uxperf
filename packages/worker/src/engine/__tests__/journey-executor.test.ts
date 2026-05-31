@@ -14,6 +14,48 @@ vi.mock("../metrics-collector", () => ({
   collectResourceSummary: vi.fn().mockResolvedValue({ total_requests: 25, total_transfer_size_bytes: 500000 }),
 }));
 
+// E-06: Mock HAR collector — use vi.hoisted() to avoid TDZ issues with vi.mock hoisting
+const { mockHarStart, mockHarStop } = vi.hoisted(() => {
+  const mockHarStop = vi.fn().mockResolvedValue({
+    entries: [
+      {
+        url: "https://example.com/app.js",
+        method: "GET",
+        status: 200,
+        resource_type: "script",
+        protocol: "h2",
+        mime_type: "application/javascript",
+        transfer_size: 50000,
+        resource_size: 150000,
+        started_at: 100,
+        duration_ms: 200,
+        timing: { blocked_ms: 0, dns_ms: 0, connect_ms: 20, ssl_ms: 0, send_ms: 0, wait_ms: 140, receive_ms: 40 },
+        is_third_party: false,
+        initiator: "script",
+      },
+    ],
+    summary: {
+      total_entries: 1,
+      total_transfer_bytes: 50000,
+      total_resource_bytes: 150000,
+      by_type: { script: { count: 1, transfer_bytes: 50000 } },
+      third_party_count: 0,
+      third_party_bytes: 0,
+      slowest_resources: [{ url: "https://example.com/app.js", duration_ms: 200 }],
+      largest_resources: [{ url: "https://example.com/app.js", transfer_size: 50000 }],
+    },
+  });
+  const mockHarStart = vi.fn();
+  return { mockHarStart, mockHarStop };
+});
+
+vi.mock("../har-collector", () => ({
+  createHarCollector: vi.fn().mockReturnValue({
+    start: mockHarStart,
+    stop: mockHarStop,
+  }),
+}));
+
 function createMockPage() {
   const page = {
     goto: vi.fn().mockResolvedValue(undefined),
@@ -380,6 +422,61 @@ describe("executeJourney", () => {
         expect(step.finished_at).toBeTruthy();
         expect(step.duration_ms).toBeGreaterThanOrEqual(0);
       }
+    });
+  });
+
+  // ── E-06: Full network waterfall (HAR) ──
+
+  describe("HAR capture (E-06)", () => {
+    it("captures HAR data by default", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const result = await executeJourney(mockBrowser, baseDef, steps);
+
+      expect(mockHarStart).toHaveBeenCalled();
+      expect(mockHarStop).toHaveBeenCalled();
+      expect(result.har).toBeDefined();
+      expect(result.har!.entries).toHaveLength(1);
+      expect(result.har!.summary.total_entries).toBe(1);
+    });
+
+    it("includes HAR entries with correct structure", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const result = await executeJourney(mockBrowser, baseDef, steps);
+      const entry = result.har!.entries[0];
+
+      expect(entry.url).toBe("https://example.com/app.js");
+      expect(entry.resource_type).toBe("script");
+      expect(entry.transfer_size).toBe(50000);
+      expect(entry.is_third_party).toBe(false);
+      expect(entry.timing.wait_ms).toBe(140);
+    });
+
+    it("includes HAR summary with by-type breakdown", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const result = await executeJourney(mockBrowser, baseDef, steps);
+      const summary = result.har!.summary;
+
+      expect(summary.total_transfer_bytes).toBe(50000);
+      expect(summary.by_type.script.count).toBe(1);
+      expect(summary.slowest_resources).toHaveLength(1);
+    });
+
+    it("skips HAR when captureHar is false", async () => {
+      mockHarStart.mockClear();
+      mockHarStop.mockClear();
+
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const result = await executeJourney(mockBrowser, baseDef, steps, { captureHar: false });
+
+      expect(result.har).toBeUndefined();
     });
   });
 });

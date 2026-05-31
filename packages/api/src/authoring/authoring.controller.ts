@@ -32,4 +32,20 @@ export class AuthoringController {
   getPolicyEnvelope(@Query("project_id") projectId: string) {
     return this.nlAuthoringService.getPolicyEnvelope(projectId);
   }
+
+  @Post("generate-code")
+  async generateCode(@Body() body: {
+    project_id: string;
+    user_id?: string;
+    prompt: string;
+    target_url?: string;
+    device?: "desktop" | "mobile";
+    model?: string;
+  }) {
+    const result = await this.nlAuthoringService.generate(body);
+    const code = result.generated_script
+      ? this.nlAuthoringService.generatePlaywrightCode(result.generated_script)
+      : null;
+    return { ...result, playwright_code: code };
+  }
 }

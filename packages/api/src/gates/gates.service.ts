@@ -3,7 +3,7 @@ import { DatabaseService } from "../database/database.service";
 import { BaselinesService, BaselineRow } from "../baselines/baselines.service";
 
 export interface GateDefinition {
-  type: "threshold" | "baseline_relative" | "statistical";
+  type: "threshold" | "baseline_relative" | "statistical" | "vu_tiered" | "resource_floor" | "capacity_floor";
   metric: string;
   // threshold gate fields
   operator?: "lte" | "gte" | "lt" | "gt";
@@ -13,6 +13,21 @@ export interface GateDefinition {
   baseline_stat?: "p50" | "p75" | "p95" | "mean"; // which stat to compare (default p75)
   // statistical gate fields
   stddev_multiplier?: number; // e.g. 2 → fail if metric exceeds mean + 2*stddev
+  // E-11: VU-tiered fields
+  vu_tiers?: VuTier[];       // thresholds per VU level
+  // E-12: resource floor fields
+  resource_metric?: "cpu_pct" | "memory_pct" | "disk_io_pct" | "network_mbps";
+  floor_value?: number;      // minimum acceptable value (e.g. 20 → fail if < 20%)
+  // E-13: capacity floor fields
+  capacity_metric?: "rps" | "concurrent_users" | "throughput_mbps";
+  min_capacity?: number;     // required minimum capacity
+}
+
+// E-11: VU tier configuration
+export interface VuTier {
+  max_vus: number;           // apply this threshold when VUs <= max_vus
+  threshold: number;         // the metric threshold for this tier
+  operator?: "lte" | "gte" | "lt" | "gt";
 }
 
 export interface CreateGateDto {
@@ -353,6 +368,30 @@ export class GatesService {
           break;
         }
 
+        // E-11: VU-tiered gate — different thresholds at different load levels
+        case "vu_tiered": {
+          const result = this.evaluateVuTiered(def, actualValue, metrics);
+          passed = result.passed;
+          computedThreshold = result.computedThreshold;
+          break;
+        }
+
+        // E-12: Resource floor gate — ensure resources stay above minimum
+        case "resource_floor": {
+          const result = this.evaluateResourceFloor(def, metrics);
+          passed = result.passed;
+          computedThreshold = result.computedThreshold;
+          break;
+        }
+
+        // E-13: Capacity floor gate — ensure system can handle minimum capacity
+        case "capacity_floor": {
+          const result = this.evaluateCapacityFloor(def, metrics);
+          passed = result.passed;
+          computedThreshold = result.computedThreshold;
+          break;
+        }
+
         default:
           this.logger.warn(`Unknown gate type: ${(def as any).type}, skipping`);
           continue;
@@ -536,5 +575,123 @@ export class GatesService {
     const passed = actualValue <= computedThreshold;
 
     return { passed, computedThreshold, baselineValue: baseline.mean! };
+  }
+
+  /**
+   * E-11: Evaluate a VU-tiered gate.
+   * Different thresholds apply at different VU levels.
+   * §10: "A 200ms LCP gate at 10 VUs is not the same as at 1000 VUs."
+   */
+  evaluateVuTiered(
+    def: GateDefinition,
+    actualValue: number | undefined,
+    metrics: Record<string, unknown>,
+  ): { passed: boolean; computedThreshold?: number; matchedTier?: VuTier } {
+    if (actualValue === undefined) return { passed: true };
+    const tiers = def.vu_tiers ?? [];
+    if (tiers.length === 0) {
+      // Fall back to basic threshold
+      return { passed: this.evaluateThreshold(def, actualValue) };
+    }
+
+    // Get current VU count from metrics
+    const currentVus = (metrics.virtual_users ?? metrics.vus ?? metrics.concurrent_users ?? 0) as number;
+
+    // Find the matching tier (smallest max_vus that is >= currentVus)
+    const sorted = [...tiers].sort((a, b) => a.max_vus - b.max_vus);
+    const matchedTier = sorted.find((t) => currentVus <= t.max_vus) ?? sorted[sorted.length - 1];
+
+    const op = matchedTier.operator ?? def.operator ?? "lte";
+    const threshold = matchedTier.threshold;
+
+    let passed: boolean;
+    switch (op) {
+      case "lte": passed = actualValue <= threshold; break;
+      case "gte": passed = actualValue >= threshold; break;
+      case "lt":  passed = actualValue < threshold;  break;
+      case "gt":  passed = actualValue > threshold;  break;
+      default:    passed = true;
+    }
+
+    return { passed, computedThreshold: threshold, matchedTier };
+  }
+
+  /**
+   * E-12: Evaluate a resource floor gate.
+   * Ensures server resources (CPU, memory, etc.) stay above minimum during test.
+   * "Resource floor gates protect against tests that pass on metrics but
+   * leave the system starved."
+   */
+  evaluateResourceFloor(
+    def: GateDefinition,
+    metrics: Record<string, unknown>,
+  ): { passed: boolean; computedThreshold?: number; actualValue?: number } {
+    const resourceMetric = def.resource_metric ?? "cpu_pct";
+    const floorValue = def.floor_value ?? 20; // default: fail if below 20%
+
+    // Map resource metric names to possible keys in metrics
+    const metricMap: Record<string, string[]> = {
+      cpu_pct: ["cpu_available_pct", "cpu_idle_pct", "cpu_free_pct"],
+      memory_pct: ["memory_available_pct", "memory_free_pct", "mem_available_pct"],
+      disk_io_pct: ["disk_io_available_pct", "disk_free_pct"],
+      network_mbps: ["network_available_mbps", "network_bandwidth_mbps"],
+    };
+
+    const keys = metricMap[resourceMetric] ?? [resourceMetric];
+    let actualValue: number | undefined;
+    for (const k of keys) {
+      const v = metrics[k];
+      if (typeof v === "number") {
+        actualValue = v;
+        break;
+      }
+    }
+
+    if (actualValue === undefined) {
+      this.logger.warn(`Resource metric ${resourceMetric} not found in metrics; skipping`);
+      return { passed: true };
+    }
+
+    // Floor gate: value must be >= floor
+    const passed = actualValue >= floorValue;
+    return { passed, computedThreshold: floorValue, actualValue };
+  }
+
+  /**
+   * E-13: Evaluate a capacity floor gate.
+   * Ensures the system can sustain minimum throughput/RPS/concurrent users.
+   * "If the system can't sustain 500 RPS at p95 < 200ms, the gate fails."
+   */
+  evaluateCapacityFloor(
+    def: GateDefinition,
+    metrics: Record<string, unknown>,
+  ): { passed: boolean; computedThreshold?: number; actualValue?: number } {
+    const capacityMetric = def.capacity_metric ?? "rps";
+    const minCapacity = def.min_capacity ?? 100;
+
+    const metricMap: Record<string, string[]> = {
+      rps: ["requests_per_second", "rps", "throughput_rps"],
+      concurrent_users: ["max_concurrent_users", "concurrent_users", "sustained_vus"],
+      throughput_mbps: ["throughput_mbps", "data_throughput_mbps"],
+    };
+
+    const keys = metricMap[capacityMetric] ?? [capacityMetric];
+    let actualValue: number | undefined;
+    for (const k of keys) {
+      const v = metrics[k];
+      if (typeof v === "number") {
+        actualValue = v;
+        break;
+      }
+    }
+
+    if (actualValue === undefined) {
+      this.logger.warn(`Capacity metric ${capacityMetric} not found in metrics; skipping`);
+      return { passed: true };
+    }
+
+    // Capacity floor: value must be >= minimum
+    const passed = actualValue >= minCapacity;
+    return { passed, computedThreshold: minCapacity, actualValue };
   }
 }

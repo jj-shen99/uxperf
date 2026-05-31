@@ -91,6 +91,7 @@ export interface JourneyResult {
   success: boolean;
   steps: StepResult[];
   measurements: MeasureResult[];
+  har?: import("../har-collector").HarResult; // E-06: full network waterfall
   total_duration_ms: number;
   started_at: string;
   finished_at: string;

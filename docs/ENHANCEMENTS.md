@@ -40,8 +40,8 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 | E-03 | `measure` directive | 🟢 | On-demand Web Vitals capture with labels. |
 | E-04 | Per-step screenshots | 🟢 | Base64 PNG, configurable, graceful failure. |
 | E-05 | Inter-stage timing | 🟢 | ISO timestamps + `duration_ms` per step. |
-| E-06 | Full network waterfall | 🟡 | Summary only. See E-32 for full HAR. |
-| E-07 | NL → executable Playwright | 🟡 | 6-stage pipeline scaffold; JSON output, not runnable Playwright. |
+| E-06 | Full network waterfall | � | HAR collector wired into journey executor. `captureHar` option (default true). HAR entries + summary included in `JourneyResult`. 4 tests. |
+| E-07 | NL → executable Playwright | � | `generatePlaywrightCode()`: converts JSON script to runnable Playwright TS with intent-based action mapping, mobile device config, and perf assertions. POST `/authoring/generate-code`. 11 tests. |
 
 ## Priority 4 — Quality Gates (E-08–E-13)
 
@@ -50,9 +50,9 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 | E-08 | Duplicate gate prevention | 🟢 | 409 on duplicate name+project. Batch skips. |
 | E-09 | Gates grouped by project | 🟢 | UI project sections with filter. |
 | E-10 | Template batch apply with dedup | 🟢 | Batch apply with created/skipped feedback. |
-| E-11 | VU-tiered gates | 🟡 | Schema exists, no evaluation logic. |
-| E-12 | Resource floor gates | 🟡 | Schema exists, no evaluation logic. |
-| E-13 | Capacity floor gates | 🟡 | Schema exists, no evaluation logic. |
+| E-11 | VU-tiered gates | � | `evaluateVuTiered()`: sorted tiers matched by VU count, per-tier operator override, fallback to basic threshold. 9 tests. |
+| E-12 | Resource floor gates | � | `evaluateResourceFloor()`: CPU/memory/disk/network floor enforcement with alternative metric key lookup. 7 tests. |
+| E-13 | Capacity floor gates | � | `evaluateCapacityFloor()`: RPS/concurrent-users/throughput minimum enforcement. 7 tests. |
 
 ## Priority 5 — Dashboard & UX (E-14–E-19)
 
@@ -80,4 +80,4 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 
 ---
 
-_Last updated: 2026-05-30 (E-01–E-05, E-20–E-21, E-23, E-28–E-37 implemented)_
+_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-20–E-21, E-23, E-28–E-37 implemented)_

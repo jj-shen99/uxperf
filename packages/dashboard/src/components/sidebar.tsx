@@ -55,6 +55,7 @@ const navGroups: NavGroup[] = [
     label: "Analysis",
     items: [
       { href: "/gates", label: "Gates", icon: Shield },
+      { href: "/budgets", label: "Budgets", icon: Sliders },
       { href: "/compare", label: "Compare", icon: GitCompare },
       { href: "/anomalies", label: "Anomalies", icon: AlertTriangle },
       { href: "/intelligence", label: "Intelligence", icon: Brain },

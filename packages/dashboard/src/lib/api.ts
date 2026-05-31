@@ -272,6 +272,38 @@ export const api = {
         request<void>(`/rbac/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
     },
   },
+  budgets: {
+    list: (projectId?: string) =>
+      request<any[]>(`/budgets${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
+    get: (id: string) => request<any>(`/budgets/${id}`),
+    create: (data: any) => request<any>("/budgets", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: any) =>
+      request<any>(`/budgets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/budgets/${id}`, { method: "DELETE" }),
+    evaluate: (projectId: string, route: string, metrics: Record<string, number>, deviceClass?: string) =>
+      request<any>(`/budgets/evaluate/${encodeURIComponent(projectId)}?route=${encodeURIComponent(route)}${deviceClass ? `&device_class=${deviceClass}` : ""}`, {
+        method: "POST", body: JSON.stringify({ metrics }),
+      }),
+    ratchet: (projectId: string) =>
+      request<any>(`/budgets/ratchet/${encodeURIComponent(projectId)}`, { method: "POST" }),
+  },
+  gateOverrides: {
+    create: (data: any) => request<any>("/gates/overrides", { method: "POST", body: JSON.stringify(data) }),
+    decide: (id: string, data: any) =>
+      request<any>(`/gates/overrides/${id}/decide`, { method: "POST", body: JSON.stringify(data) }),
+    forRun: (runId: string) => request<any[]>(`/gates/overrides/run/${encodeURIComponent(runId)}`),
+    forProject: (projectId: string, status?: string) =>
+      request<any[]>(`/gates/overrides/project/${encodeURIComponent(projectId)}${status ? `?status=${status}` : ""}`),
+    audit: (projectId: string) => request<any[]>(`/gates/overrides/audit/${encodeURIComponent(projectId)}`),
+  },
+  canary: {
+    analyze: (data: any) => request<any>("/analytics/canary", { method: "POST", body: JSON.stringify(data) }),
+    analyzeMulti: (data: any) => request<any>("/analytics/canary/multi", { method: "POST", body: JSON.stringify(data) }),
+  },
+  forecastBreach: {
+    check: (data: any) => request<any>("/intelligence/forecast/breach", { method: "POST", body: JSON.stringify(data) }),
+    checkAll: (data: any) => request<any[]>("/intelligence/forecast/breach-check", { method: "POST", body: JSON.stringify(data) }),
+  },
   environments: {
     list: () => request<any[]>("/environments"),
     create: (data: { name: string; slug: string; description?: string }) =>
