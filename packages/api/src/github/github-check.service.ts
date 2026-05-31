@@ -165,6 +165,152 @@ export class GitHubCheckService {
     }
   }
 
+  /**
+   * E-33: Post or update a single unified PR comment with collapsible sections.
+   * Ch 13, p167: "One comment on the PR" — don't spam; upsert a single comment
+   * identified by a marker, updating it on each new run.
+   */
+  async upsertPrComment(
+    config: GitHubCheckConfig & { prNumber: number },
+    runId: string,
+    outcomes: GateEvaluationOutcome[],
+    dashboardUrl?: string,
+  ): Promise<{ commentId: number | null; created: boolean }> {
+    if (!config.token) {
+      this.logger.warn("No GitHub token; skipping PR comment");
+      return { commentId: null, created: false };
+    }
+
+    const marker = "<!-- perf-framework-gate-summary -->";
+    const body = this.buildPrCommentBody(marker, runId, outcomes, dashboardUrl);
+
+    try {
+      // Search for existing comment with our marker
+      const existingId = await this.findExistingComment(config, marker);
+
+      if (existingId) {
+        // Update existing comment
+        const resp = await fetch(
+          `https://api.github.com/repos/${config.owner}/${config.repo}/issues/comments/${existingId}`,
+          {
+            method: "PATCH",
+            headers: this.githubHeaders(config.token),
+            body: JSON.stringify({ body }),
+          },
+        );
+        if (!resp.ok) {
+          this.logger.error(`Failed to update PR comment: ${resp.status}`);
+          return { commentId: null, created: false };
+        }
+        this.logger.log(`Updated PR comment ${existingId} on PR #${config.prNumber}`);
+        return { commentId: existingId, created: false };
+      }
+
+      // Create new comment
+      const resp = await fetch(
+        `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${config.prNumber}/comments`,
+        {
+          method: "POST",
+          headers: this.githubHeaders(config.token),
+          body: JSON.stringify({ body }),
+        },
+      );
+      if (!resp.ok) {
+        this.logger.error(`Failed to create PR comment: ${resp.status}`);
+        return { commentId: null, created: false };
+      }
+      const data = (await resp.json()) as { id: number };
+      this.logger.log(`Created PR comment ${data.id} on PR #${config.prNumber}`);
+      return { commentId: data.id, created: true };
+    } catch (error) {
+      this.logger.error(`PR comment failed: ${error}`);
+      return { commentId: null, created: false };
+    }
+  }
+
+  private async findExistingComment(
+    config: GitHubCheckConfig & { prNumber: number },
+    marker: string,
+  ): Promise<number | null> {
+    try {
+      const resp = await fetch(
+        `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${config.prNumber}/comments?per_page=100`,
+        { headers: this.githubHeaders(config.token) },
+      );
+      if (!resp.ok) return null;
+      const comments = (await resp.json()) as { id: number; body: string }[];
+      const existing = comments.find((c) => c.body.includes(marker));
+      return existing?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildPrCommentBody(
+    marker: string,
+    runId: string,
+    outcomes: GateEvaluationOutcome[],
+    dashboardUrl?: string,
+  ): string {
+    const blockingFailed = outcomes.filter((o) => o.status === "failed" && o.policy === "block");
+    const warnings = outcomes.filter((o) => o.status === "failed" && o.policy !== "block");
+    const passed = outcomes.filter((o) => o.status === "passed");
+
+    const icon = blockingFailed.length > 0 ? "\u274c" : warnings.length > 0 ? "\u26a0\ufe0f" : "\u2705";
+    const headline = blockingFailed.length > 0
+      ? `${blockingFailed.length} blocking gate(s) failed`
+      : warnings.length > 0
+        ? `${warnings.length} warning(s), all blocking gates passed`
+        : `All ${outcomes.length} gate(s) passed`;
+
+    const lines: string[] = [
+      marker,
+      `## ${icon} Performance Gate Results`,
+      "",
+      `**Run:** \`${runId}\` | **Result:** ${headline}`,
+      dashboardUrl ? `**Dashboard:** [View details](${dashboardUrl})` : "",
+      "",
+    ];
+
+    // Blocking failures section
+    if (blockingFailed.length > 0) {
+      lines.push("<details open>");
+      lines.push(`<summary>\u274c Blocking Failures (${blockingFailed.length})</summary>\n`);
+      lines.push(this.buildDetailsTable(blockingFailed));
+      lines.push("\n</details>\n");
+    }
+
+    // Warnings section
+    if (warnings.length > 0) {
+      lines.push("<details>");
+      lines.push(`<summary>\u26a0\ufe0f Warnings (${warnings.length})</summary>\n`);
+      lines.push(this.buildDetailsTable(warnings));
+      lines.push("\n</details>\n");
+    }
+
+    // Passed section
+    if (passed.length > 0) {
+      lines.push("<details>");
+      lines.push(`<summary>\u2705 Passed (${passed.length})</summary>\n`);
+      lines.push(this.buildDetailsTable(passed));
+      lines.push("\n</details>\n");
+    }
+
+    lines.push("---");
+    lines.push("*Posted by perf-framework*");
+
+    return lines.filter((l) => l !== undefined).join("\n");
+  }
+
+  private githubHeaders(token: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    };
+  }
+
   // -- Private helpers --
 
   private buildTitle(

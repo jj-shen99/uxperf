@@ -47,6 +47,19 @@ export interface ForecastInput {
   history_days?: number;
 }
 
+export interface BreachWarning {
+  project_id: string;
+  metric: string;
+  budget_threshold: number;
+  will_breach: boolean;
+  breach_date: string | null;
+  days_until_breach: number | null;
+  weeks_until_breach: number | null;
+  current_trend: TrendComponent;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
 @Injectable()
 export class ForecastingService {
   private readonly logger = new Logger(ForecastingService.name);
@@ -338,6 +351,110 @@ export class ForecastingService {
       ],
     );
     return r.rows[0].id;
+  }
+
+  /**
+   * E-37: Forecast breach warnings.
+   * Ch 14, p179: "If the bundle has grown 3KB a week for the last quarter,
+   * when will it cross the 200KB budget?"
+   *
+   * Generates a forecast and checks if/when yhat crosses the budget threshold.
+   * Returns breach info including estimated date and weeks until breach.
+   */
+  async projectBreach(input: ForecastInput & { budget_threshold: number }): Promise<BreachWarning> {
+    const { budget_threshold, ...forecastInput } = input;
+    const forecast = await this.generateForecast({
+      ...forecastInput,
+      horizon_days: forecastInput.horizon_days ?? 90,
+    });
+
+    if (forecast.forecast_data.length === 0) {
+      return {
+        project_id: input.project_id,
+        metric: input.metric,
+        budget_threshold,
+        will_breach: false,
+        breach_date: null,
+        days_until_breach: null,
+        weeks_until_breach: null,
+        current_trend: forecast.trend_component,
+        confidence: "low",
+        reason: "Insufficient data to forecast",
+      };
+    }
+
+    // Find first forecast point that crosses the budget
+    const breachPoint = forecast.forecast_data.find((p) => p.yhat >= budget_threshold);
+    const likelyBreachPoint = forecast.forecast_data.find((p) => p.yhat_lower >= budget_threshold);
+
+    if (!breachPoint) {
+      return {
+        project_id: input.project_id,
+        metric: input.metric,
+        budget_threshold,
+        will_breach: false,
+        breach_date: null,
+        days_until_breach: null,
+        weeks_until_breach: null,
+        current_trend: forecast.trend_component,
+        confidence: forecast.trend_component.r_squared > 0.5 ? "high" : "medium",
+        reason: `No breach projected within ${forecast.horizon_days} days`,
+      };
+    }
+
+    const today = new Date();
+    const breachDate = new Date(breachPoint.date);
+    const daysUntil = Math.ceil((breachDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const weeksUntil = Math.round(daysUntil / 7 * 10) / 10;
+
+    // Confidence based on R² and whether lower bound also breaches
+    const confidence: "high" | "medium" | "low" =
+      likelyBreachPoint && forecast.trend_component.r_squared > 0.5
+        ? "high"
+        : forecast.trend_component.r_squared > 0.3
+          ? "medium"
+          : "low";
+
+    return {
+      project_id: input.project_id,
+      metric: input.metric,
+      budget_threshold,
+      will_breach: true,
+      breach_date: breachPoint.date,
+      days_until_breach: Math.max(0, daysUntil),
+      weeks_until_breach: Math.max(0, weeksUntil),
+      current_trend: forecast.trend_component,
+      confidence,
+      reason: `At current pace (${forecast.trend_component.slope_per_day}/day), ${input.metric} will cross ${budget_threshold} in ~${weeksUntil} weeks`,
+    };
+  }
+
+  /**
+   * E-37: Check all budgets for a project and return breach warnings.
+   */
+  async checkAllBudgetBreaches(
+    projectId: string,
+    budgets: { metric: string; threshold: number }[],
+    environment?: string,
+  ): Promise<BreachWarning[]> {
+    const warnings: BreachWarning[] = [];
+
+    for (const budget of budgets) {
+      const warning = await this.projectBreach({
+        project_id: projectId,
+        metric: budget.metric,
+        budget_threshold: budget.threshold,
+        environment,
+        horizon_days: 90,
+      });
+      if (warning.will_breach) {
+        warnings.push(warning);
+      }
+    }
+
+    // Sort by urgency (closest breach first)
+    warnings.sort((a, b) => (a.days_until_breach ?? 999) - (b.days_until_breach ?? 999));
+    return warnings;
   }
 
   async listForecasts(projectId: string, metric?: string): Promise<any[]> {

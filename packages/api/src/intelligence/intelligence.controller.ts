@@ -58,6 +58,24 @@ export class IntelligenceController {
     return this.forecasting.listForecasts(projectId, metric);
   }
 
+  @Post("forecast/breach")
+  projectBreach(@Body() body: any) {
+    return this.forecasting.projectBreach(body);
+  }
+
+  @Post("forecast/breach-check")
+  checkBudgetBreaches(
+    @Body() body: {
+      project_id: string;
+      budgets: { metric: string; threshold: number }[];
+      environment?: string;
+    },
+  ) {
+    return this.forecasting.checkAllBudgetBreaches(
+      body.project_id, body.budgets, body.environment,
+    );
+  }
+
   // -- RUM --
 
   @Post("rum/ingest")

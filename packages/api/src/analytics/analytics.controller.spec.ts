@@ -3,6 +3,7 @@ import { AnalyticsController } from "./analytics.controller";
 import { AnomaliesService } from "./anomalies.service";
 import { ChangePointService } from "./change-point.service";
 import { AttributionService } from "./attribution.service";
+import { CanaryAnalysisService } from "./canary-analysis.service";
 
 describe("AnalyticsController", () => {
   let controller: AnalyticsController;
@@ -31,6 +32,7 @@ describe("AnalyticsController", () => {
         { provide: AnomaliesService, useValue: mockAnomalies },
         { provide: ChangePointService, useValue: mockChangePoint },
         { provide: AttributionService, useValue: mockAttribution },
+        { provide: CanaryAnalysisService, useValue: { analyze: jest.fn(), analyzeMultiMetric: jest.fn() } },
       ],
     }).compile();
     controller = module.get(AnalyticsController);

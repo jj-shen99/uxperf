@@ -25,11 +25,11 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 
 | # | Enhancement | Status | Book Ref | Notes |
 |---|-------------|--------|----------|-------|
-| E-33 | **PR bot / GitHub Check Run integration** — single-comment gate summary | 🟡 | Ch 13, p167 | `github-check.service.ts` exists and posts gate results, but lacks "one comment with sections" UX and override-with-audit path. |
-| E-34 | **Gate override with audit trail** — engineer can acknowledge + proceed | 🔴 | Ch 12, p155; Ch 13, p168 | "When a regression is justified, the engineer should be able to acknowledge and proceed without disabling the check." No override entity or audit log. |
-| E-35 | **Canary deployment analysis** — compare canary vs baseline RUM cohorts | 🔴 | Ch 13, p162–164 | "Canary analysis is the integration between your deploy system and your perf platform." No canary-cohort comparison logic. |
-| E-36 | **Anomaly → notification wiring** — auto-dispatch on change-point detection | 🟡 | Ch 14, p181–182 | `anomaliesService.analyzeProject()` finds change-points but doesn't dispatch notifications. Need webhook fan-out on anomaly creation. |
-| E-37 | **Forecasting breach warnings** — "budget breach in N weeks" alerts | 🟡 | Ch 14, p179; App G, p237 | `forecasting.service.ts` has `fitTrend()` and `fitSeasonality()` but no `projectBreach()` method that warns when a metric will cross its budget. |
+| E-33 | **PR bot / GitHub Check Run integration** — single-comment gate summary | � | Ch 13, p167 | `upsertPrComment()`: marker-based upsert of single PR comment with collapsible `<details>` sections for blocking/warnings/passed. 9 tests. |
+| E-34 | **Gate override with audit trail** — engineer can acknowledge + proceed | � | Ch 12, p155; Ch 13, p168 | `gate-overrides.service.ts`: CRUD, approve/reject workflow, TTL expiry, `hasActiveOverride()`, audit trail endpoint. DB migration 011. 10 tests. |
+| E-35 | **Canary deployment analysis** — compare canary vs baseline RUM cohorts | � | Ch 13, p162–164 | `canary-analysis.service.ts`: Mann-Whitney U test, multi-metric analysis, cohort stats (mean/median/p75/p95/stddev). POST `/analytics/canary`. 12 tests. |
+| E-36 | **Anomaly → notification wiring** — auto-dispatch on change-point detection | � | Ch 14, p181–182 | `analyzeProject()` now dispatches `anomaly_detected` via `NotificationsService.dispatch()` for each new anomaly. Graceful failure on dispatch error. 5 tests. |
+| E-37 | **Forecasting breach warnings** — "budget breach in N weeks" alerts | � | Ch 14, p179; App G, p237 | `projectBreach()`: forecast + threshold crossing detection with confidence levels. `checkAllBudgetBreaches()` for batch. POST `/intelligence/forecast/breach`. 6 tests. |
 
 ## Priority 3 — Engine & Runner (E-01–E-07)
 
@@ -80,4 +80,4 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 
 ---
 
-_Last updated: 2026-05-30 (E-01–E-05, E-20–E-21, E-23, E-28–E-32 implemented; book-derived E-33–E-37 pending)_
+_Last updated: 2026-05-30 (E-01–E-05, E-20–E-21, E-23, E-28–E-37 implemented)_

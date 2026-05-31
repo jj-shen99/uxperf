@@ -10,6 +10,7 @@ import {
 import { AnomaliesService } from "./anomalies.service";
 import { ChangePointService } from "./change-point.service";
 import { AttributionService } from "./attribution.service";
+import { CanaryAnalysisService } from "./canary-analysis.service";
 
 @Controller("analytics")
 export class AnalyticsController {
@@ -17,6 +18,7 @@ export class AnalyticsController {
     private readonly anomaliesService: AnomaliesService,
     private readonly changePointService: ChangePointService,
     private readonly attributionService: AttributionService,
+    private readonly canaryService: CanaryAnalysisService,
   ) {}
 
   // -- Anomalies --
@@ -87,6 +89,32 @@ export class AnalyticsController {
       baselineRunId,
       regressionRunId,
       metric,
+    );
+  }
+
+  // -- E-35: Canary Analysis --
+
+  @Post("canary")
+  analyzeCanary(@Body() body: any) {
+    return this.canaryService.analyze(body);
+  }
+
+  @Post("canary/multi")
+  analyzeCanaryMulti(
+    @Body() body: {
+      project_id: string;
+      canary_build: string;
+      baseline_build: string;
+      metrics: string[];
+      environment?: string;
+    },
+  ) {
+    return this.canaryService.analyzeMultiMetric(
+      body.project_id,
+      body.canary_build,
+      body.baseline_build,
+      body.metrics,
+      body.environment,
     );
   }
 }

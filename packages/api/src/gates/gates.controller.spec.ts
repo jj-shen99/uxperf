@@ -1,6 +1,7 @@
 import { Test } from "@nestjs/testing";
 import { GatesController } from "./gates.controller";
 import { GatesService } from "./gates.service";
+import { GateOverridesService } from "./gate-overrides.service";
 
 describe("GatesController", () => {
   let controller: GatesController;
@@ -16,7 +17,10 @@ describe("GatesController", () => {
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       controllers: [GatesController],
-      providers: [{ provide: GatesService, useValue: mockService }],
+      providers: [
+        { provide: GatesService, useValue: mockService },
+        { provide: GateOverridesService, useValue: {} },
+      ],
     }).compile();
     controller = module.get(GatesController);
   });

@@ -13,10 +13,14 @@ import {
   CreateGateDto,
   UpdateGateDto,
 } from "./gates.service";
+import { GateOverridesService, CreateOverrideDto, OverrideDecisionDto } from "./gate-overrides.service";
 
 @Controller("gates")
 export class GatesController {
-  constructor(private readonly gatesService: GatesService) {}
+  constructor(
+    private readonly gatesService: GatesService,
+    private readonly overridesService: GateOverridesService,
+  ) {}
 
   @Get()
   findAll(@Query("project_id") projectId?: string) {
@@ -56,5 +60,35 @@ export class GatesController {
   @Get("results/:runId")
   getRunResults(@Param("runId") runId: string) {
     return this.gatesService.getResultsForRun(runId);
+  }
+
+  // -- E-34: Gate Overrides --
+
+  @Post("overrides")
+  createOverride(@Body() dto: CreateOverrideDto) {
+    return this.overridesService.create(dto);
+  }
+
+  @Post("overrides/:id/decide")
+  decideOverride(@Param("id") id: string, @Body() dto: OverrideDecisionDto) {
+    return this.overridesService.decide(id, dto);
+  }
+
+  @Get("overrides/run/:runId")
+  findOverridesForRun(@Param("runId") runId: string) {
+    return this.overridesService.findForRun(runId);
+  }
+
+  @Get("overrides/project/:projectId")
+  findOverridesForProject(
+    @Param("projectId") projectId: string,
+    @Query("status") status?: string,
+  ) {
+    return this.overridesService.findForProject(projectId, status);
+  }
+
+  @Get("overrides/audit/:projectId")
+  getOverrideAuditTrail(@Param("projectId") projectId: string) {
+    return this.overridesService.getAuditTrail(projectId);
   }
 }

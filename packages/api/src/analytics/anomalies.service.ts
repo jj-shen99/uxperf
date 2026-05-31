@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Inject, Optional } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { ChangePointService, ChangePointResult } from "./change-point.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 export interface AnomalyRow {
   id: string;
@@ -40,6 +41,7 @@ export class AnomaliesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly changePointService: ChangePointService,
+    @Optional() @Inject(NotificationsService) private readonly notificationsService?: NotificationsService,
   ) {}
 
   async findAll(
@@ -182,6 +184,27 @@ export class AnomaliesService {
       this.logger.log(
         `Created anomaly for ${cp.metric} in project ${projectId}: ${cp.description}`,
       );
+
+      // E-36: Dispatch notification for the new anomaly
+      if (this.notificationsService) {
+        try {
+          await this.notificationsService.dispatch({
+            event: "anomaly_detected",
+            project_id: projectId,
+            title: `Anomaly detected: ${cp.metric}`,
+            message: cp.description,
+            details: {
+              anomaly_id: anomaly.id,
+              metric: cp.metric,
+              severity: cp.severity,
+              detector: cp.detector,
+              run_id: cp.changeRunId,
+            },
+          });
+        } catch (e) {
+          this.logger.error(`Failed to dispatch anomaly notification: ${e}`);
+        }
+      }
     }
 
     return created;

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 
 export type ChannelType = "slack" | "email" | "webhook";
-export type NotificationEvent = "gate_failed" | "run_completed" | "run_failed" | "baseline_regression" | "digest";
+export type NotificationEvent = "gate_failed" | "run_completed" | "run_failed" | "baseline_regression" | "anomaly_detected" | "forecast_breach" | "digest";
 
 export interface NotificationChannelRow {
   id: string;
