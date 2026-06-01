@@ -251,6 +251,8 @@ export const api = {
         request<any[]>(`/intelligence/geo/locations${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`),
       dispatch: (data: any) =>
         request<any>("/intelligence/geo/dispatch", { method: "POST", body: JSON.stringify(data) }),
+      compare: (runId: string) =>
+        request<any>(`/intelligence/geo/compare/${encodeURIComponent(runId)}`),
     },
   },
   auth: {

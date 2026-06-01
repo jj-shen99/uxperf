@@ -4,6 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/use-projects";
+import { DecisionDashboard } from "@/components/decision-dashboard";
+import { MobileSegmentView } from "@/components/mobile-segment-view";
+import { MultiGeoView } from "@/components/multi-geo-view";
 
 const METRICS: Record<string, { label: string; unit: string; good: number; poor: number }> = {
   lcp_ms: { label: "LCP", unit: "ms", good: 2500, poor: 4000 },
@@ -43,7 +46,7 @@ const ratingStyle: Record<string, string> = {
   poor: "bg-red-900/30 text-red-400",
 };
 
-type TabKey = "overview" | "trends" | "pages" | "environments" | "scores" | "recommendations" | "attribution" | "forecast" | "rum" | "crux" | "capacity";
+type TabKey = "overview" | "trends" | "pages" | "environments" | "scores" | "recommendations" | "attribution" | "forecast" | "rum" | "crux" | "capacity" | "decisions" | "mobile" | "geo";
 
 export default function IntelligencePage() {
   const queryClient = useQueryClient();
@@ -295,6 +298,9 @@ export default function IntelligencePage() {
     { key: "rum", label: "RUM" },
     { key: "crux", label: "CrUX" },
     { key: "capacity", label: "Capacity" },
+    { key: "decisions", label: "Decisions" },
+    { key: "mobile", label: "Mobile vs Desktop" },
+    { key: "geo", label: "Multi-Geo" },
   ] as const;
 
   return (
@@ -346,6 +352,28 @@ export default function IntelligencePage() {
         </div>
       ) : (
         <>
+          {/* Decisions Tab (E-60) */}
+          {tab === "decisions" && (
+            <DecisionDashboard
+              runs={runs}
+              projects={projects}
+            />
+          )}
+
+          {/* Mobile vs Desktop Tab (E-61) */}
+          {tab === "mobile" && (
+            <MobileSegmentView runs={runs} />
+          )}
+
+          {/* Multi-Geo Tab (E-62) */}
+          {tab === "geo" && (
+            projectId ? (
+              <MultiGeoView projectId={projectId} />
+            ) : (
+              <p className="text-sm text-gray-500">Select a project to view multi-geo data.</p>
+            )
+          )}
+
           {/* Overview Tab */}
           {tab === "overview" && (
             <div className="space-y-4">
