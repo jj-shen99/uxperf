@@ -45,11 +45,16 @@ export default function InvestigationPage() {
     [anomalies, selectedAnomalyId],
   );
 
-  // Fetch runs for timeline
+  // Fetch runs for timeline (fetch all, filter client-side for the anomaly's project)
   const { data: runs = [] } = useQuery({
-    queryKey: ["runs", projectId],
-    queryFn: () => api.runs.list(projectId || undefined),
-    enabled: !!projectId,
+    queryKey: ["runs"],
+    queryFn: () => api.runs.list(),
+  });
+
+  // Detect anomalies mutation
+  const detectMut = useMutation({
+    mutationFn: (pid: string) => api.analytics.detect({ project_id: pid }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["anomalies"] }),
   });
 
   // Fetch baselines for comparison
@@ -84,11 +89,15 @@ export default function InvestigationPage() {
   const timeline = useMemo(() => {
     if (!selectedAnomaly || runs.length === 0) return [];
     const metric = selectedAnomaly.metric;
-    const anomalyRunIdx = runs.findIndex((r: any) => r.id === selectedAnomaly.run_id);
+    // Filter to the anomaly's project runs, sorted chronologically
+    const projectRuns = runs
+      .filter((r: any) => r.project_id === selectedAnomaly.project_id)
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const anomalyRunIdx = projectRuns.findIndex((r: any) => r.id === selectedAnomaly.run_id);
     if (anomalyRunIdx < 0) return [];
     const windowStart = Math.max(0, anomalyRunIdx - 10);
-    const windowEnd = Math.min(runs.length, anomalyRunIdx + 6);
-    return runs
+    const windowEnd = Math.min(projectRuns.length, anomalyRunIdx + 6);
+    return projectRuns
       .slice(windowStart, windowEnd)
       .filter((r: any) => r.status === "completed" && r.metrics)
       .map((r: any) => ({
@@ -140,11 +149,36 @@ export default function InvestigationPage() {
       <div className="grid grid-cols-12 gap-6">
         {/* Anomaly List */}
         <div className="col-span-4 space-y-2">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-gray-500">Anomalies</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-medium uppercase tracking-wider text-gray-500">Anomalies</h2>
+            {projectId && (
+              <button
+                onClick={() => detectMut.mutate(projectId)}
+                disabled={detectMut.isPending}
+                className="rounded-md bg-indigo-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                title="Run server-side anomaly detection for this project"
+              >
+                {detectMut.isPending ? "Detecting…" : "Detect"}
+              </button>
+            )}
+          </div>
+          {detectMut.isSuccess && (detectMut.data as any[])?.length > 0 && (
+            <p className="text-[10px] text-green-400">{(detectMut.data as any[]).length} new anomaly(ies) found</p>
+          )}
+          {detectMut.isSuccess && (detectMut.data as any[])?.length === 0 && (
+            <p className="text-[10px] text-gray-500">No new anomalies detected</p>
+          )}
           {isLoading ? (
             <p className="text-sm text-gray-500">Loading...</p>
           ) : anomalies.length === 0 ? (
-            <p className="text-sm text-gray-500">No anomalies found.</p>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 space-y-2">
+              <p className="text-sm text-gray-500">No anomalies found.</p>
+              <p className="text-xs text-gray-600">
+                {projectId
+                  ? 'Click "Detect" above to run anomaly detection for this project, or anomalies are auto-detected when runs complete.'
+                  : "Select a project first, then click \"Detect\" to run anomaly detection."}
+              </p>
+            </div>
           ) : (
             <div className="space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
               {anomalies.map((a: any) => (

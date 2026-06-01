@@ -66,7 +66,7 @@ export default function AnomaliesPage() {
       .filter((r: any) => r.status === "completed" && r.metrics && (!projectId || r.project_id === projectId))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    if (completed.length < 3) return [];
+    if (completed.length < 2) return [];
 
     const detected: DetectedAnomaly[] = [];
     const metricKeys = Object.keys(METRIC_THRESHOLDS);
@@ -77,9 +77,9 @@ export default function AnomaliesPage() {
         const v = r.metrics?.[key] as number | undefined;
         if (v != null) vals.push({ run: r, value: v });
       }
-      if (vals.length < 3) continue;
+      if (vals.length < 2) continue;
 
-      for (let i = 2; i < vals.length; i++) {
+      for (let i = 1; i < vals.length; i++) {
         const prev = vals.slice(Math.max(0, i - 5), i);
         const avg = prev.reduce((s, p) => s + p.value, 0) / prev.length;
         const stddev = Math.sqrt(prev.reduce((s, p) => s + (p.value - avg) ** 2, 0) / prev.length);
@@ -189,6 +189,9 @@ export default function AnomaliesPage() {
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
           <p className="text-xs text-gray-500">Total Anomalies</p>
           <p className="mt-1 text-2xl font-bold text-white">{anomalies.length}</p>
+          <p className="mt-0.5 text-[10px] text-gray-600">
+            {runs.filter((r: any) => r.status === "completed" && r.metrics && (!projectId || r.project_id === projectId)).length} completed runs
+          </p>
         </div>
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
           <p className="text-xs text-gray-500">Critical</p>
@@ -305,7 +308,7 @@ export default function AnomaliesPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
           {anomalies.length === 0
-            ? "No anomalies detected. Need at least 3 completed runs with metrics."
+            ? `No anomalies detected for ${projectId ? "this project" : "any project"}. Need at least 2 completed runs with metrics to detect anomalies. ${projectId ? `This project has ${runs.filter((r: any) => r.status === "completed" && r.metrics && r.project_id === projectId).length} completed run(s) — try selecting \"All projects\" or running more tests.` : ""}`
             : `No matching anomalies found.`}
         </div>
       ) : (

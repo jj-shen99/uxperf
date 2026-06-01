@@ -378,6 +378,16 @@ export default function IntelligencePage() {
           {tab === "overview" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Core Web Vitals &amp; Metric Health (last 20 runs)</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Each card shows the average, min, and max of a Core Web Vital or Lighthouse metric across your most recent 20 runs.
+                <strong className="text-gray-500"> LCP</strong> (Largest Contentful Paint) measures when the main content is visible.
+                <strong className="text-gray-500"> FCP</strong> (First Contentful Paint) measures when the first element renders.
+                <strong className="text-gray-500"> CLS</strong> (Cumulative Layout Shift) measures visual stability.
+                <strong className="text-gray-500"> TTFB</strong> (Time to First Byte) measures server response time.
+                <strong className="text-gray-500"> INP</strong> (Interaction to Next Paint) measures input responsiveness.
+                <strong className="text-gray-500"> TBT</strong> (Total Blocking Time) measures main-thread blocking.
+                Ratings follow Google&apos;s thresholds: <span className="text-green-500">good</span> / <span className="text-yellow-500">needs work</span> / <span className="text-red-500">poor</span>.
+              </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {metricHealth.map((m: any) => (
                   <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
@@ -408,6 +418,11 @@ export default function IntelligencePage() {
           {tab === "trends" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Metric Trends (last 30 runs)</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Compares the average of your first 5 runs against the most recent 5 runs for each Core Web Vital.
+                A change of &gt;5% flags the metric as <span className="text-red-500">degrading</span> or <span className="text-green-500">improving</span>.
+                The bar chart visualizes all individual values — bar color reflects whether that value is good (green), needs work (yellow), or poor (red) per Google thresholds.
+              </p>
               {trendData.length === 0 ? (
                 <p className="text-sm text-gray-500">Need at least 2 runs to show trends.</p>
               ) : (
@@ -460,6 +475,11 @@ export default function IntelligencePage() {
           {tab === "pages" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Slowest Pages by Average LCP</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Ranks tested URLs by their average LCP (Largest Contentful Paint) across all completed runs.
+                High LCP pages are your biggest optimization targets — they represent the worst user-facing load times.
+                FCP and run count are shown for additional context.
+              </p>
               {slowestPages.length === 0 ? (
                 <p className="text-sm text-gray-500">No page-level data available.</p>
               ) : (
@@ -506,6 +526,10 @@ export default function IntelligencePage() {
           {tab === "environments" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Environment Comparison</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Compares average LCP, FCP, and Lighthouse Performance Score across environments (e.g., staging vs production).
+                Significant differences between environments can indicate deployment-specific regressions or infrastructure variance.
+              </p>
               {envComparison.length === 0 ? (
                 <p className="text-sm text-gray-500">No environment data available.</p>
               ) : (
@@ -547,6 +571,11 @@ export default function IntelligencePage() {
           {tab === "scores" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Lighthouse Performance Score Distribution</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Shows how Lighthouse Performance scores (0–100) are distributed across all completed runs.
+                The score is a weighted composite: LCP (25%), TBT (30%), CLS (25%), FCP (10%), SI (10%).
+                Average, median, and p90 scores help you understand the typical and worst-case performance.
+              </p>
               {!scoreDistribution ? (
                 <p className="text-sm text-gray-500">No Lighthouse score data available.</p>
               ) : (
@@ -593,6 +622,12 @@ export default function IntelligencePage() {
           {tab === "recommendations" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Actionable Recommendations</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Auto-generated recommendations based on your recent 10 runs.
+                <strong className="text-red-400"> Critical</strong>: a metric is in the "poor" range.
+                <strong className="text-yellow-400"> Warning</strong>: needs improvement, or degrading trend &gt;15%.
+                <strong className="text-blue-400"> Info</strong>: limited test coverage or other non-urgent observations.
+              </p>
               {recommendations.length === 0 ? (
                 <div className="rounded-lg border border-green-800/50 bg-green-900/10 p-6 text-center">
                   <p className="text-sm text-green-400 font-medium">All clear!</p>
@@ -633,6 +668,11 @@ export default function IntelligencePage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-medium text-gray-400">SHAP Feature Attribution</h2>
               </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                SHAP (SHapley Additive exPlanations) measures how much each feature (e.g., image size, script count, server region)
+                contributes to a metric like LCP. Higher importance means that feature has more impact on performance.
+                Requires a project to be selected and attribution analysis to be run via the API.
+              </p>
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view attribution data.</p>
               ) : attributions.length === 0 ? (
@@ -680,8 +720,13 @@ export default function IntelligencePage() {
           {/* Forecast Tab */}
           {tab === "forecast" && (
             <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Performance Forecast</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Predicts future metric values (14-day horizon) using time-series analysis of your historical runs.
+                Each row shows predicted value, lower, and upper confidence bounds.
+                Trend direction (improving/degrading/stable), seasonal patterns, and forecast accuracy (MAPE) are shown when available.
+              </p>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium text-gray-400">Performance Forecast</h2>
                 {projectId && (
                   <div className="flex items-center gap-2">
                     <select
@@ -775,6 +820,11 @@ export default function IntelligencePage() {
           {tab === "rum" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Real-User Monitoring (RUM) Summary</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                RUM data reflects real user experience from actual browsers in the field (vs. synthetic lab tests).
+                Metrics are shown at p50 (median), p75 (recommended reporting percentile), and p95 (tail).
+                Compare RUM data with your synthetic runs to identify gaps between lab and field performance.
+              </p>
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view RUM data.</p>
               ) : rumSummary.length === 0 ? (
@@ -807,6 +857,11 @@ export default function IntelligencePage() {
           {tab === "crux" && (
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Chrome UX Report (CrUX) Snapshots</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                CrUX provides aggregated, anonymized field data from real Chrome users visiting your origin over 28 days.
+                This is the same data Google uses for search ranking signals.
+                Metrics include LCP, FCP, INP, CLS, and TTFB at the 75th percentile — the threshold Google evaluates.
+              </p>
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view CrUX data.</p>
               ) : cruxSnapshots.length === 0 ? (
@@ -842,8 +897,13 @@ export default function IntelligencePage() {
           {/* Capacity Tab */}
           {tab === "capacity" && (
             <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Capacity Planning</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Derived from load test results (k6 Browser engine). Shows the maximum sustainable virtual users (VUs),
+                the saturation point where performance degrades, and available headroom.
+                Use this to answer: "How many concurrent users can our app handle before metrics breach thresholds?"
+              </p>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium text-gray-400">Capacity Planning</h2>
                 {projectId && (
                   <button
                     onClick={() => capacityMut.mutate()}
