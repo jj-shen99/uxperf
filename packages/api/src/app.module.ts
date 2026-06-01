@@ -22,6 +22,7 @@ import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { AuthModule } from "./auth/auth.module";
 import { EnvironmentsModule } from "./environments/environments.module";
 import { BudgetsModule } from "./budgets/budgets.module";
+import { ConfigModule } from "./config/config.module";
 import { HealthController } from "./health.controller";
 import { AuthGuard } from "./auth/auth.guard";
 
@@ -49,6 +50,7 @@ import { AuthGuard } from "./auth/auth.guard";
     AuthModule,
     EnvironmentsModule,
     BudgetsModule,
+    ConfigModule,
   ],
   controllers: [HealthController],
   providers: [

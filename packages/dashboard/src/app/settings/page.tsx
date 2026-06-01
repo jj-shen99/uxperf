@@ -136,6 +136,52 @@ export default function SettingsPage() {
     mutationFn: (id: string) => api.notifications.test(id),
   });
 
+  // --- Engine Configuration (WPT) ---
+  const { data: engineConfig = {} } = useQuery({
+    queryKey: ["config", "engine"],
+    queryFn: () => api.config.getAll("engine."),
+  });
+  const [wptForm, setWptForm] = useState({ server: "", api_key: "" });
+  const [wptMsg, setWptMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Sync wptForm when config loads
+  useEffect(() => {
+    if (engineConfig["engine.wpt_server"] || engineConfig["engine.wpt_api_key"]) {
+      setWptForm({
+        server: engineConfig["engine.wpt_server"] ?? "",
+        api_key: engineConfig["engine.wpt_api_key"] ?? "",
+      });
+    }
+  }, [engineConfig["engine.wpt_server"], engineConfig["engine.wpt_api_key"]]);
+
+  const saveWptConfig = useMutation({
+    mutationFn: async () => {
+      await Promise.all([
+        api.config.set("engine.wpt_server", wptForm.server.trim()),
+        api.config.set("engine.wpt_api_key", wptForm.api_key.trim()),
+      ]);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config", "engine"] });
+      setWptMsg({ type: "success", text: "WPT configuration saved" });
+    },
+    onError: (err: Error) => setWptMsg({ type: "error", text: err.message }),
+  });
+
+  const clearWptConfig = useMutation({
+    mutationFn: async () => {
+      await Promise.all([
+        api.config.delete("engine.wpt_server"),
+        api.config.delete("engine.wpt_api_key"),
+      ]);
+    },
+    onSuccess: () => {
+      setWptForm({ server: "", api_key: "" });
+      qc.invalidateQueries({ queryKey: ["config", "engine"] });
+      setWptMsg({ type: "success", text: "WPT configuration cleared" });
+    },
+  });
+
   // --- Environments ---
   const { data: environments = [] } = useQuery({
     queryKey: ["environments"],
@@ -520,6 +566,69 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* Engine Configuration — WebPageTest */}
+      {isAdmin && (
+        <section className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-medium text-gray-400">Engine Configuration — WebPageTest</h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Configure a private WebPageTest instance to enable WPT as a testing engine.
+              The worker will use these credentials when running WPT tests.
+            </p>
+          </div>
+          <div className="space-y-3 max-w-lg">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">WPT Server URL</label>
+              <input
+                placeholder="https://wpt.example.com"
+                value={wptForm.server}
+                onChange={(e) => setWptForm({ ...wptForm, server: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">WPT API Key</label>
+              <input
+                type="password"
+                placeholder="API key"
+                value={wptForm.api_key}
+                onChange={(e) => setWptForm({ ...wptForm, api_key: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setWptMsg(null); saveWptConfig.mutate(); }}
+                disabled={!wptForm.server.trim() || !wptForm.api_key.trim() || saveWptConfig.isPending}
+                className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {saveWptConfig.isPending ? "Saving..." : "Save WPT Config"}
+              </button>
+              {engineConfig["engine.wpt_server"] && (
+                <button
+                  onClick={() => { setWptMsg(null); clearWptConfig.mutate(); }}
+                  disabled={clearWptConfig.isPending}
+                  className="rounded-md border border-gray-700 px-4 py-1.5 text-sm text-gray-400 hover:text-red-400 hover:border-red-800"
+                >
+                  Clear
+                </button>
+              )}
+              {engineConfig["engine.wpt_server"] && (
+                <span className="flex items-center gap-1.5 text-xs text-green-400">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  Configured
+                </span>
+              )}
+            </div>
+            {wptMsg && (
+              <p className={`text-sm ${wptMsg.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                {wptMsg.text}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Environment Management (Admin only) */}
       {isAdmin && (

@@ -344,4 +344,10 @@ export const api = {
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },
+  config: {
+    getAll: (prefix?: string) => request<Record<string, string>>(`/config${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`),
+    get: (key: string) => request<{ key: string; value: string | null }>(`/config/${encodeURIComponent(key)}`),
+    set: (key: string, value: string) => request<any>(`/config/${encodeURIComponent(key)}`, { method: "PUT", body: JSON.stringify({ value }) }),
+    delete: (key: string) => request<any>(`/config/${encodeURIComponent(key)}`, { method: "DELETE" }),
+  },
 };

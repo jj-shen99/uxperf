@@ -28,7 +28,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const CACHE_OPTIONS = ["warm", "cold", "production_replay"] as const;
-const ENGINE_OPTIONS = ["k6_browser", "playwright_lighthouse", "sitespeed"] as const;
+const ENGINE_OPTIONS = ["k6_browser", "playwright_lighthouse", "wpt", "sitespeed"] as const;
 
 interface Stage {
   duration_s: number;
