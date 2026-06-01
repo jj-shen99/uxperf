@@ -137,10 +137,34 @@ function convertToCompiledSteps(
 }
 
 /**
- * Check if a script has measure steps (multi-link journey).
+ * Check if a script has explicit measure steps.
  */
 function hasJourneyMeasureSteps(steps: any[]): boolean {
   return steps.some((s: any) => /^measure/i.test((s.intent ?? "").trim()));
+}
+
+/**
+ * Auto-inject measure steps after navigation/click steps when no explicit
+ * measure intents exist. This ensures per-link web vitals are always captured.
+ */
+function autoInjectMeasureSteps(
+  steps: { intent: string; locators?: any }[],
+): { intent: string; locators?: any }[] {
+  if (hasJourneyMeasureSteps(steps)) return steps;
+
+  const result: { intent: string; locators?: any }[] = [];
+  for (const step of steps) {
+    result.push(step);
+    const lower = (step.intent ?? "").toLowerCase();
+    // After navigation or click steps, auto-insert a measure step
+    if (/\b(go to|navigate|visit|open|load|click|tap|press|submit)\b/i.test(lower)) {
+      const label = (step.intent.match(/["'](.+?)["']/)?.[1]
+        ?? step.intent.replace(/^(click|navigate|go to|visit|open|load|tap|press|submit)\s+(on\s+|to\s+)?/i, "").trim())
+        || `after step ${result.length}`;
+      result.push({ intent: `measure: "${label}"` });
+    }
+  }
+  return result;
 }
 
 async function executeRun(run: ClaimedRun): Promise<void> {
@@ -158,10 +182,24 @@ async function executeRun(run: ClaimedRun): Promise<void> {
   }
 
   const nlSteps = script?.canonical_json?.steps ?? [];
-  const useJourney = nlSteps.length > 0 && hasJourneyMeasureSteps(nlSteps);
+  const useJourney = nlSteps.length > 0;
 
   if (useJourney) {
-    await postLog(run.id, `Engine: journey (${nlSteps.length} steps, multi-link)`);
+    // Auto-inject measure steps if the script doesn't have any
+    if (!hasJourneyMeasureSteps(nlSteps)) {
+      await postLog(run.id, `Script has ${nlSteps.length} step(s) but no measure intents — auto-injecting measure steps`);
+      script = {
+        ...script,
+        canonical_json: {
+          ...script.canonical_json,
+          steps: autoInjectMeasureSteps(nlSteps),
+        },
+      };
+      const injectedSteps = script.canonical_json.steps;
+      const measureCount = injectedSteps.filter((s: any) => /^measure/i.test(s.intent ?? "")).length;
+      await postLog(run.id, `Injected ${measureCount} measure step(s) → ${injectedSteps.length} total steps`);
+    }
+    await postLog(run.id, `Engine: journey (${script.canonical_json.steps.length} steps, multi-link)`);
     await executeJourneyRun(run, script, startedAt);
   } else {
     await postLog(run.id, `Engine: playwright_lighthouse`);

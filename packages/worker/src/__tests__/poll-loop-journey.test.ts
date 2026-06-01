@@ -66,6 +66,29 @@ function hasJourneyMeasureSteps(steps: any[]): boolean {
   return steps.some((s: any) => /^measure/i.test((s.intent ?? "").trim()));
 }
 
+/**
+ * Auto-inject measure steps after navigation/click steps when no explicit
+ * measure intents exist.
+ */
+function autoInjectMeasureSteps(
+  steps: { intent: string; locators?: any }[],
+): { intent: string; locators?: any }[] {
+  if (hasJourneyMeasureSteps(steps)) return steps;
+
+  const result: { intent: string; locators?: any }[] = [];
+  for (const step of steps) {
+    result.push(step);
+    const lower = (step.intent ?? "").toLowerCase();
+    if (/\b(go to|navigate|visit|open|load|click|tap|press|submit)\b/i.test(lower)) {
+      const label = (step.intent.match(/["'](.+?)["']/)?.[1]
+        ?? step.intent.replace(/^(click|navigate|go to|visit|open|load|tap|press|submit)\s+(on\s+|to\s+)?/i, "").trim())
+        || `after step ${result.length}`;
+      result.push({ intent: `measure: "${label}"` });
+    }
+  }
+  return result;
+}
+
 // === Tests ===
 
 describe("convertToCompiledSteps", () => {
@@ -225,5 +248,100 @@ describe("hasJourneyMeasureSteps", () => {
 
   it("handles missing intent field", () => {
     expect(hasJourneyMeasureSteps([{}])).toBe(false);
+  });
+});
+
+describe("autoInjectMeasureSteps", () => {
+  it("returns steps unchanged when measure intents already exist", () => {
+    const steps = [
+      { intent: 'click "A"' },
+      { intent: 'measure: "A"' },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result).toBe(steps); // same reference — no modification
+  });
+
+  it("injects measure after click steps", () => {
+    const steps = [
+      { intent: 'click "Product A"' },
+      { intent: 'click "Product B"' },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result).toHaveLength(4);
+    expect(result[0].intent).toBe('click "Product A"');
+    expect(result[1].intent).toBe('measure: "Product A"');
+    expect(result[2].intent).toBe('click "Product B"');
+    expect(result[3].intent).toBe('measure: "Product B"');
+  });
+
+  it("injects measure after navigate steps", () => {
+    const steps = [
+      { intent: "navigate to https://shop.com" },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result).toHaveLength(2);
+    expect(result[1].intent).toMatch(/^measure:/);
+  });
+
+  it("does not inject after non-actionable steps", () => {
+    const steps = [
+      { intent: "wait for page to settle" },
+      { intent: "scroll down" },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    // wait and scroll don't trigger measure injection
+    expect(result).toHaveLength(2);
+  });
+
+  it("injects after submit steps", () => {
+    const steps = [
+      { intent: "submit form" },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result).toHaveLength(2);
+    expect(result[1].intent).toMatch(/^measure:/);
+  });
+
+  it("uses quoted label from the original intent", () => {
+    const steps = [
+      { intent: 'click on "My Link"' },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result[1].intent).toBe('measure: "My Link"');
+  });
+
+  it("strips action verb prefix for label when no quotes", () => {
+    const steps = [
+      { intent: "click the login button" },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result[1].intent).toContain("measure:");
+    expect(result[1].intent).not.toContain("click");
+  });
+
+  it("handles empty steps array", () => {
+    expect(autoInjectMeasureSteps([])).toEqual([]);
+  });
+
+  it("handles mixed actionable and non-actionable steps", () => {
+    const steps = [
+      { intent: "navigate to https://shop.com" },
+      { intent: "wait for page" },
+      { intent: 'click "Buy"' },
+      { intent: "scroll down" },
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    // navigate -> measure, wait (no inject), click -> measure, scroll (no inject)
+    expect(result).toHaveLength(6);
+    expect(result.filter(s => s.intent.startsWith("measure:")).length).toBe(2);
+  });
+
+  it("generates fallback label when intent has no useful text", () => {
+    const steps = [
+      { intent: "click" }, // bare action verb
+    ];
+    const result = autoInjectMeasureSteps(steps);
+    expect(result).toHaveLength(2);
+    expect(result[1].intent).toMatch(/^measure: "/);
   });
 });
