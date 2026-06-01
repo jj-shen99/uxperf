@@ -443,6 +443,7 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 |----------|-------------|
 | [Architecture](docs/ARCHITECTURE.md) | System architecture with component diagrams |
 | [User Guide](docs/USER_GUIDE.md) | Setup, configuration, and day-to-day usage |
+| [Engine Guide](docs/ENGINE_GUIDE.md) | When to use each testing engine, setup, and configuration |
 | [API Reference](#api-reference) | Full REST endpoint listing |
 | [Contributing](docs/CONTRIBUTING.md) | Development workflow and guidelines |
 
