@@ -11,6 +11,7 @@ export default function AuthorPage() {
   const [device, setDevice] = useState("desktop");
   const [result, setResult] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [scriptTab, setScriptTab] = useState<"playwright" | "json">("playwright");
   const queryClient = useQueryClient();
   const { projects, projectId, setProjectId } = useProjects();
 
@@ -152,7 +153,12 @@ export default function AuthorPage() {
           {result.generated_script && (
             <div className="rounded-lg border bg-card p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Generated Script</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-semibold">Generated Script</h3>
+                  <span className="rounded-full bg-indigo-900/40 px-2 py-0.5 text-[11px] text-indigo-300">
+                    {result.generated_script?.steps?.length ?? 0} steps
+                  </span>
+                </div>
                 <button
                   onClick={() => saveScript.mutate()}
                   disabled={saved || saveScript.isPending}
@@ -165,9 +171,34 @@ export default function AuthorPage() {
                   {saved ? "Saved" : saveScript.isPending ? "Saving..." : "Save as Script"}
                 </button>
               </div>
-              <pre className="overflow-auto rounded-md bg-muted p-4 text-xs">
-                {JSON.stringify(result.generated_script, null, 2)}
-              </pre>
+
+              {/* Script tabs */}
+              <div className="flex gap-1 border-b border-gray-800 mb-3">
+                {(["playwright", "json"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setScriptTab(tab)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-t transition ${
+                      scriptTab === tab
+                        ? "bg-gray-800 text-white border-b-2 border-indigo-500"
+                        : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    {tab === "playwright" ? "Playwright Code" : "JSON"}
+                  </button>
+                ))}
+              </div>
+
+              {scriptTab === "playwright" && result.playwright_code && (
+                <pre className="overflow-auto rounded-md bg-muted p-4 text-xs whitespace-pre">
+                  {result.playwright_code}
+                </pre>
+              )}
+              {scriptTab === "json" && (
+                <pre className="overflow-auto rounded-md bg-muted p-4 text-xs">
+                  {JSON.stringify(result.generated_script, null, 2)}
+                </pre>
+              )}
             </div>
           )}
 

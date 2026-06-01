@@ -90,14 +90,6 @@ function LoginForm() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-          <p className="text-xs font-medium text-gray-500 mb-2">Demo accounts</p>
-          <div className="space-y-1 text-xs text-gray-500">
-            <p><span className="text-gray-400">admin@perftest.io</span> / admin123! <span className="text-amber-400/60">(admin)</span></p>
-            <p><span className="text-gray-400">editor@perftest.io</span> / editor123! <span className="text-blue-400/60">(editor)</span></p>
-            <p><span className="text-gray-400">viewer@perftest.io</span> / viewer123! <span className="text-gray-400/60">(viewer)</span></p>
-          </div>
-        </div>
       </div>
     </div>
   );

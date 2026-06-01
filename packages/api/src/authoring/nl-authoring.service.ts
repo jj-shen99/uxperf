@@ -69,16 +69,24 @@ export class NlAuthoringService {
     const reconResult = await this.pageReconnaissance(request.target_url);
     stages.push(reconResult);
 
+    // Stage 2.5: If intent contains a loop ("each link"), expand into per-link steps
+    let effectiveIntent = intentResult.output;
+    if ((intentResult.output as any).has_loop && (reconResult.output as any).links?.length > 0) {
+      const expandedSteps = this.expandLoopSteps(intentResult.output, reconResult.output);
+      effectiveIntent = { ...intentResult.output, steps: expandedSteps, expanded: true };
+      this.logger.log(`Loop expansion: ${(intentResult.output.steps as any[]).length} steps → ${expandedSteps.length} steps`);
+    }
+
     // Stage 3: Locator synthesis
     const locatorResult = await this.synthesizeLocators(
-      intentResult.output,
+      effectiveIntent,
       reconResult.output,
     );
     stages.push(locatorResult);
 
     // Stage 4: Script assembly
     const scriptResult = await this.assembleScript(
-      intentResult.output,
+      effectiveIntent,
       locatorResult.output,
       request,
     );
@@ -203,17 +211,43 @@ export class NlAuthoringService {
       const locator = step.locators?.primary;
       lines.push(`  // ${intent}`);
 
-      if (this.isNavigationIntent(intent)) {
+      if (this.isMeasureIntent(intent)) {
+        const label = intent.replace(/^measure:?\s*/i, "").replace(/^["']|["']$/g, "");
+        lines.push(`  // Capture performance metrics: ${label}`);
+        lines.push(`  await page.waitForLoadState('networkidle');`);
+        lines.push(`  const metrics_${steps.indexOf(step)} = await page.evaluate(() => {`);
+        lines.push(`    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;`);
+        lines.push(`    const paint = performance.getEntriesByType('paint');`);
+        lines.push(`    const fcp = paint.find(e => e.name === 'first-contentful-paint');`);
+        lines.push(`    const lcp = paint.find(e => e.name === 'largest-contentful-paint');`);
+        lines.push(`    return {`);
+        lines.push(`      ttfb: nav ? nav.responseStart - nav.requestStart : 0,`);
+        lines.push(`      fcp: fcp?.startTime ?? 0,`);
+        lines.push(`      lcp: lcp?.startTime ?? 0,`);
+        lines.push(`      loadEvent: nav ? nav.loadEventEnd - nav.startTime : 0,`);
+        lines.push(`    };`);
+        lines.push(`  });`);
+        lines.push(`  console.log('Metrics [${this.escapeQuotes(label)}]:', JSON.stringify(metrics_${steps.indexOf(step)}));`);
+      } else if (this.isGoBackIntent(intent)) {
+        lines.push(`  await page.goto('${this.escapeQuotes(targetUrl)}');`);
+        lines.push(`  await page.waitForLoadState('load');`);
+      } else if (this.isNavigationIntent(intent)) {
         const url = this.extractUrl(intent) ?? targetUrl;
         lines.push(`  await page.goto('${this.escapeQuotes(url)}');`);
         lines.push(`  await page.waitForLoadState('networkidle');`);
       } else if (this.isClickIntent(intent)) {
-        const selector = locator?.selector ?? `getByRole('button', {name: '${this.escapeQuotes(intent)}'})`;
+        // Check for quoted text in intent: click on "Book Title"
+        const quotedMatch = intent.match(/["'](.+?)["']/);
+        const defaultSelector = quotedMatch
+          ? `getByRole('link', {name: '${this.escapeQuotes(quotedMatch[1])}'})`
+          : `getByRole('button', {name: '${this.escapeQuotes(intent)}'})`;
+        const selector = locator?.selector ?? defaultSelector;
         if (selector.startsWith("getBy")) {
           lines.push(`  await page.${selector}.click();`);
         } else {
           lines.push(`  await page.locator('${this.escapeQuotes(selector)}').click();`);
         }
+        lines.push(`  await page.waitForLoadState('load');`);
       } else if (this.isTypeIntent(intent)) {
         const { selector: sel, value } = this.extractTypeTarget(intent);
         const s = locator?.selector ?? sel;
@@ -269,6 +303,14 @@ export class NlAuthoringService {
     return s.replace(/'/g, "\\'").replace(/\n/g, "\\n");
   }
 
+  private isMeasureIntent(intent: string): boolean {
+    return /^measure:?\s/i.test(intent);
+  }
+
+  private isGoBackIntent(intent: string): boolean {
+    return /\b(navigate back|go back|return to)\b/i.test(intent);
+  }
+
   private isNavigationIntent(intent: string): boolean {
     return /\b(go to|navigate|visit|open|load)\b/i.test(intent);
   }
@@ -316,12 +358,22 @@ export class NlAuthoringService {
       .filter((s) => s.length > 0)
       .map((s, i) => ({ step: i + 1, intent: s }));
 
+    // Detect loop keywords ("each", "all", "every") that signal iteration over page elements
+    const hasLoop = steps.some((s) =>
+      /\b(each|all|every)\b/i.test(s.intent) &&
+      /\b(link|button|item|card|product|book|result|element)s?\b/i.test(s.intent),
+    );
+    // Detect if user wants metrics for iterated items
+    const wantsMetrics = steps.some((s) =>
+      /\b(metric|measure|performance|vitals|lcp|fcp|cls)s?\b/i.test(s.intent),
+    );
+
     return {
       stage: 1,
       name: "intent_parse",
       status: "completed",
       duration_ms: Date.now() - start,
-      output: { steps, raw_prompt: prompt },
+      output: { steps, raw_prompt: prompt, has_loop: hasLoop, wants_metrics: wantsMetrics },
     };
   }
 
@@ -329,18 +381,89 @@ export class NlAuthoringService {
     targetUrl?: string,
   ): Promise<PipelineStageResult> {
     const start = Date.now();
-    // In production: crawl target with headless browser, extract a11y tree
-    return {
-      stage: 2,
-      name: "page_reconnaissance",
-      status: targetUrl ? "completed" : "skipped",
-      duration_ms: Date.now() - start,
-      output: {
-        target_url: targetUrl ?? null,
-        a11y_tree: null, // placeholder — populated by actual browser crawl
-        note: "Page recon requires headless browser; returning scaffold",
-      },
-    };
+    if (!targetUrl) {
+      return {
+        stage: 2,
+        name: "page_reconnaissance",
+        status: "skipped",
+        duration_ms: Date.now() - start,
+        output: { target_url: null, links: [], headings: [] },
+      };
+    }
+
+    // Fetch the page and extract links + headings via regex-based HTML parsing
+    // (no browser dependency in the API process — lightweight recon)
+    try {
+      const res = await fetch(targetUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html",
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      const html = await res.text();
+
+      // Extract all <a> tags with href and visible text
+      const linkRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gis;
+      const links: { href: string; text: string }[] = [];
+      let match: RegExpExecArray | null;
+      while ((match = linkRegex.exec(html)) !== null) {
+        const href = match[1];
+        // Strip HTML tags from link text
+        const text = match[2].replace(/<[^>]+>/g, "").trim();
+        if (text && text.length > 1 && text.length < 200 && href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+          links.push({ href, text });
+        }
+      }
+
+      // Extract headings for context
+      const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gis;
+      const headings: string[] = [];
+      while ((match = headingRegex.exec(html)) !== null) {
+        const text = match[1].replace(/<[^>]+>/g, "").trim();
+        if (text) headings.push(text);
+      }
+
+      // Deduplicate links by text
+      const seen = new Set<string>();
+      const uniqueLinks = links.filter((l) => {
+        const key = l.text.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      this.logger.log(`Page recon: ${uniqueLinks.length} unique links, ${headings.length} headings from ${targetUrl}`);
+
+      return {
+        stage: 2,
+        name: "page_reconnaissance",
+        status: "completed",
+        duration_ms: Date.now() - start,
+        output: {
+          target_url: targetUrl,
+          links: uniqueLinks.slice(0, 100), // Cap at 100 links
+          headings: headings.slice(0, 20),
+          total_links_found: links.length,
+          unique_links: uniqueLinks.length,
+        },
+      };
+    } catch (err) {
+      this.logger.warn(`Page recon failed for ${targetUrl}: ${err}`);
+      return {
+        stage: 2,
+        name: "page_reconnaissance",
+        status: "completed",
+        duration_ms: Date.now() - start,
+        output: {
+          target_url: targetUrl,
+          links: [],
+          headings: [],
+          error: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
   }
 
   private async synthesizeLocators(
@@ -350,14 +473,32 @@ export class NlAuthoringService {
     const start = Date.now();
     const steps = (intentOutput.steps as { step: number; intent: string }[]) ?? [];
 
-    const locators = steps.map((s) => ({
-      step: s.step,
-      intent: s.intent,
-      primary: { strategy: "role", selector: `getByRole('button', {name: '${s.intent}'})` },
-      fallbacks: [
-        { strategy: "text", selector: `getByText('${s.intent}')` },
-      ],
-    }));
+    const locators = steps.map((s) => {
+      // Extract quoted text from intents like: click on "Book Title"
+      const quotedMatch = s.intent.match(/["'](.+?)["']/);
+      const linkText = quotedMatch?.[1];
+
+      if (linkText && /\bclick\b/i.test(s.intent)) {
+        // Use getByRole('link') for click intents with quoted text (likely a link)
+        return {
+          step: s.step,
+          intent: s.intent,
+          primary: { strategy: "role", selector: `getByRole('link', {name: '${linkText}'})` },
+          fallbacks: [
+            { strategy: "text", selector: `getByText('${linkText}')` },
+          ],
+        };
+      }
+
+      return {
+        step: s.step,
+        intent: s.intent,
+        primary: { strategy: "role", selector: `getByRole('button', {name: '${s.intent}'})` },
+        fallbacks: [
+          { strategy: "text", selector: `getByText('${s.intent}')` },
+        ],
+      };
+    });
 
     return {
       stage: 3,
@@ -399,6 +540,89 @@ export class NlAuthoringService {
       duration_ms: Date.now() - start,
       output: { script },
     };
+  }
+
+  /**
+   * Expand loop intents into per-link steps using page reconnaissance data.
+   * Called between intent parse and locator synthesis when a loop keyword is detected.
+   */
+  private expandLoopSteps(
+    intentOutput: Record<string, unknown>,
+    reconOutput: Record<string, unknown>,
+  ): { step: number; intent: string }[] {
+    const originalSteps = (intentOutput.steps as { step: number; intent: string }[]) ?? [];
+    const links = (reconOutput.links as { href: string; text: string }[]) ?? [];
+    const wantsMetrics = intentOutput.wants_metrics as boolean;
+
+    if (links.length === 0) return originalSteps;
+
+    // Find the loop step and the element type it references
+    const loopStepIdx = originalSteps.findIndex((s) =>
+      /\b(each|all|every)\b/i.test(s.intent) &&
+      /\b(link|button|item|card|product|book|result|element)s?\b/i.test(s.intent),
+    );
+    if (loopStepIdx === -1) return originalSteps;
+
+    // Determine filter keywords from the loop intent
+    const loopIntent = originalSteps[loopStepIdx].intent.toLowerCase();
+    const filterKeywords = this.extractFilterKeywords(loopIntent);
+
+    // Filter links by keywords if present
+    let targetLinks = links;
+    if (filterKeywords.length > 0) {
+      targetLinks = links.filter((l) => {
+        const text = l.text.toLowerCase();
+        const href = l.href.toLowerCase();
+        return filterKeywords.some((kw) => text.includes(kw) || href.includes(kw));
+      });
+      // If filter is too aggressive, fall back to all links
+      if (targetLinks.length === 0) targetLinks = links;
+    }
+
+    // Cap at 20 links to avoid excessive test duration
+    targetLinks = targetLinks.slice(0, 20);
+
+    // Build expanded steps:
+    //  - Steps before the loop
+    //  - For each link: visit page → click link → measure → go back
+    //  - Steps after the loop (excluding metric-related steps already folded in)
+    const before = originalSteps.slice(0, loopStepIdx);
+    const after = originalSteps.slice(loopStepIdx + 1).filter(
+      (s) => !/\b(metric|measure|performance|vitals)s?\b/i.test(s.intent),
+    );
+
+    const expanded: { step: number; intent: string }[] = [...before];
+    let stepNum = before.length + 1;
+
+    for (const link of targetLinks) {
+      expanded.push({ step: stepNum++, intent: `click on "${link.text}"` });
+      if (wantsMetrics) {
+        expanded.push({ step: stepNum++, intent: `measure: "${link.text}"` });
+      }
+      expanded.push({ step: stepNum++, intent: `navigate back to ${reconOutput.target_url ?? "the page"}` });
+    }
+
+    for (const s of after) {
+      expanded.push({ step: stepNum++, intent: s.intent });
+    }
+
+    return expanded;
+  }
+
+  /**
+   * Extract content filter keywords from the loop intent.
+   * E.g., "click on each book link" → ["book"]
+   */
+  private extractFilterKeywords(intent: string): string[] {
+    // Remove common structural words
+    const stripped = intent
+      .replace(/\b(click|tap|go|visit|open|on|each|all|every|the|and|then|a|an|for)\b/gi, "")
+      .replace(/\b(link|button|item|card|element|generate|performance|metrics?)s?\b/gi, "")
+      .trim();
+    return stripped
+      .split(/\s+/)
+      .map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, ""))
+      .filter((w) => w.length > 2);
   }
 
   private async validate(

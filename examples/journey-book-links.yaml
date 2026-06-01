@@ -1,0 +1,47 @@
+# Journey: Test performance of each book link on an Amazon author page.
+#
+# This script navigates to the author page, clicks each book link,
+# captures Web Vitals (LCP, FCP, CLS, TTFB) for each book page,
+# then returns to the author page for the next book.
+#
+# Usage:
+#   Save this file, then create a run via the API or dashboard with:
+#     engine: playwright_lighthouse
+#     mode: journey
+#
+# The journey engine supports: visit, click, fill, scroll, wait_for,
+# hover, select, press, and measure (captures CWV at that point).
+
+name: Amazon Author Page - Book Link Performance
+target: https://www.amazon.com/stores/Jj-Shen/author/B07ZTYB8FG
+device: desktop
+screenshots: true
+
+stages:
+  # Land on author page and measure baseline
+  - visit /
+  - measure: "Author page load"
+
+  # Book 1: The Mandarin Companion
+  - click "The Mandarin Companion"
+  - measure: "The Mandarin Companion"
+  - visit /
+
+  # Book 2: Tales of Hidden Kingdoms
+  - click "Tales of Hidden Kingdoms"
+  - measure: "Tales of Hidden Kingdoms"
+  - visit /
+
+  # Book 3: Echoes of the Jade Court
+  - click "Echoes of the Jade Court"
+  - measure: "Echoes of the Jade Court"
+  - visit /
+
+  # Book 4: The Dragon's Apprentice
+  - click "The Dragon's Apprentice"
+  - measure: "The Dragon's Apprentice"
+  - visit /
+
+  # Book 5: Whispers in the Bamboo
+  - click "Whispers in the Bamboo"
+  - measure: "Whispers in the Bamboo"
