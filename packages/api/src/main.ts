@@ -21,8 +21,8 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Body size limit — 1MB default (prevents DoS via large payloads)
-  app.use(json({ limit: "1mb" }));
+  // Body size limit — 10MB (worker uploads Lighthouse reports which can be 2–5MB)
+  app.use(json({ limit: "10mb" }));
 
   // Global validation pipe (class-validator)
   app.useGlobalPipes(new ValidationPipe({
