@@ -196,6 +196,8 @@ export const api = {
         }),
       cancel: (id: string) =>
         request<any>(`/load/runs/${id}/cancel`, { method: "POST" }),
+      delete: (id: string) =>
+        request<void>(`/load/runs/${id}`, { method: "DELETE" }),
       costEstimate: (data: { stages: any[]; target_vus: number }) =>
         request<any>("/load/runs/cost-estimate", { method: "POST", body: JSON.stringify(data) }),
     },

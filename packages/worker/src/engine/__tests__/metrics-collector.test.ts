@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   collectWebVitals,
+  collectWebVitalsSPA,
   collectPageTimings,
   collectResourceSummary,
 } from "../metrics-collector";
@@ -45,6 +46,34 @@ describe("metrics-collector", () => {
     it("handles empty result from evaluate", async () => {
       const page = mockPage({});
       const result = await collectWebVitals(page);
+      expect(result).toEqual({});
+    });
+  });
+
+  describe("collectWebVitalsSPA", () => {
+    it("returns SPA-derived vitals from page.evaluate", async () => {
+      const vitals = {
+        lcp_ms: 350.5,
+        fcp_ms: 210.3,
+        cls: 0.01,
+        ttfb_ms: 45.2,
+      };
+      const page = mockPage(vitals);
+      const result = await collectWebVitalsSPA(page);
+      expect(result).toEqual(vitals);
+      expect(page.evaluate).toHaveBeenCalledTimes(1);
+    });
+
+    it("handles result with only lcp_ms from SPA marker", async () => {
+      const page = mockPage({ lcp_ms: 280 });
+      const result = await collectWebVitalsSPA(page);
+      expect(result.lcp_ms).toBe(280);
+      expect(result.cls).toBeUndefined();
+    });
+
+    it("handles empty result from SPA collector", async () => {
+      const page = mockPage({});
+      const result = await collectWebVitalsSPA(page);
       expect(result).toEqual({});
     });
   });

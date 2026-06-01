@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useProjects } from "@/hooks/use-projects";
@@ -27,17 +27,92 @@ function fmtMs(v: number | null | undefined, metric?: string): string {
   return v >= 1000 ? `${(v / 1000).toFixed(2)}s` : `${Math.round(v)}ms`;
 }
 
+// Client-side detection thresholds (same as /anomalies page)
+const METRIC_THRESHOLDS: Record<string, { good: number; poor: number; label: string; unit: string }> = {
+  lcp_ms: { good: 2500, poor: 4000, label: "LCP", unit: "ms" },
+  fcp_ms: { good: 1800, poor: 3000, label: "FCP", unit: "ms" },
+  cls: { good: 0.1, poor: 0.25, label: "CLS", unit: "" },
+  ttfb_ms: { good: 800, poor: 1800, label: "TTFB", unit: "ms" },
+  inp_ms: { good: 200, poor: 500, label: "INP", unit: "ms" },
+  tbt_ms: { good: 200, poor: 600, label: "TBT", unit: "ms" },
+};
+
+function detectClientSideAnomalies(runs: any[], projectId: string): any[] {
+  const completed = runs
+    .filter((r: any) => r.status === "completed" && r.metrics && r.project_id === projectId)
+    .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  if (completed.length < 2) return [];
+
+  const detected: any[] = [];
+
+  for (const key of Object.keys(METRIC_THRESHOLDS)) {
+    const vals: { run: any; value: number }[] = [];
+    for (const r of completed) {
+      const v = r.metrics?.[key] as number | undefined;
+      if (v != null) vals.push({ run: r, value: v });
+    }
+    if (vals.length < 2) continue;
+
+    for (let i = 1; i < vals.length; i++) {
+      const prev = vals.slice(Math.max(0, i - 5), i);
+      const avg = prev.reduce((s, p) => s + p.value, 0) / prev.length;
+      const stddev = Math.sqrt(prev.reduce((s, p) => s + (p.value - avg) ** 2, 0) / prev.length);
+      const current = vals[i].value;
+      const run = vals[i].run;
+      const th = METRIC_THRESHOLDS[key];
+      const deviation = current - avg;
+      const threshold = Math.max(stddev * 2, avg * 0.15);
+
+      if (deviation > threshold && current > th.good) {
+        const changePct = ((current - avg) / avg) * 100;
+        let severity: "critical" | "warning" | "info" = "info";
+        if (current > th.poor) severity = "critical";
+        else if (current > th.good) severity = "warning";
+
+        detected.push({
+          id: `client-${run.id}-${key}`,
+          project_id: run.project_id,
+          run_id: run.id,
+          metric: key,
+          severity,
+          status: "open",
+          detector: "client_threshold",
+          description: `${th.label} spiked to ${key === "cls" ? current.toFixed(3) : Math.round(current)}${th.unit} (+${changePct.toFixed(0)}% from avg)`,
+          details: { value: current, baseline: avg, change_percent: changePct },
+          detected_at: run.finished_at ?? run.created_at,
+        });
+      }
+    }
+  }
+
+  return detected.sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
+}
+
 export default function InvestigationPage() {
   const { projects, projectId, setProjectId } = useProjects();
   const qc = useQueryClient();
   const [selectedAnomalyId, setSelectedAnomalyId] = useState<string | null>(null);
   const [tab, setTab] = useState<InvestigationTab>("timeline");
 
-  // Fetch anomalies
-  const { data: anomalies = [], isLoading } = useQuery({
+  // Fetch server-side anomalies
+  const { data: serverAnomalies = [], isLoading } = useQuery({
     queryKey: ["anomalies", projectId],
     queryFn: () => api.analytics.anomalies(projectId || undefined),
   });
+
+  // Fetch runs for timeline and client-side fallback detection
+  const { data: runs = [] } = useQuery({
+    queryKey: ["runs"],
+    queryFn: () => api.runs.list(),
+  });
+
+  // Merge server-side anomalies with client-side fallback when server has none
+  const anomalies = useMemo(() => {
+    if (serverAnomalies.length > 0) return serverAnomalies;
+    if (!projectId || runs.length === 0) return [];
+    return detectClientSideAnomalies(runs, projectId);
+  }, [serverAnomalies, runs, projectId]);
 
   // Selected anomaly details
   const selectedAnomaly = useMemo(
@@ -45,17 +120,26 @@ export default function InvestigationPage() {
     [anomalies, selectedAnomalyId],
   );
 
-  // Fetch runs for timeline (fetch all, filter client-side for the anomaly's project)
-  const { data: runs = [] } = useQuery({
-    queryKey: ["runs"],
-    queryFn: () => api.runs.list(),
-  });
-
   // Detect anomalies mutation
   const detectMut = useMutation({
     mutationFn: (pid: string) => api.analytics.detect({ project_id: pid }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["anomalies"] }),
   });
+
+  // Auto-detect anomalies when project is selected and none exist
+  const autoDetectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      projectId &&
+      !isLoading &&
+      serverAnomalies.length === 0 &&
+      !detectMut.isPending &&
+      autoDetectedRef.current !== projectId
+    ) {
+      autoDetectedRef.current = projectId;
+      detectMut.mutate(projectId);
+    }
+  }, [projectId, isLoading, serverAnomalies.length, detectMut.isPending]);
 
   // Fetch baselines for comparison
   const { data: baselines = [] } = useQuery({

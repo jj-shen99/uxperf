@@ -21,6 +21,10 @@ describe("LoadController", () => {
     createLoadRun: jest.fn().mockResolvedValue({ id: "lr-1", status: "queued" }),
     updateStatus: jest.fn().mockResolvedValue({ id: "lr-1", status: "running" }),
     cancel: jest.fn().mockResolvedValue({ id: "lr-1", status: "cancelled" }),
+    deleteLoadRun: jest.fn().mockResolvedValue(undefined),
+    claimLoadRun: jest.fn().mockResolvedValue({ id: "lr-1", url: "https://example.com" }),
+    completeLoadRun: jest.fn().mockResolvedValue({ id: "lr-1", status: "completed" }),
+    timeoutStaleRuns: jest.fn().mockResolvedValue(2),
     estimateCost: jest.fn().mockReturnValue({ vu_minutes: 10 }),
   };
   const mockTelemetry: Record<string, jest.Mock> = {
@@ -72,5 +76,27 @@ describe("LoadController", () => {
       metrics_summary: { browser_lcp_p95: 2000 },
     });
     expect(mockGates.evaluateForLoadRun).toHaveBeenCalled();
+  });
+
+  it("deletes a load run", async () => {
+    await controller.deleteLoadRun("lr-1");
+    expect(mockOrch.deleteLoadRun).toHaveBeenCalledWith("lr-1");
+  });
+
+  it("claims a load run", async () => {
+    const result = await controller.claimLoadRun();
+    expect(result).toEqual({ id: "lr-1", url: "https://example.com" });
+    expect(mockOrch.claimLoadRun).toHaveBeenCalled();
+  });
+
+  it("completes a load run", async () => {
+    const result = await controller.completeLoadRun("lr-1", { success: true });
+    expect(result.status).toBe("completed");
+    expect(mockOrch.completeLoadRun).toHaveBeenCalledWith("lr-1", { success: true });
+  });
+
+  it("times out stale runs", async () => {
+    const result = await controller.timeoutStaleRuns();
+    expect(result).toEqual({ timed_out: 2 });
   });
 });

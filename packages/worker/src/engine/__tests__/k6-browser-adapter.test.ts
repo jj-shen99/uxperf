@@ -53,6 +53,147 @@ describe("K6BrowserAdapter", () => {
     });
   });
 
+  describe("generateJourneyK6Script", () => {
+    const baseProfile = {
+      stages: [{ duration_s: 30, target_vus: 5 }],
+      target_vus: 5,
+      cache_state: "warm" as const,
+    };
+
+    it("generates journey script with click and measure steps", () => {
+      const steps = [
+        { intent: 'click "Product A"', action: "click" as const, target: "Product A", label: 'click "Product A"' },
+        { intent: 'measure: "Product A"', action: "measure" as const, target: "measure", label: 'measure: "Product A"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://shop.com", n_runs: 1, device: "desktop", viewport: { width: 1920, height: 1080 } },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain("browser_journey");
+      expect(script).toContain("https://shop.com");
+      expect(script).toContain("Product A");
+      expect(script).toContain(".click()");
+      expect(script).toContain("// Measure:");
+    });
+
+    it("generates visit steps with goto", () => {
+      const steps = [
+        { intent: "navigate to https://shop.com/cart", action: "visit" as const, target: "https://shop.com/cart", label: "navigate to cart" },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://shop.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain("page.goto('https://shop.com/cart'");
+    });
+
+    it("generates fill steps", () => {
+      const steps = [
+        { intent: "type 'hello' into #search", action: "fill" as const, target: "#search", value: "hello", label: "fill search" },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain(".fill('hello')");
+      expect(script).toContain("#search");
+    });
+
+    it("generates scroll and wait steps", () => {
+      const steps = [
+        { intent: "scroll down", action: "scroll" as const, target: "bottom", label: "scroll down" },
+        { intent: "wait for page", action: "wait_for" as const, target: "body", label: "wait" },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain("scrollTo");
+      expect(script).toContain("waitForTimeout(2000)");
+    });
+
+    it("dispatches to journey script when script_steps present in generateK6Script", () => {
+      const request = {
+        url: "https://example.com",
+        n_runs: 1,
+        device: "desktop",
+        script_steps: [
+          { intent: 'click "A"', action: "click" as const, target: "A", label: 'click "A"' },
+          { intent: 'measure: "A"', action: "measure" as const, target: "measure", label: 'measure: "A"' },
+        ],
+      };
+      const script = adapter.generateK6Script(request, baseProfile);
+      expect(script).toContain("browser_journey");
+      expect(script).toContain(".click()");
+    });
+
+    it("falls back to single-URL script when no script_steps", () => {
+      const request = {
+        url: "https://example.com",
+        n_runs: 1,
+        device: "desktop",
+      };
+      const script = adapter.generateK6Script(request, baseProfile);
+      expect(script).toContain("browser_test");
+      expect(script).not.toContain("browser_journey");
+    });
+
+    it("falls back to single-URL script when script_steps is empty", () => {
+      const request = {
+        url: "https://example.com",
+        n_runs: 1,
+        device: "desktop",
+        script_steps: [],
+      };
+      const script = adapter.generateK6Script(request, baseProfile);
+      expect(script).toContain("browser_test");
+      expect(script).not.toContain("browser_journey");
+    });
+
+    it("escapes single quotes in targets and labels", () => {
+      const steps = [
+        { intent: "click button", action: "click" as const, target: "button[aria-label='Add']", label: "click 'Add' button" },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      // Should not produce broken JS from unescaped quotes
+      expect(script).toContain("locator(");
+      expect(script).not.toContain("locator('button[aria-label='Add']')");
+    });
+
+    it("handles unknown action type gracefully", () => {
+      const steps = [
+        { intent: "custom action", action: "something_new" as any, target: "x", label: "custom" },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain("// Unknown step: custom");
+    });
+
+    it("uses default viewport when none provided", () => {
+      const steps = [
+        { intent: 'measure: "home"', action: "measure" as const, target: "measure", label: 'measure: "home"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        baseProfile,
+        steps,
+      );
+      expect(script).toContain("width: 1920");
+      expect(script).toContain("height: 1080");
+    });
+  });
+
   describe("checkSaturation", () => {
     it("detects no saturation for normal metrics", () => {
       const summary: K6Summary = {

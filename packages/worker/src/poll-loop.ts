@@ -9,6 +9,8 @@
  *   POLL_INTERVAL_MS — poll interval in ms (default: 5000)
  */
 import { runPlaywrightLighthouse, executeJourney } from "./engine/index";
+import { K6BrowserAdapter } from "./engine/adapters/k6-browser-adapter";
+import type { K6RunRequest, K6ScriptStep } from "./engine/adapters/k6-browser-adapter";
 import type { CompiledStep, JourneyDefinition, StepAction } from "./engine/journey/types";
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
@@ -344,16 +346,162 @@ async function executeSingleUrlRun(
   }
 }
 
+// =====================================================
+// Load Run Execution (k6-based load testing)
+// =====================================================
+
+interface ClaimedLoadRun {
+  id: string;
+  project_id: string;
+  script_id?: string;
+  url: string;
+  engine: string;
+  target_vus: number;
+  stages: { duration_s: number; target_vus: number; ramp_type?: string }[];
+  cache_state: string;
+}
+
+async function claimLoadRun(): Promise<ClaimedLoadRun | null> {
+  try {
+    const res = await fetch(`${API_URL}/load/runs/claim`, { method: "POST" });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text === "null" || text === "") return null;
+    return JSON.parse(text);
+  } catch (e) {
+    console.error(`[worker] Failed to claim load run: ${e}`);
+    return null;
+  }
+}
+
+async function completeLoadRun(
+  loadRunId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const res = await fetch(`${API_URL}/load/runs/${loadRunId}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error(`[worker] Failed to complete load run ${loadRunId}: ${res.status}`);
+    }
+  } catch (e) {
+    console.error(`[worker] Error completing load run ${loadRunId}: ${e}`);
+  }
+}
+
+async function executeLoadRun(loadRun: ClaimedLoadRun): Promise<void> {
+  const startedAt = new Date().toISOString();
+  console.log(`[worker:load] Executing load run ${loadRun.id}: ${loadRun.target_vus} VUs, engine=${loadRun.engine}, url=${loadRun.url}`);
+
+  if (!loadRun.url) {
+    console.error(`[worker:load] No URL for load run ${loadRun.id} — project may not have environment_configs set`);
+    await completeLoadRun(loadRun.id, {
+      success: false,
+      error: "No URL configured for project. Set environment_configs on the project.",
+    });
+    return;
+  }
+
+  const k6 = new K6BrowserAdapter();
+  const available = await k6.isAvailable();
+  if (!available) {
+    console.error(`[worker:load] k6 is not available — set K6_BROWSER_ENABLED=true and ensure k6 binary is on PATH`);
+    await completeLoadRun(loadRun.id, {
+      success: false,
+      error: "k6 browser engine is not available on this worker.",
+    });
+    return;
+  }
+
+  try {
+    // Fetch script steps if script_id is set
+    let scriptSteps: K6ScriptStep[] | undefined;
+    if (loadRun.script_id) {
+      const script = await fetchScript(loadRun.script_id);
+      if (script?.canonical_json?.steps) {
+        const nlSteps = script.canonical_json.steps;
+        scriptSteps = convertToCompiledSteps(
+          hasJourneyMeasureSteps(nlSteps) ? nlSteps : autoInjectMeasureSteps(nlSteps),
+          script.canonical_json.target_url ?? loadRun.url,
+        ).map((s) => ({
+          intent: s.label,
+          action: s.action as K6ScriptStep["action"],
+          target: s.target,
+          value: s.value,
+          label: s.label,
+        }));
+      }
+    }
+
+    const request: K6RunRequest = {
+      url: loadRun.url,
+      n_runs: loadRun.target_vus,
+      device: "desktop",
+      viewport: { width: 1920, height: 1080 },
+      engine: "k6_browser",
+      load_profile: {
+        stages: loadRun.stages.map((s) => ({
+          duration_s: s.duration_s,
+          target_vus: s.target_vus,
+        })),
+        target_vus: loadRun.target_vus,
+        cache_state: loadRun.cache_state as "cold" | "warm" | "production_replay",
+      },
+      script_steps: scriptSteps,
+    };
+
+    console.log(`[worker:load] Running k6 with ${loadRun.stages.length} stage(s), ${loadRun.target_vus} VUs`);
+    const result = await k6.run(request);
+
+    const durationS = (Date.now() - new Date(startedAt).getTime()) / 1000;
+    const vuMinutes = loadRun.stages.reduce((acc, s) => {
+      return acc + (s.target_vus * s.duration_s) / 60;
+    }, 0);
+
+    console.log(`[worker:load] Load run ${loadRun.id} ${result.success ? "completed" : "failed"} in ${durationS.toFixed(1)}s`);
+
+    await completeLoadRun(loadRun.id, {
+      success: result.success,
+      metrics_summary: result.metrics,
+      actual_peak_vus: loadRun.target_vus,
+      vu_minutes: Math.round(vuMinutes * 10) / 10,
+      duration_s: Math.round(durationS),
+      error: result.error,
+    });
+  } catch (e) {
+    console.error(`[worker:load] Load run ${loadRun.id} crashed: ${e}`);
+    await completeLoadRun(loadRun.id, {
+      success: false,
+      error: String(e),
+    });
+  }
+}
+
+// =====================================================
+// Main Poll Loop
+// =====================================================
+
 async function pollLoop(): Promise<void> {
   console.log(`[worker] Poll loop started — API: ${API_URL}, interval: ${POLL_INTERVAL}ms`);
 
   while (true) {
+    // Try to claim a regular run first
     const run = await claimRun();
     if (run) {
       await executeRun(run);
-      // Check for more immediately
       continue;
     }
+
+    // Then try to claim a load run
+    const loadRun = await claimLoadRun();
+    if (loadRun) {
+      await executeLoadRun(loadRun);
+      continue;
+    }
+
     // No work — wait before polling again
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
   }

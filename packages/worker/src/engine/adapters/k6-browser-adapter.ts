@@ -45,9 +45,18 @@ export interface UiServerTarget {
   labels?: Record<string, string>;
 }
 
+export interface K6ScriptStep {
+  intent: string;
+  action: "visit" | "click" | "fill" | "scroll" | "wait_for" | "measure";
+  target: string;
+  value?: string;
+  label: string;
+}
+
 export interface K6RunRequest extends EngineRunRequest {
   engine: "k6_browser";
   load_profile: K6LoadProfile;
+  script_steps?: K6ScriptStep[];
 }
 
 export interface K6Summary {
@@ -139,6 +148,17 @@ export class K6BrowserAdapter implements TestRunner {
    * Generate a k6 browser script from the run request and load profile.
    */
   generateK6Script(request: EngineRunRequest, profile: K6LoadProfile): string {
+    const k6Request = request as K6RunRequest;
+    if (k6Request.script_steps && k6Request.script_steps.length > 0) {
+      return this.generateJourneyK6Script(request, profile, k6Request.script_steps);
+    }
+    return this.generateSingleUrlK6Script(request, profile);
+  }
+
+  /**
+   * Generate a single-URL k6 browser script.
+   */
+  private generateSingleUrlK6Script(request: EngineRunRequest, profile: K6LoadProfile): string {
     const stages = profile.stages.map(
       (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
     ).join(",\n      ");
@@ -180,6 +200,85 @@ export default async function () {
     check(page, {
       'page loaded': (p) => p.url() !== 'about:blank',
     });
+  } finally {
+    await page.close();
+  }
+}
+`;
+  }
+
+  /**
+   * Generate a multi-step journey k6 browser script from compiled steps.
+   * Each VU executes the full journey; measure steps capture web vitals.
+   */
+  generateJourneyK6Script(
+    request: EngineRunRequest,
+    profile: K6LoadProfile,
+    steps: K6ScriptStep[],
+  ): string {
+    const stages = profile.stages.map(
+      (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
+    ).join(",\n      ");
+
+    const viewport = request.viewport ?? { width: 1920, height: 1080 };
+    const escUrl = request.url.replace(/'/g, "\\'");
+
+    // Build step code
+    const stepCode = steps.map((step) => {
+      const safeTarget = step.target.replace(/'/g, "\\'");
+      const safeLabel = step.label.replace(/'/g, "\\'");
+      switch (step.action) {
+        case "visit":
+          return `    await page.goto('${safeTarget}', { waitUntil: 'networkidle' });\n    await page.waitForTimeout(1000);`;
+        case "click":
+          return `    await page.locator('${safeTarget}').first().click();\n    await page.waitForTimeout(2000);`;
+        case "fill":
+          return `    await page.locator('${safeTarget}').first().fill('${(step.value ?? '').replace(/'/g, "\\\'")}');`;
+        case "scroll":
+          return `    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));\n    await page.waitForTimeout(500);`;
+        case "wait_for":
+          return `    await page.waitForTimeout(2000);`;
+        case "measure":
+          return `    // Measure: ${safeLabel}\n    await page.waitForTimeout(1000);\n    check(page, { '${safeLabel} loaded': (p) => p.url() !== 'about:blank' });`;
+        default:
+          return `    // Unknown step: ${safeLabel}`;
+      }
+    }).join("\n\n");
+
+    return `
+import { browser } from 'k6/browser';
+import { check } from 'k6';
+
+export const options = {
+  scenarios: {
+    browser_journey: {
+      executor: 'ramping-vus',
+      stages: [
+      ${stages}
+      ],
+      options: {
+        browser: {
+          type: 'chromium',
+        },
+      },
+    },
+  },
+  thresholds: {
+    'browser_web_vital_lcp': ['p(95)<2500'],
+    'browser_web_vital_fcp': ['p(95)<1800'],
+    'browser_web_vital_cls': ['p(95)<0.1'],
+  },
+};
+
+export default async function () {
+  const page = await browser.newPage();
+  try {
+    await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });
+    await page.goto('${escUrl}', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1000);
+
+${stepCode}
+
   } finally {
     await page.close();
   }

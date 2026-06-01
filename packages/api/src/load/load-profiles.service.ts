@@ -13,6 +13,7 @@ export interface LoadProfileRow {
   network_profile: string | null;
   device: string;
   concurrency_cap: number;
+  script_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,7 @@ export interface CreateLoadProfileDto {
   network_profile?: string;
   device?: string;
   concurrency_cap?: number;
+  script_id?: string;
 }
 
 @Injectable()
@@ -78,8 +80,8 @@ export class LoadProfilesService {
     const result = await this.db.query<LoadProfileRow>(
       `INSERT INTO load_profiles
         (project_id, name, description, stages, target_vus, cache_state,
-         ui_server_targets, network_profile, device, concurrency_cap)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ui_server_targets, network_profile, device, concurrency_cap, script_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         dto.project_id,
@@ -92,6 +94,7 @@ export class LoadProfilesService {
         dto.network_profile ?? null,
         dto.device ?? "desktop",
         dto.concurrency_cap ?? 10,
+        dto.script_id ?? null,
       ],
     );
     return result.rows[0];
@@ -107,7 +110,8 @@ export class LoadProfilesService {
         target_vus = COALESCE($5, target_vus),
         cache_state = COALESCE($6, cache_state),
         ui_server_targets = COALESCE($7, ui_server_targets),
-        concurrency_cap = COALESCE($8, concurrency_cap)
+        concurrency_cap = COALESCE($8, concurrency_cap),
+        script_id = COALESCE($9, script_id)
        WHERE id = $1
        RETURNING *`,
       [
@@ -119,6 +123,7 @@ export class LoadProfilesService {
         dto.cache_state ?? null,
         dto.ui_server_targets ? JSON.stringify(dto.ui_server_targets) : null,
         dto.concurrency_cap ?? null,
+        dto.script_id ?? null,
       ],
     );
     return result.rows[0];

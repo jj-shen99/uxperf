@@ -157,6 +157,122 @@ describe("Investigation page — timeline logic", () => {
   });
 });
 
+// Replicate detectClientSideAnomalies from investigation/page.tsx
+const CLIENT_THRESHOLDS: Record<string, { good: number; poor: number; label: string; unit: string }> = {
+  lcp_ms: { good: 2500, poor: 4000, label: "LCP", unit: "ms" },
+  fcp_ms: { good: 1800, poor: 3000, label: "FCP", unit: "ms" },
+  cls: { good: 0.1, poor: 0.25, label: "CLS", unit: "" },
+  ttfb_ms: { good: 800, poor: 1800, label: "TTFB", unit: "ms" },
+  inp_ms: { good: 200, poor: 500, label: "INP", unit: "ms" },
+  tbt_ms: { good: 200, poor: 600, label: "TBT", unit: "ms" },
+};
+
+function detectClientSideAnomalies(runs: any[], projectId: string): any[] {
+  const completed = runs
+    .filter((r: any) => r.status === "completed" && r.metrics && r.project_id === projectId)
+    .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  if (completed.length < 2) return [];
+  const detected: any[] = [];
+  for (const key of Object.keys(CLIENT_THRESHOLDS)) {
+    const vals: { run: any; value: number }[] = [];
+    for (const r of completed) {
+      const v = r.metrics?.[key] as number | undefined;
+      if (v != null) vals.push({ run: r, value: v });
+    }
+    if (vals.length < 2) continue;
+    for (let i = 1; i < vals.length; i++) {
+      const prev = vals.slice(Math.max(0, i - 5), i);
+      const avg = prev.reduce((s, p) => s + p.value, 0) / prev.length;
+      const stddev = Math.sqrt(prev.reduce((s, p) => s + (p.value - avg) ** 2, 0) / prev.length);
+      const current = vals[i].value;
+      const run = vals[i].run;
+      const th = CLIENT_THRESHOLDS[key];
+      const deviation = current - avg;
+      const threshold = Math.max(stddev * 2, avg * 0.15);
+      if (deviation > threshold && current > th.good) {
+        const changePct = ((current - avg) / avg) * 100;
+        let severity: "critical" | "warning" | "info" = "info";
+        if (current > th.poor) severity = "critical";
+        else if (current > th.good) severity = "warning";
+        detected.push({
+          id: `client-${run.id}-${key}`,
+          project_id: run.project_id,
+          run_id: run.id,
+          metric: key,
+          severity,
+          status: "open",
+          detector: "client_threshold",
+          description: `${th.label} spiked`,
+          details: { value: current, baseline: avg, change_percent: changePct },
+          detected_at: run.finished_at ?? run.created_at,
+        });
+      }
+    }
+  }
+  return detected.sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
+}
+
+describe("Investigation page — client-side anomaly fallback", () => {
+  it("detects a spike above the good threshold", () => {
+    const runs = [
+      { id: "r1", project_id: "p1", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01" },
+      { id: "r2", project_id: "p1", status: "completed", metrics: { lcp_ms: 5000 }, created_at: "2024-01-02" },
+    ];
+    const anomalies = detectClientSideAnomalies(runs, "p1");
+    expect(anomalies.length).toBeGreaterThan(0);
+    expect(anomalies[0].metric).toBe("lcp_ms");
+    expect(anomalies[0].severity).toBe("critical"); // 5000 > 4000 (poor)
+  });
+
+  it("returns empty when fewer than 2 completed runs", () => {
+    const runs = [
+      { id: "r1", project_id: "p1", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01" },
+    ];
+    expect(detectClientSideAnomalies(runs, "p1")).toEqual([]);
+  });
+
+  it("ignores runs from other projects", () => {
+    const runs = [
+      { id: "r1", project_id: "p2", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01" },
+      { id: "r2", project_id: "p2", status: "completed", metrics: { lcp_ms: 5000 }, created_at: "2024-01-02" },
+    ];
+    expect(detectClientSideAnomalies(runs, "p1")).toEqual([]);
+  });
+
+  it("does not flag small deviations below good threshold", () => {
+    const runs = [
+      { id: "r1", project_id: "p1", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01" },
+      { id: "r2", project_id: "p1", status: "completed", metrics: { lcp_ms: 1300 }, created_at: "2024-01-02" },
+    ];
+    // 1300 < 2500 (good threshold), so no anomaly
+    expect(detectClientSideAnomalies(runs, "p1")).toEqual([]);
+  });
+
+  it("classifies warning severity correctly", () => {
+    const runs = [
+      { id: "r1", project_id: "p1", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01" },
+      { id: "r2", project_id: "p1", status: "completed", metrics: { lcp_ms: 3000 }, created_at: "2024-01-02" },
+    ];
+    const anomalies = detectClientSideAnomalies(runs, "p1");
+    expect(anomalies.length).toBeGreaterThan(0);
+    expect(anomalies[0].severity).toBe("warning"); // 3000 > 2500 (good) but < 4000 (poor)
+  });
+
+  it("sets correct anomaly fields", () => {
+    const runs = [
+      { id: "r1", project_id: "p1", status: "completed", metrics: { lcp_ms: 1200 }, created_at: "2024-01-01", finished_at: "2024-01-01T01:00:00Z" },
+      { id: "r2", project_id: "p1", status: "completed", metrics: { lcp_ms: 5000 }, created_at: "2024-01-02", finished_at: "2024-01-02T01:00:00Z" },
+    ];
+    const anomalies = detectClientSideAnomalies(runs, "p1");
+    expect(anomalies[0].run_id).toBe("r2");
+    expect(anomalies[0].project_id).toBe("p1");
+    expect(anomalies[0].detector).toBe("client_threshold");
+    expect(anomalies[0].status).toBe("open");
+    expect(anomalies[0].id).toContain("client-");
+    expect(anomalies[0].detected_at).toBe("2024-01-02T01:00:00Z");
+  });
+});
+
 describe("Anomalies page — minimum run threshold", () => {
   it("requires at least 2 completed runs to detect anomalies", () => {
     const runs = [

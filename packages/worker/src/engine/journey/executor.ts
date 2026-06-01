@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import {
   collectWebVitals,
+  collectWebVitalsSPA,
   collectPageTimings,
   collectResourceSummary,
 } from "../metrics-collector";
@@ -69,6 +70,9 @@ export async function executeJourney(
   const page: Page = await context.newPage();
   let lastError: string | undefined;
 
+  // Track what the previous step did, so measure knows which collector to use
+  let lastActionBeforeMeasure: string | undefined;
+
   // E-06: Start HAR collector before navigation
   const harCollector = opts.captureHar
     ? createHarCollector(page, definition.target)
@@ -81,6 +85,18 @@ export async function executeJourney(
     for (const step of steps) {
       const stepStart = new Date();
       await onProgress?.(`Step ${step.index + 1}/${steps.length}: ${step.label}`);
+
+      // Before click steps, set an SPA navigation marker so the measure
+      // step can compute render time relative to the click
+      if (step.action === "click" || step.action === "hover" || step.action === "select" || step.action === "press") {
+        try {
+          await page.evaluate(() => {
+            (window as any).__perfSpaNavStart = performance.now();
+          });
+        } catch {
+          // Marker is best-effort
+        }
+      }
 
       let error: string | undefined;
       try {
@@ -118,11 +134,19 @@ export async function executeJourney(
         error,
       });
 
+      // Track last non-measure action for deciding which collector to use
+      if (step.action !== "measure") {
+        lastActionBeforeMeasure = step.action;
+      }
+
       // E-03: measure directive
       if (step.action === "measure") {
         try {
+          // Use SPA-aware collector after click/interaction steps,
+          // standard collector after visit (full navigation) steps
+          const useSpaCollector = lastActionBeforeMeasure !== "visit";
           const [vitals, timings, resources] = await Promise.all([
-            collectWebVitals(page),
+            useSpaCollector ? collectWebVitalsSPA(page) : collectWebVitals(page),
             collectPageTimings(page),
             collectResourceSummary(page),
           ]);
@@ -194,7 +218,13 @@ async function executeStep(
 
     case "click":
       await resolveLocator(page, step.target).click({ timeout });
-      await page.waitForTimeout(Math.min(opts.settleDelay, 500));
+      // Wait for network to settle after click — SPA navigations may fetch data
+      try {
+        await page.waitForLoadState("networkidle", { timeout: 5000 });
+      } catch {
+        // Fallback: if networkidle times out, at least wait for the settle delay
+      }
+      await page.waitForTimeout(Math.max(opts.settleDelay, 1000));
       break;
 
     case "fill":

@@ -225,3 +225,133 @@ describe("computeCategoryScores", () => {
     expect(scores.budgets.total).toBe(budgetItems.length);
   });
 });
+
+// Replicate autoEvaluate from audit/page.tsx
+function autoEvaluate(
+  runs: any[],
+  gates: any[],
+  _schedules: any[],
+  baselines: any[],
+  anomalies: any[],
+  loadProfiles: any[],
+  channels: any[],
+  budgets: any[],
+): Record<string, AuditStatus> {
+  const result: Record<string, AuditStatus> = {};
+  const completedRuns = runs.filter((r: any) => r.status === "completed" && r.metrics);
+  const hasMetrics = completedRuns.length > 0;
+
+  const multiRuns = completedRuns.filter((r: any) => (r.config?.n_runs ?? 1) >= 3);
+  result.mh_3 = multiRuns.length > 0 ? (multiRuns.length === completedRuns.length ? "pass" : "partial") : completedRuns.length > 0 ? "fail" : "not_checked";
+
+  if (hasMetrics) {
+    const latest = completedRuns[completedRuns.length - 1];
+    const m = latest.metrics ?? {};
+    const hasAllCWV = m.lcp_ms != null && m.fcp_ms != null && m.cls != null && m.ttfb_ms != null;
+    result.mh_6 = hasAllCWV ? "pass" : "partial";
+  }
+
+  result.lt_1 = loadProfiles.length > 0 ? "pass" : "fail";
+  const loadRuns = runs.filter((r: any) => r.mode === "load" || r.engine === "k6_browser");
+  result.lt_3 = loadRuns.length > 0 ? "pass" : "fail";
+  result.rt_1 = anomalies.length > 0 ? "pass" : "fail";
+  result.rt_2 = channels.length > 0 ? "pass" : "fail";
+  result.rt_3 = baselines.length > 0 ? "pass" : "fail";
+  result.bg_1 = budgets.length > 0 || gates.some((g: any) => g.metric) ? "pass" : "fail";
+  result.bg_2 = gates.length > 0 ? "pass" : "fail";
+  return result;
+}
+
+describe("autoEvaluate", () => {
+  it("returns all fail/not_checked with empty project data", () => {
+    const result = autoEvaluate([], [], [], [], [], [], [], []);
+    expect(result.mh_3).toBe("not_checked");
+    expect(result.lt_1).toBe("fail");
+    expect(result.lt_3).toBe("fail");
+    expect(result.rt_1).toBe("fail");
+    expect(result.rt_2).toBe("fail");
+    expect(result.rt_3).toBe("fail");
+    expect(result.bg_1).toBe("fail");
+    expect(result.bg_2).toBe("fail");
+  });
+
+  it("returns pass for items with matching data", () => {
+    const runs = [
+      { status: "completed", metrics: { lcp_ms: 1200, fcp_ms: 800, cls: 0.05, ttfb_ms: 200 }, config: { n_runs: 5 } },
+    ];
+    const result = autoEvaluate(
+      runs,
+      [{ metric: "lcp_ms", threshold: 2500 }],
+      [],
+      [{ id: "b1" }],
+      [{ id: "a1" }],
+      [{ id: "lp1" }],
+      [{ id: "ch1" }],
+      [{ id: "bud1" }],
+    );
+    expect(result.mh_3).toBe("pass");
+    expect(result.mh_6).toBe("pass");
+    expect(result.lt_1).toBe("pass");
+    expect(result.rt_1).toBe("pass");
+    expect(result.rt_2).toBe("pass");
+    expect(result.rt_3).toBe("pass");
+    expect(result.bg_1).toBe("pass");
+    expect(result.bg_2).toBe("pass");
+  });
+
+  it("returns partial for mh_3 when some runs have n_runs < 3", () => {
+    const runs = [
+      { status: "completed", metrics: { lcp_ms: 1200 }, config: { n_runs: 5 } },
+      { status: "completed", metrics: { lcp_ms: 1300 }, config: { n_runs: 1 } },
+    ];
+    const result = autoEvaluate(runs, [], [], [], [], [], [], []);
+    expect(result.mh_3).toBe("partial");
+  });
+
+  it("returns fail for mh_3 when all runs have n_runs < 3", () => {
+    const runs = [
+      { status: "completed", metrics: { lcp_ms: 1200 }, config: { n_runs: 1 } },
+    ];
+    const result = autoEvaluate(runs, [], [], [], [], [], [], []);
+    expect(result.mh_3).toBe("fail");
+  });
+
+  it("returns partial for mh_6 when some CWV metrics missing", () => {
+    const runs = [
+      { status: "completed", metrics: { lcp_ms: 1200, fcp_ms: 800 } },
+    ];
+    const result = autoEvaluate(runs, [], [], [], [], [], [], []);
+    expect(result.mh_6).toBe("partial");
+  });
+
+  it("detects load runs by engine=k6_browser", () => {
+    const runs = [{ engine: "k6_browser", status: "completed", metrics: {} }];
+    const result = autoEvaluate(runs, [], [], [], [], [], [], []);
+    expect(result.lt_3).toBe("pass");
+  });
+
+  it("saved statuses override auto-evaluated ones", () => {
+    const auto = autoEvaluate([], [], [], [], [], [], [], []);
+    expect(auto.lt_1).toBe("fail");
+    // When merged with saved: { lt_1: "pass" }, saved wins
+    const merged = { ...auto, lt_1: "pass" as AuditStatus };
+    expect(merged.lt_1).toBe("pass");
+    // Score should be non-zero now
+    expect(computeAuditScore(merged)).toBeGreaterThan(0);
+  });
+
+  it("overall score is non-zero when auto-eval finds passing items", () => {
+    const result = autoEvaluate(
+      [{ status: "completed", metrics: { lcp_ms: 1200, fcp_ms: 800, cls: 0.05, ttfb_ms: 200 }, config: { n_runs: 5 } }],
+      [{ metric: "lcp_ms" }],
+      [],
+      [{ id: "b1" }],
+      [{ id: "a1" }],
+      [{ id: "lp1" }],
+      [{ id: "ch1" }],
+      [{ id: "bud1" }],
+    );
+    const score = computeAuditScore(result);
+    expect(score).toBeGreaterThan(0);
+  });
+});

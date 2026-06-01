@@ -1,0 +1,1 @@
+ALTER TABLE load_runs DROP COLUMN IF EXISTS url;

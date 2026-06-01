@@ -10,6 +10,7 @@ import type { JourneyDefinition, CompiledStep } from "../journey/types";
 // Mock metrics-collector
 vi.mock("../metrics-collector", () => ({
   collectWebVitals: vi.fn().mockResolvedValue({ lcp_ms: 1200, fcp_ms: 600, cls: 0.02, ttfb_ms: 80 }),
+  collectWebVitalsSPA: vi.fn().mockResolvedValue({ lcp_ms: 350, fcp_ms: 210, cls: 0.01, ttfb_ms: 45 }),
   collectPageTimings: vi.fn().mockResolvedValue({ dom_content_loaded_ms: 400, load_event_ms: 900 }),
   collectResourceSummary: vi.fn().mockResolvedValue({ total_requests: 25, total_transfer_size_bytes: 500000 }),
 }));
@@ -60,6 +61,7 @@ function createMockPage() {
   const page = {
     goto: vi.fn().mockResolvedValue(undefined),
     waitForTimeout: vi.fn().mockResolvedValue(undefined),
+    waitForLoadState: vi.fn().mockResolvedValue(undefined),
     waitForURL: vi.fn().mockResolvedValue(undefined),
     screenshot: vi.fn().mockResolvedValue(Buffer.from("fake-png")),
     evaluate: vi.fn().mockResolvedValue(undefined),
@@ -407,7 +409,8 @@ describe("executeJourney", () => {
       expect(result.success).toBe(true);
       expect(result.steps).toHaveLength(7);
       expect(result.measurements).toHaveLength(1);
-      expect(result.measurements[0].web_vitals.lcp_ms).toBe(1200);
+      // SPA collector is used because measure follows click steps (not a visit)
+      expect(result.measurements[0].web_vitals.lcp_ms).toBe(350);
 
       // All non-measure steps have screenshots
       for (let i = 0; i < 6; i++) {

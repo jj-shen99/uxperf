@@ -13,6 +13,7 @@ import { LoadOrchestratorService } from "./load-orchestrator.service";
 import { ServerTelemetryService } from "./server-telemetry.service";
 import { LoadCorrelationService } from "./load-correlation.service";
 import { LoadGatesService } from "./load-gates.service";
+import { Public } from "../auth/auth.guard";
 
 @Controller("load")
 export class LoadController {
@@ -76,6 +77,20 @@ export class LoadController {
     return this.orchestrator.createLoadRun(body);
   }
 
+  /** Worker polls this to claim the next queued load run. */
+  @Public()
+  @Post("runs/claim")
+  claimLoadRun() {
+    return this.orchestrator.claimLoadRun();
+  }
+
+  /** Worker calls this when a load run completes or fails. */
+  @Public()
+  @Post("runs/:id/complete")
+  completeLoadRun(@Param("id") id: string, @Body() payload: any) {
+    return this.orchestrator.completeLoadRun(id, payload);
+  }
+
   @Patch("runs/:id/status")
   updateLoadRunStatus(
     @Param("id") id: string,
@@ -88,6 +103,11 @@ export class LoadController {
   @Post("runs/:id/cancel")
   cancelLoadRun(@Param("id") id: string) {
     return this.orchestrator.cancel(id);
+  }
+
+  @Delete("runs/:id")
+  deleteLoadRun(@Param("id") id: string) {
+    return this.orchestrator.deleteLoadRun(id);
   }
 
   @Post("runs/:id/cost-estimate")

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/use-projects";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   AreaChart,
   Area,
@@ -74,6 +75,7 @@ function StagePreview({ stages }: { stages: Stage[] }) {
 export default function LoadTestingPage() {
   const queryClient = useQueryClient();
   const { projects, projectId, setProjectId } = useProjects();
+  const { isAdmin } = useCurrentUser();
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [showCreateProfile, setShowCreateProfile] = useState(false);
   const [showQuickRun, setShowQuickRun] = useState(false);
@@ -95,6 +97,11 @@ export default function LoadTestingPage() {
   const [qVUs, setQVUs] = useState(5);
   const [qDuration, setQDuration] = useState(60);
   const [qCache, setQCache] = useState<string>("warm");
+  const [qUrl, setQUrl] = useState<string>("");
+  const [qScriptId, setQScriptId] = useState<string>("");
+
+  // Profile script state
+  const [pScriptId, setPScriptId] = useState<string>("");
 
   // Queries
   const { data: loadRuns = [], isLoading: runsLoading } = useQuery({
@@ -106,6 +113,12 @@ export default function LoadTestingPage() {
   const { data: profiles = [], isLoading: profilesLoading } = useQuery({
     queryKey: ["load-profiles"],
     queryFn: () => api.load.profiles.list(),
+  });
+
+  const { data: scripts = [] } = useQuery({
+    queryKey: ["scripts", projectId],
+    queryFn: () => api.scripts.list(projectId || undefined),
+    enabled: !!projectId,
   });
 
   const { data: correlation } = useQuery({
@@ -145,6 +158,11 @@ export default function LoadTestingPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
   });
 
+  const deleteRun = useMutation({
+    mutationFn: (id: string) => api.load.runs.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
+  });
+
   const addStage = () => setPStages([...pStages, { duration_s: 30, target_vus: pVUs, ramp_type: "linear" }]);
   const removeStage = (i: number) => setPStages(pStages.filter((_, idx) => idx !== i));
   const updateStage = (i: number, field: keyof Stage, value: number | string) =>
@@ -159,6 +177,7 @@ export default function LoadTestingPage() {
       stages: pStages,
       target_vus: pVUs,
       cache_state: pCache,
+      ...(pScriptId ? { script_id: pScriptId } : {}),
     });
   };
 
@@ -173,6 +192,8 @@ export default function LoadTestingPage() {
         { duration_s: Math.round(qDuration * 0.2), target_vus: 0, ramp_type: "linear" },
       ],
       cache_state: qCache,
+      ...(qUrl.trim() ? { url: qUrl.trim() } : {}),
+      ...(qScriptId ? { script_id: qScriptId } : {}),
     });
     setShowQuickRun(false);
   };
@@ -255,7 +276,12 @@ export default function LoadTestingPage() {
       {showQuickRun && (
         <div className="rounded-lg border border-indigo-800/50 bg-indigo-900/20 p-4 space-y-3">
           <h3 className="text-sm font-medium text-indigo-300">Quick Run (Ramp Up → Steady → Ramp Down)</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-5 gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Target URL</label>
+              <input type="url" placeholder="https://example.com" value={qUrl} onChange={(e) => setQUrl(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+            </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Virtual Users</label>
               <input type="number" min={1} max={500} value={qVUs} onChange={(e) => setQVUs(Number(e.target.value))}
@@ -273,7 +299,20 @@ export default function LoadTestingPage() {
                 {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Journey Script</label>
+              <select value={qScriptId} onChange={(e) => setQScriptId(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                <option value="">Single URL (no script)</option>
+                {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
+          {qScriptId && (
+            <p className="text-[10px] text-indigo-300/70">
+              Each VU will execute the full journey script. Per-link web vitals will be captured at each measure step.
+            </p>
+          )}
           <StagePreview stages={[
             { duration_s: Math.round(qDuration * 0.2), target_vus: qVUs },
             { duration_s: Math.round(qDuration * 0.6), target_vus: qVUs },
@@ -304,7 +343,7 @@ export default function LoadTestingPage() {
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Target VUs</label>
               <input type="number" min={1} max={500} value={pVUs} onChange={(e) => setPVUs(Number(e.target.value))}
@@ -322,6 +361,14 @@ export default function LoadTestingPage() {
               <select value={pEngine} onChange={(e) => setPEngine(e.target.value)}
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
                 {ENGINE_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Journey Script</label>
+              <select value={pScriptId} onChange={(e) => setPScriptId(e.target.value)}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                <option value="">Single URL (no script)</option>
+                {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
           </div>
@@ -395,6 +442,11 @@ export default function LoadTestingPage() {
                   <span>{p.stages?.length ?? 0} stages</span>
                   <span>{p.cache_state}</span>
                   <span>{p.device ?? "desktop"}</span>
+                  {p.script_id && (
+                    <span className="text-indigo-400">
+                      {scripts.find((s: any) => s.id === p.script_id)?.name ?? "script"}
+                    </span>
+                  )}
                 </div>
                 {p.stages && <StagePreview stages={p.stages} />}
               </div>
@@ -484,7 +536,11 @@ export default function LoadTestingPage() {
                     </span>
                     <span className="text-sm font-medium text-gray-200">{run.engine}</span>
                     <span className="text-xs text-gray-500">
+                      {run.url && <>{run.url} · </>}
                       {run.target_vus} VUs · {run.cache_state}
+                      {run.script_id && (
+                        <> · <span className="text-indigo-400">{scripts.find((s: any) => s.id === run.script_id)?.name ?? "script"}</span></>
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -500,6 +556,14 @@ export default function LoadTestingPage() {
                         className="rounded border border-red-800/50 px-2 py-0.5 text-xs text-red-400 hover:bg-red-900/30"
                       >
                         Cancel
+                      </button>
+                    )}
+                    {isAdmin && ["completed", "failed", "cancelled"].includes(run.status) && (
+                      <button
+                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); if (confirm("Delete this load run?")) deleteRun.mutate(run.id); }}
+                        className="rounded border border-red-800/50 px-2 py-0.5 text-xs text-red-400 hover:bg-red-900/30"
+                      >
+                        Delete
                       </button>
                     )}
                     <span className="text-xs text-gray-600">{new Date(run.created_at).toLocaleString()}</span>

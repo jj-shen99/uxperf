@@ -120,6 +120,67 @@ function StatusIcon({ status }: { status: AuditStatus }) {
 
 // ── PAGE COMPONENT ──
 
+/**
+ * Auto-evaluate checklist items from project data.
+ * Returns statuses only for items that can be verified automatically;
+ * items that require human judgment are left as-is.
+ */
+function autoEvaluate(
+  runs: any[],
+  gates: any[],
+  schedules: any[],
+  baselines: any[],
+  anomalies: any[],
+  loadProfiles: any[],
+  channels: any[],
+  budgets: any[],
+): Record<string, AuditStatus> {
+  const result: Record<string, AuditStatus> = {};
+
+  const completedRuns = runs.filter((r: any) => r.status === "completed" && r.metrics);
+  const hasMetrics = completedRuns.length > 0;
+
+  // -- Measurement Hygiene --
+  // mh_3: n_runs >= 3
+  const multiRuns = completedRuns.filter((r: any) => (r.config?.n_runs ?? 1) >= 3);
+  result.mh_3 = multiRuns.length > 0 ? (multiRuns.length === completedRuns.length ? "pass" : "partial") : completedRuns.length > 0 ? "fail" : "not_checked";
+
+  // mh_6: All Core Web Vitals tracked
+  if (hasMetrics) {
+    const latest = completedRuns[completedRuns.length - 1];
+    const m = latest.metrics ?? {};
+    const hasAllCWV = m.lcp_ms != null && m.fcp_ms != null && m.cls != null && m.ttfb_ms != null;
+    result.mh_6 = hasAllCWV ? "pass" : "partial";
+  }
+
+  // -- Load Testing --
+  // lt_1: Load profiles defined
+  result.lt_1 = loadProfiles.length > 0 ? "pass" : "fail";
+
+  // lt_3: Load tests run regularly
+  const loadRuns = runs.filter((r: any) => r.mode === "load" || r.engine === "k6_browser");
+  result.lt_3 = loadRuns.length > 0 ? "pass" : "fail";
+
+  // -- Runtime & Monitoring --
+  // rt_1: Anomaly detection enabled
+  result.rt_1 = anomalies.length > 0 ? "pass" : "fail";
+
+  // rt_2: Notification channels tested
+  result.rt_2 = channels.length > 0 ? "pass" : "fail";
+
+  // rt_3: Baselines regularly updated
+  result.rt_3 = baselines.length > 0 ? "pass" : "fail";
+
+  // -- Budgets & Gates --
+  // bg_1: Performance budgets defined
+  result.bg_1 = budgets.length > 0 || gates.some((g: any) => g.metric) ? "pass" : "fail";
+
+  // bg_2: CI gates enforce budgets
+  result.bg_2 = gates.length > 0 ? "pass" : "fail";
+
+  return result;
+}
+
 export default function AuditChecklistPage() {
   const queryClient = useQueryClient();
   const { projects, projectId, setProjectId } = useProjects();
@@ -133,13 +194,34 @@ export default function AuditChecklistPage() {
     enabled: !!projectId,
   });
 
-  const statuses: Record<string, AuditStatus> = useMemo(() => {
+  // Fetch project data for auto-audit evaluation
+  const { data: runs = [] } = useQuery({ queryKey: ["runs"], queryFn: () => api.runs.list() });
+  const { data: gates = [] } = useQuery({ queryKey: ["gates", projectId], queryFn: () => api.gates.list(projectId || undefined), enabled: !!projectId });
+  const { data: schedules = [] } = useQuery({ queryKey: ["schedules", projectId], queryFn: () => api.schedules.list(projectId || undefined), enabled: !!projectId });
+  const { data: baselines = [] } = useQuery({ queryKey: ["baselines", projectId], queryFn: () => api.baselines.list(projectId || undefined), enabled: !!projectId });
+  const { data: serverAnomalies = [] } = useQuery({ queryKey: ["anomalies", projectId], queryFn: () => api.analytics.anomalies(projectId || undefined), enabled: !!projectId });
+  const { data: loadProfiles = [] } = useQuery({ queryKey: ["load-profiles"], queryFn: () => api.load.profiles.list() });
+  const { data: channels = [] } = useQuery({ queryKey: ["notification-channels", projectId], queryFn: () => api.notifications.listChannels(projectId || undefined), enabled: !!projectId });
+  const { data: budgets = [] } = useQuery({ queryKey: ["budgets", projectId], queryFn: () => api.budgets.list(projectId || undefined), enabled: !!projectId });
+
+  const savedStatuses: Record<string, AuditStatus> = useMemo(() => {
     try {
       return savedConfig?.value ? JSON.parse(savedConfig.value) : {};
     } catch {
       return {};
     }
   }, [savedConfig]);
+
+  // Merge: auto-evaluated items provide defaults, saved statuses override
+  const autoStatuses = useMemo(() => {
+    if (!projectId) return {};
+    const projectRuns = runs.filter((r: any) => r.project_id === projectId);
+    return autoEvaluate(projectRuns, gates, schedules, baselines, serverAnomalies, loadProfiles, channels, budgets);
+  }, [projectId, runs, gates, schedules, baselines, serverAnomalies, loadProfiles, channels, budgets]);
+
+  const statuses: Record<string, AuditStatus> = useMemo(() => {
+    return { ...autoStatuses, ...savedStatuses };
+  }, [autoStatuses, savedStatuses]);
 
   const saveMut = useMutation({
     mutationFn: (newStatuses: Record<string, AuditStatus>) =>
@@ -148,8 +230,15 @@ export default function AuditChecklistPage() {
   });
 
   const setStatus = (itemId: string, status: AuditStatus) => {
-    const next = { ...statuses, [itemId]: status };
+    const next = { ...savedStatuses, [itemId]: status };
     saveMut.mutate(next);
+  };
+
+  const handleAutoAudit = () => {
+    if (!projectId) return;
+    // Save the auto-evaluated statuses merged with any existing overrides
+    const merged = { ...autoStatuses, ...savedStatuses };
+    saveMut.mutate(merged);
   };
 
   const overallScore = computeAuditScore(statuses);
@@ -162,19 +251,30 @@ export default function AuditChecklistPage() {
         <div>
           <h1 className="text-xl font-semibold text-white">Audit Checklist</h1>
           <p className="mt-1 text-sm text-gray-400">
-            Interactive performance audit based on best practices (Appendix C)
+            Interactive performance audit based on best practices
           </p>
         </div>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
-        >
-          <option value="">Select a project</option>
-          {projects.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+          >
+            <option value="">Select a project</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {projectId && (
+            <button
+              onClick={handleAutoAudit}
+              disabled={saveMut.isPending}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {saveMut.isPending ? "Auditing..." : "Auto-Audit"}
+            </button>
+          )}
+        </div>
       </div>
 
       {!projectId ? (

@@ -7,6 +7,8 @@ export interface LoadRunRow {
   project_id: string;
   load_profile_id: string | null;
   run_id: string | null;
+  script_id: string | null;
+  url: string | null;
   status: string;
   engine: string;
   target_vus: number;
@@ -44,6 +46,8 @@ export interface CreateLoadRunDto {
   project_id: string;
   load_profile_id?: string;
   run_id?: string;
+  script_id?: string;
+  url?: string;
   target_vus?: number;
   stages?: LoadStage[];
   cache_state?: string;
@@ -115,12 +119,17 @@ export class LoadOrchestratorService {
     let targetVus = dto.target_vus ?? 1;
     let cacheState = dto.cache_state ?? "warm";
     let engine = dto.engine ?? "k6_browser";
+    let scriptId = dto.script_id ?? null;
 
     if (dto.load_profile_id) {
       const profile = await this.loadProfilesService.findById(dto.load_profile_id);
       stages = profile.stages;
       targetVus = profile.target_vus;
       cacheState = profile.cache_state;
+      // Inherit script_id from profile if not explicitly provided
+      if (!scriptId && profile.script_id) {
+        scriptId = profile.script_id;
+      }
     }
 
     // Pre-run validation
@@ -140,14 +149,16 @@ export class LoadOrchestratorService {
 
     const result = await this.db.query<LoadRunRow>(
       `INSERT INTO load_runs
-        (project_id, load_profile_id, run_id, status, engine, target_vus, stages,
+        (project_id, load_profile_id, run_id, script_id, url, status, engine, target_vus, stages,
          cache_state, cost_estimate)
-       VALUES ($1, $2, $3, 'queued', $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         dto.project_id,
         dto.load_profile_id ?? null,
         dto.run_id ?? null,
+        scriptId,
+        dto.url ?? null,
         engine,
         targetVus,
         JSON.stringify(stages),
@@ -269,6 +280,94 @@ export class LoadOrchestratorService {
    */
   async cancel(id: string): Promise<LoadRunRow> {
     return this.updateStatus(id, "cancelled");
+  }
+
+  /**
+   * Atomically claim the next queued load run for execution.
+   * Returns the load run enriched with the project URL, or null if none available.
+   */
+  async claimLoadRun(): Promise<(LoadRunRow & { url: string }) | null> {
+    // Atomically transition queued → running
+    const result = await this.db.query<LoadRunRow>(
+      `UPDATE load_runs
+       SET status = 'running', started_at = now()
+       WHERE id = (
+         SELECT id FROM load_runs
+         WHERE status = 'queued'
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const loadRun = result.rows[0];
+
+    // Use the load run's own url if set, otherwise resolve from project environment_configs
+    let url = loadRun.url ?? "";
+    if (!url) {
+      const projectResult = await this.db.query<{
+        environment_configs: Record<string, any>;
+      }>(
+        "SELECT environment_configs FROM projects WHERE id = $1",
+        [loadRun.project_id],
+      );
+
+      const envConfigs = projectResult.rows[0]?.environment_configs ?? {};
+      url =
+        envConfigs.staging?.url ??
+        envConfigs.production?.url ??
+        Object.values(envConfigs).find((c: any) => c?.url)?.url ??
+        "";
+    }
+
+    this.logger.log(`Claimed load run ${loadRun.id}: ${loadRun.target_vus} VUs, engine=${loadRun.engine}`);
+
+    return { ...loadRun, url };
+  }
+
+  /**
+   * Complete a load run with metrics and status.
+   */
+  async completeLoadRun(
+    id: string,
+    payload: {
+      success: boolean;
+      metrics_summary?: Record<string, unknown>;
+      actual_peak_vus?: number;
+      vu_minutes?: number;
+      duration_s?: number;
+      saturation_warnings?: SaturationWarning[];
+      error?: string;
+    },
+  ): Promise<LoadRunRow> {
+    return this.updateStatus(
+      id,
+      payload.success ? "completed" : "failed",
+      {
+        metrics_summary: payload.metrics_summary,
+        actual_peak_vus: payload.actual_peak_vus,
+        vu_minutes: payload.vu_minutes,
+        duration_s: payload.duration_s,
+        saturation_warnings: payload.saturation_warnings,
+        error: payload.error,
+      },
+    );
+  }
+
+  /**
+   * Delete a load run by ID.
+   */
+  async deleteLoadRun(id: string): Promise<void> {
+    const result = await this.db.query(
+      "DELETE FROM load_runs WHERE id = $1",
+      [id],
+    );
+    if ((result as any).rowCount === 0) {
+      throw new NotFoundException(`Load run ${id} not found`);
+    }
   }
 
   // --- Validation & Enforcement ---
