@@ -1,9 +1,10 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const { headers: customHeaders, ...restOptions } = options ?? {};
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
+    ...restOptions,
+    headers: { "Content-Type": "application/json", ...(customHeaders as Record<string, string>) },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -66,6 +67,8 @@ export const api = {
     delete: (id: string) => request<void>(`/gates/${id}`, { method: "DELETE" }),
     evaluate: (runId: string) => request<any[]>("/gates/evaluate", { method: "POST", body: JSON.stringify({ run_id: runId }) }),
     getRunResults: (runId: string) => request<any[]>(`/gates/results/${encodeURIComponent(runId)}`),
+    yamlExport: (projectId: string) => request<{ yaml: string; gate_count: number }>(`/gates/yaml/export?project_id=${encodeURIComponent(projectId)}`),
+    yamlSync: (projectId: string, yaml: string) => request<any>("/gates/yaml/sync", { method: "POST", body: JSON.stringify({ project_id: projectId, yaml }) }),
   },
   schedules: {
     list: (projectId?: string) => request<any[]>(`/schedules${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),

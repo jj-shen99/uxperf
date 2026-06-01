@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useProjects } from "@/hooks/use-projects";
+import { GateYamlEditor } from "@/components/gate-yaml-editor";
 
 const GATE_TEMPLATES = [
   { name: "LCP Budget", metric: "lcp", operator: "lte", threshold: 2500, policy: "block", description: "Largest Contentful Paint ≤ 2.5s (Good)" },
@@ -37,6 +38,7 @@ export default function GatesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
+  const [showYaml, setShowYaml] = useState(false);
   const [filterProjectId, setFilterProjectId] = useState("");
   const [checkRunId, setCheckRunId] = useState("");
   const [checkResults, setCheckResults] = useState<any[] | null>(null);
@@ -171,25 +173,44 @@ export default function GatesPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => { setShowCheck(!showCheck); setShowCreate(false); setShowTemplates(false); setCheckResults(null); }}
+            onClick={() => { setShowYaml(!showYaml); setShowCheck(false); setShowCreate(false); setShowTemplates(false); }}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
+          >
+            {showYaml ? "Hide YAML" : "YAML Config"}
+          </button>
+          <button
+            onClick={() => { setShowCheck(!showCheck); setShowCreate(false); setShowTemplates(false); setShowYaml(false); setCheckResults(null); }}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
           >
             {showCheck ? "Hide Check" : "Check Against Run"}
           </button>
           <button
-            onClick={() => { setShowTemplates(!showTemplates); setShowCreate(false); setShowCheck(false); }}
+            onClick={() => { setShowTemplates(!showTemplates); setShowCreate(false); setShowCheck(false); setShowYaml(false); }}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
           >
             {showTemplates ? "Hide Templates" : "Templates"}
           </button>
           <button
-            onClick={() => { setShowCreate(!showCreate); setShowTemplates(false); setShowCheck(false); }}
+            onClick={() => { setShowCreate(!showCreate); setShowTemplates(false); setShowCheck(false); setShowYaml(false); }}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
           >
             {showCreate ? "Cancel" : "New Gate"}
           </button>
         </div>
       </div>
+
+      {/* YAML Config Editor */}
+      {showYaml && filterProjectId && (
+        <GateYamlEditor
+          projectId={filterProjectId}
+          projectName={projectMap[filterProjectId] || filterProjectId.slice(0, 8)}
+        />
+      )}
+      {showYaml && !filterProjectId && (
+        <div className="rounded-lg border border-yellow-900/40 bg-yellow-900/10 p-4">
+          <p className="text-sm text-yellow-400">Select a project from the filter below to use YAML configuration.</p>
+        </div>
+      )}
 
       {/* Check Against Run */}
       {showCheck && (

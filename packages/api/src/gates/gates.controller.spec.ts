@@ -2,6 +2,7 @@ import { Test } from "@nestjs/testing";
 import { GatesController } from "./gates.controller";
 import { GatesService } from "./gates.service";
 import { GateOverridesService } from "./gate-overrides.service";
+import { GateYamlConfigService } from "./gate-yaml-config.service";
 
 describe("GatesController", () => {
   let controller: GatesController;
@@ -20,6 +21,7 @@ describe("GatesController", () => {
       providers: [
         { provide: GatesService, useValue: mockService },
         { provide: GateOverridesService, useValue: {} },
+        { provide: GateYamlConfigService, useValue: { syncFromYaml: jest.fn() } },
       ],
     }).compile();
     controller = module.get(GatesController);

@@ -14,12 +14,14 @@ import {
   UpdateGateDto,
 } from "./gates.service";
 import { GateOverridesService, CreateOverrideDto, OverrideDecisionDto } from "./gate-overrides.service";
+import { GateYamlConfigService } from "./gate-yaml-config.service";
 
 @Controller("gates")
 export class GatesController {
   constructor(
     private readonly gatesService: GatesService,
     private readonly overridesService: GateOverridesService,
+    private readonly yamlConfigService: GateYamlConfigService,
   ) {}
 
   @Get()
@@ -90,5 +92,37 @@ export class GatesController {
   @Get("overrides/audit/:projectId")
   getOverrideAuditTrail(@Param("projectId") projectId: string) {
     return this.overridesService.getAuditTrail(projectId);
+  }
+
+  // -- E-48: YAML Config --
+
+  @Post("yaml/sync")
+  syncFromYaml(@Body() body: { project_id: string; yaml: string }) {
+    return this.yamlConfigService.syncFromYaml(body.project_id, body.yaml);
+  }
+
+  @Get("yaml/export")
+  async exportToYaml(@Query("project_id") projectId: string) {
+    const gates = await this.gatesService.findAll(projectId);
+    const lines = ["gates:"];
+    for (const g of gates) {
+      const def = g.definition;
+      lines.push(`  - name: ${g.name}`);
+      lines.push(`    metric: ${def.metric}`);
+      lines.push(`    type: ${def.type}`);
+      if (def.operator) lines.push(`    operator: ${def.operator}`);
+      if (def.threshold != null) lines.push(`    threshold: ${def.threshold}`);
+      if (def.regression_pct != null) lines.push(`    regression_pct: ${def.regression_pct}`);
+      if (def.baseline_stat) lines.push(`    baseline_stat: ${def.baseline_stat}`);
+      if (def.stddev_multiplier != null) lines.push(`    stddev_multiplier: ${def.stddev_multiplier}`);
+      lines.push(`    policy: ${g.policy}`);
+      lines.push(`    enabled: ${g.enabled}`);
+      if (def.quorum) {
+        lines.push(`    quorum:`);
+        if (def.quorum.window_size != null) lines.push(`      window_size: ${def.quorum.window_size}`);
+        if (def.quorum.required_failures != null) lines.push(`      required_failures: ${def.quorum.required_failures}`);
+      }
+    }
+    return { yaml: lines.join("\n"), gate_count: gates.length };
   }
 }

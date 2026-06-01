@@ -49,16 +49,16 @@ The book describes a family of gate types; several are missing or only partially
 |---|-------------|--------|----------|-------------|
 | E-49 | **PR comment — single-comment gate summary** | � | Ch 13, p167; Ch 15, p260 | Enhanced `buildDetailsTable()` with baseline comparison, delta-from-baseline (%), CI info, computed thresholds, and per-severity quorum detail. Fixed bug showing `undefined` for baseline/statistical gates. `fmtNum()` helper. |
 | E-50 | **Commit status on production deploys** | � | Ch 14, p244; Ch 15, p260 | `DeployWatchService` with `registerDeploy()`, `evaluateDeploy()` (compare RUM p75 vs baseline), `evaluateAllPending()`. Posts GitHub commit status via `reportCommitStatus()`. Expiry at 48h, min 30 RUM samples, 15% regression threshold. Migration 014 for `deploy_watches` table. 9 deploy watch tests. |
-| E-51 | **Pre-commit bundle-size check** | 🔴 | Ch 13, p211–212 | Lint-level check: if `package.json` adds a dependency, estimate the bundle-size impact and warn before commit. Not a full gate — a fast pre-commit sanity check. |
-| E-52 | **Staging smoke-test gate** | 🔴 | Ch 13, p215 | Run a reduced synthetic suite against staging per deploy (not per PR). Separate from PR gates — this is the "staging as sanity check" pattern. |
+| E-51 | **Pre-commit bundle-size check** | ✅ | Ch 13, p211–212 | `BundleSizeCheckService` in `ci/bundle-size-check.service.ts`. Compares before/after `package.json` deps, estimates bundle-size impact using known-sizes lookup (72 popular packages) + 25KB heuristic for unknowns. Warns at 50KB, fails at 200KB delta. `analyzePackageJsonDiff()`, `recordCheck()` for audit trail. Dev-only packages (typescript, jest, eslint) scored at 0KB. 10 tests. |
+| E-52 | **Staging smoke-test gate** | ✅ | Ch 13, p215 | `StagingSmokeService` in `ci/staging-smoke.service.ts`. Creates smoke test runs targeting staging URL per deploy SHA, finds smoke-tagged scripts, evaluates gates with `evaluateSmokeGates()`. `completeSmokeTest()` marks pass/fail, `timeoutStale()` expires stuck tests after 30 min. Supports lte/lt/gte/gt operators. 8 tests. |
 
 ## Priority 5 — Load Testing Enhancements (Ch 8, 14–15)
 
 | # | Enhancement | Status | Book Ref | Description |
 |---|-------------|--------|----------|-------------|
-| E-53 | **Load test YAML definition** | 🔴 | Ch 15, p255–256 | Mirror the synthetic YAML format for load tests: profile (ramp_to, hold_for, ramp_down), stages (same journey DSL), measure list. Currently load profiles are DB-only records. |
-| E-54 | **Saturation point auto-detection** | 🟡 | Ch 14, p242; Ch 15, p257 | Detect the VU count at which p95 latency crosses a threshold or throughput plateaus. `saturation_warnings` column exists in `load_runs` but no automated detector is wired. |
-| E-55 | **Load + synthetic + RUM correlation view** | 🔴 | Ch 14, p234; Ch 15, p256 | Dashboard view that overlays load test results with synthetic and RUM data for the same route, showing how single-user metrics degrade under concurrency. |
+| E-53 | **Load test YAML definition** | ✅ | Ch 15, p255–256 | `LoadYamlConfigService` in `load/load-yaml-config.service.ts`. Parses YAML with `load_profiles:`/`profiles:` root key, stages (`ramp_to`, `hold_for`, `ramp_down`, `duration`), `ui_server_targets`, `measures` list. `parseDuration()` handles "2m", "30s", "1m30s". `syncFromYaml()` creates/updates profiles by name. 12 tests. |
+| E-54 | **Saturation point auto-detection** | ✅ | Ch 14, p242; Ch 15, p257 | `SaturationDetectorService` in `load/saturation-detector.service.ts`. Four detection methods: `detectLatencyThreshold()` (p95 crossing), `detectCpuSaturation()` (CPU > 80%), `detectThroughputPlateau()` (slope analysis), `detectErrorRate()`. Picks earliest saturation point, assesses confidence (high/medium/low), generates capacity recommendations (75% of saturation VUs). Persists warnings to `load_runs`. 10 tests. |
+| E-55 | **Load + synthetic + RUM correlation view** | ✅ | Ch 14, p234; Ch 15, p256 | `LoadCorrelationView` component in `components/load-correlation-view.tsx`. Three-card summary (Synthetic/RUM/Load), lab-vs-field disagreement indicator (none/mild/severe), load degradation ratio, saturation badge. Degradation table with per-VU p50/p95/throughput/CPU and saturation highlighting. 10 logic tests. |
 
 ## Priority 6 — Intelligence Layer (Ch 14, App G)
 
@@ -105,4 +105,4 @@ The book describes a family of gate types; several are missing or only partially
 
 ---
 
-_Last updated: 2026-05-31. E-38–50, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-50, E-56, E-59, E-72 completed). Bug fixes: RUM ingestion missing custom_metrics/build_hash columns; scheduleFlush one-shot bug; aggregateResults double-pick; SQL interval string interpolation → MAKE_INTERVAL._
+_Last updated: 2026-06-01. E-38–55, E-56, E-59, E-72 implemented. Cross-referenced against existing codebase (E-01–E-55, E-56, E-59, E-72 completed). E-48 YAML UI: `GateYamlEditor` component with export/edit/sync and `yaml/export` + `yaml/sync` API endpoints. Bug fixes: RUM ingestion missing custom_metrics/build_hash columns; scheduleFlush one-shot bug; aggregateResults double-pick; SQL interval string interpolation → MAKE_INTERVAL; request() header merge spread-order bug (Content-Type lost); CORS origin now supports comma-separated + wildcard._

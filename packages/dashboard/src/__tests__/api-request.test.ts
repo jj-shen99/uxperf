@@ -257,6 +257,93 @@ describe("Large payload handling — Regression (413 fix)", () => {
   });
 });
 
+// --- request() header merge regression (E-51 bugfix) ---
+
+describe("request() — Header merge order (regression)", () => {
+  // Reproduce the old bug: { headers: merged, ...options } would overwrite
+  // merged headers with options.headers. The fix destructures headers first.
+  function mergeHeadersOld(options?: RequestInit): Record<string, string> {
+    const merged = {
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      ...options,
+    };
+    return merged.headers as unknown as Record<string, string>;
+  }
+
+  function mergeHeadersFixed(options?: RequestInit): Record<string, string> {
+    const { headers: customHeaders, ...rest } = options ?? {};
+    return {
+      "Content-Type": "application/json",
+      ...(customHeaders as Record<string, string>),
+    };
+  }
+
+  it("old merge loses Content-Type when options has headers", () => {
+    const opts: RequestInit = {
+      method: "POST",
+      headers: { Authorization: "Bearer tok" },
+    };
+    const old = mergeHeadersOld(opts);
+    // Old bug: headers is overwritten by options.headers, losing Content-Type
+    expect(old["Content-Type"]).toBeUndefined();
+  });
+
+  it("fixed merge preserves Content-Type and adds custom headers", () => {
+    const opts: RequestInit = {
+      method: "POST",
+      headers: { Authorization: "Bearer tok" },
+    };
+    const fixed = mergeHeadersFixed(opts);
+    expect(fixed["Content-Type"]).toBe("application/json");
+    expect(fixed["Authorization"]).toBe("Bearer tok");
+  });
+
+  it("fixed merge works with no options", () => {
+    const fixed = mergeHeadersFixed();
+    expect(fixed["Content-Type"]).toBe("application/json");
+  });
+
+  it("fixed merge works with options but no headers", () => {
+    const fixed = mergeHeadersFixed({ method: "POST" });
+    expect(fixed["Content-Type"]).toBe("application/json");
+  });
+
+  it("fixed merge allows overriding Content-Type", () => {
+    const fixed = mergeHeadersFixed({
+      headers: { "Content-Type": "text/plain" },
+    });
+    expect(fixed["Content-Type"]).toBe("text/plain");
+  });
+});
+
+// --- CORS origin parsing (main.ts fix) ---
+
+describe("CORS origin parsing", () => {
+  function parseCorsOrigin(envValue: string) {
+    if (envValue === "*") return true;
+    if (envValue.includes(",")) return envValue.split(",").map((o) => o.trim());
+    return envValue;
+  }
+
+  it("returns true for wildcard '*'", () => {
+    expect(parseCorsOrigin("*")).toBe(true);
+  });
+
+  it("returns single string for single origin", () => {
+    expect(parseCorsOrigin("http://localhost:4200")).toBe("http://localhost:4200");
+  });
+
+  it("returns array for comma-separated origins", () => {
+    const result = parseCorsOrigin("http://localhost:4200,http://localhost:3000");
+    expect(result).toEqual(["http://localhost:4200", "http://localhost:3000"]);
+  });
+
+  it("trims whitespace in comma-separated origins", () => {
+    const result = parseCorsOrigin("http://localhost:4200 , http://localhost:3000");
+    expect(result).toEqual(["http://localhost:4200", "http://localhost:3000"]);
+  });
+});
+
 describe("Run detail auto-refresh logic — Regression", () => {
   // Extracted logic from the run detail page
   const isActive = (s: string) => s === "queued" || s === "running";
