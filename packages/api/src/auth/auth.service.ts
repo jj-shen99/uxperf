@@ -118,7 +118,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password");
     }
     if (!user.is_active) {
-      throw new UnauthorizedException("Account is deactivated");
+      throw new UnauthorizedException("Invalid email or password");
     }
     if (!this.verifyPassword(dto.password, user.password_hash)) {
       throw new UnauthorizedException("Invalid email or password");
@@ -156,10 +156,11 @@ export class AuthService {
 
     this.logger.log(`Password reset token generated for: ${dto.email}`);
 
-    // In production, send the token via email. For dev, return it directly.
+    // In production, the token should be sent via email, never in the HTTP response.
+    const isProduction = process.env.NODE_ENV === "production";
     return {
       message: "If that email is registered, a reset link has been sent.",
-      reset_token: token,
+      ...(isProduction ? {} : { reset_token: token }),
     };
   }
 

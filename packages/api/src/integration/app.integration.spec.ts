@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { AppModule } from "../app.module";
 import { DatabaseService } from "../database/database.service";
+import { JwtService } from "../auth/jwt.service";
 
 // ============================================================
 // Integration Tests — Full HTTP roundtrip through NestJS
@@ -14,6 +15,7 @@ const mockDb = { query: jest.fn(), onModuleDestroy: jest.fn() };
 
 describe("App Integration (HTTP)", () => {
   let app: INestApplication;
+  let authToken: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -26,6 +28,10 @@ describe("App Integration (HTTP)", () => {
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api/v1");
     await app.init();
+
+    // Generate a test JWT for authenticated requests
+    const jwt = moduleRef.get(JwtService);
+    authToken = jwt.sign({ sub: "test-user", email: "test@test.com", role: "admin" });
   });
 
   afterAll(async () => {
@@ -60,6 +66,7 @@ describe("App Integration (HTTP)", () => {
       mockDb.query.mockResolvedValue({ rows: [] });
       const res = await request(app.getHttpServer())
         .get("/api/v1/projects")
+        .set("Authorization", `Bearer ${authToken}`)
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
@@ -76,6 +83,7 @@ describe("App Integration (HTTP)", () => {
 
       const res = await request(app.getHttpServer())
         .post("/api/v1/projects")
+        .set("Authorization", `Bearer ${authToken}`)
         .send({ name: "test", owner_team: "eng" })
         .expect(201);
 
@@ -86,6 +94,7 @@ describe("App Integration (HTTP)", () => {
       mockDb.query.mockResolvedValue({ rows: [] });
       await request(app.getHttpServer())
         .get("/api/v1/projects/nonexistent")
+        .set("Authorization", `Bearer ${authToken}`)
         .expect(404);
     });
   });
@@ -99,6 +108,7 @@ describe("App Integration (HTTP)", () => {
       mockDb.query.mockResolvedValue({ rows: [] });
       const res = await request(app.getHttpServer())
         .get("/api/v1/runs")
+        .set("Authorization", `Bearer ${authToken}`)
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
@@ -116,6 +126,7 @@ describe("App Integration (HTTP)", () => {
 
       const res = await request(app.getHttpServer())
         .post("/api/v1/runs")
+        .set("Authorization", `Bearer ${authToken}`)
         .send({
           project_id: "p1",
           config: { url: "https://example.com" },
@@ -135,6 +146,7 @@ describe("App Integration (HTTP)", () => {
 
       const res = await request(app.getHttpServer())
         .patch("/api/v1/runs/r1")
+        .set("Authorization", `Bearer ${authToken}`)
         .send({ status: "running" })
         .expect(200);
 
@@ -145,6 +157,7 @@ describe("App Integration (HTTP)", () => {
       mockDb.query.mockResolvedValue({ rows: [] });
       await request(app.getHttpServer())
         .get("/api/v1/runs/nonexistent")
+        .set("Authorization", `Bearer ${authToken}`)
         .expect(404);
     });
   });

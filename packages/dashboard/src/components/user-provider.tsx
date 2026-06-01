@@ -56,13 +56,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [allUsers, currentUser]);
 
-  const login = useCallback((user: CurrentUser) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    setCurrentUser(user);
+  const login = useCallback((user: CurrentUser & { token?: string }) => {
+    if (user.token) {
+      localStorage.setItem("auth_token", user.token);
+    }
+    const { token: _t, ...userData } = user as any;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+    setCurrentUser(userData);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("auth_token");
     setCurrentUser(null);
     qc.clear();
     router.replace("/login");

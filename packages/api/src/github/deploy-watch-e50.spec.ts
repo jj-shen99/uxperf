@@ -8,6 +8,7 @@ import { Test } from "@nestjs/testing";
 import { DeployWatchService } from "./deploy-watch.service";
 import { GitHubCheckService } from "./github-check.service";
 import { DatabaseService } from "../database/database.service";
+import { CryptoService } from "../auth/crypto.service";
 
 describe("DeployWatchService (E-50)", () => {
   let service: DeployWatchService;
@@ -18,11 +19,18 @@ describe("DeployWatchService (E-50)", () => {
     mockDb = { query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }) };
     mockGitHub = { reportCommitStatus: jest.fn().mockResolvedValue(null) };
 
+    const mockCrypto = {
+      encrypt: jest.fn((v: string) => `enc_${v}`),
+      decrypt: jest.fn((v: string) => v.replace("enc_", "")),
+      isEncrypted: jest.fn((v: string) => v.startsWith("enc_")),
+    };
+
     const module = await Test.createTestingModule({
       providers: [
         DeployWatchService,
         { provide: DatabaseService, useValue: mockDb },
         { provide: GitHubCheckService, useValue: mockGitHub },
+        { provide: CryptoService, useValue: mockCrypto },
       ],
     }).compile();
 

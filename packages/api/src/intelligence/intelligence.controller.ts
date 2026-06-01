@@ -7,6 +7,7 @@ import {
   Query,
   Body,
 } from "@nestjs/common";
+import { Public } from "../auth/auth.guard";
 import { ShapAttributionService } from "./shap-attribution.service";
 import { ForecastingService } from "./forecasting.service";
 import { RumIngestionService } from "./rum-ingestion.service";
@@ -93,11 +94,13 @@ export class IntelligenceController {
 
   // -- RUM --
 
+  @Public()
   @Post("rum/ingest")
   ingestRum(@Body() body: any) {
     return this.rum.ingest(body);
   }
 
+  @Public()
   @Post("rum/ingest/batch")
   ingestRumBatch(@Body() body: { events: any[] }) {
     return this.rum.ingestBatch(body.events);

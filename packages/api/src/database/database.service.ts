@@ -6,10 +6,12 @@ export class DatabaseService implements OnModuleDestroy {
   private pool: Pool;
 
   constructor() {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString && process.env.NODE_ENV === "production") {
+      throw new Error("DATABASE_URL environment variable is required in production");
+    }
     this.pool = new Pool({
-      connectionString:
-        process.env.DATABASE_URL ||
-        "postgresql://perf:perf@localhost:5432/perf_framework",
+      connectionString: connectionString || "postgresql://perf:perf@localhost:5432/perf_framework",
       max: 20,
     });
   }

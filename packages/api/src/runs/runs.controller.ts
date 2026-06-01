@@ -11,6 +11,7 @@ import {
 import { RunsService, CreateRunDto, UpdateRunDto } from "./runs.service";
 import { RunOrchestratorService, RunCompletionPayload } from "./run-orchestrator.service";
 import { RbacService } from "../rbac/rbac.service";
+import { Public } from "../auth/auth.guard";
 
 @Controller("runs")
 export class RunsController {
@@ -40,6 +41,7 @@ export class RunsController {
   }
 
   /** Worker polls this to claim the next queued run. */
+  @Public()
   @Post("claim")
   claimNext() {
     return this.orchestrator.claimNextRun();
@@ -62,12 +64,14 @@ export class RunsController {
   }
 
   /** Worker appends log lines during execution. */
+  @Public()
   @Post(":id/log")
   appendLog(@Param("id") id: string, @Body() body: { lines: string }) {
     return this.runsService.appendLog(id, body.lines);
   }
 
   /** Worker calls this when a run completes or fails. */
+  @Public()
   @Post(":id/complete")
   complete(@Param("id") id: string, @Body() payload: Omit<RunCompletionPayload, "run_id">) {
     return this.orchestrator.completeRun({ run_id: id, ...payload });

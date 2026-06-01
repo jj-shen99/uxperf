@@ -5,7 +5,6 @@ export interface CruxQueryInput {
   project_id: string;
   origin: string;
   form_factor?: string;
-  api_key?: string;
 }
 
 export interface CruxSnapshot {
@@ -47,7 +46,7 @@ export class CruxIngestionService {
    * This scaffold parses the standard CrUX API response format.
    */
   async fetchAndStore(input: CruxQueryInput): Promise<CruxSnapshot> {
-    const apiKey = input.api_key ?? process.env.CRUX_API_KEY ?? "";
+    const apiKey = process.env.CRUX_API_KEY ?? "";
     const formFactor = input.form_factor ?? "ALL_FORM_FACTORS";
 
     let rawResponse: any;

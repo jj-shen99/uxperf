@@ -1,10 +1,17 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("auth_token");
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers: customHeaders, ...restOptions } = options ?? {};
+  const token = getAuthToken();
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const res = await fetch(`${API_BASE}${path}`, {
     ...restOptions,
-    headers: { "Content-Type": "application/json", ...(customHeaders as Record<string, string>) },
+    headers: { "Content-Type": "application/json", ...authHeaders, ...(customHeaders as Record<string, string>) },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

@@ -17,6 +17,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { GitHubCheckService, GitHubCheckConfig } from "./github-check.service";
+import { CryptoService } from "../auth/crypto.service";
 
 export interface DeployRecord {
   id: string;
@@ -68,6 +69,7 @@ export class DeployWatchService {
   constructor(
     private readonly db: DatabaseService,
     private readonly github: GitHubCheckService,
+    private readonly crypto: CryptoService,
   ) {}
 
   /**
@@ -87,7 +89,7 @@ export class DeployWatchService {
         input.environment ?? "production",
         input.github_owner ?? null,
         input.github_repo ?? null,
-        input.github_token ?? null,
+        input.github_token ? this.crypto.encrypt(input.github_token) : null,
       ],
     );
 
@@ -292,10 +294,19 @@ export class DeployWatchService {
     );
     const row = result.rows[0];
     if (!row?.github_owner || !row.github_repo || !row.github_token) return null;
+    let token = row.github_token;
+    try {
+      if (this.crypto.isEncrypted(token)) {
+        token = this.crypto.decrypt(token);
+      }
+    } catch (e) {
+      this.logger.error(`Failed to decrypt GitHub token for deploy ${deployId}`);
+      return null;
+    }
     return {
       owner: row.github_owner,
       repo: row.github_repo,
-      token: row.github_token,
+      token,
       sha: row.git_sha,
     };
   }
