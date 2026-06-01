@@ -1,11 +1,12 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+  # push and pull_request triggers disabled
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
