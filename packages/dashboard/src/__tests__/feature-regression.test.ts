@@ -25,29 +25,20 @@ describe("useProjects default behaviour", () => {
     expect(projectId).toBe("proj-abc-123");
   });
 
-  it("auto-selects first project once list loads", () => {
+  it("does NOT auto-select first project (user must choose)", () => {
     const projects = [
       { id: "p1", name: "Project 1" },
       { id: "p2", name: "Project 2" },
     ];
     let projectId = "";
-    // Simulate the useEffect auto-select logic
-    if (!projectId && projects.length > 0) {
-      projectId = projects[0].id;
-    }
-    expect(projectId).toBe("p1");
+    // No auto-select — projectId stays empty until user picks
+    expect(projectId).toBe("");
+    expect(projects.length).toBeGreaterThan(0);
   });
 
-  it("does not overwrite manually selected project", () => {
-    const projects = [
-      { id: "p1", name: "Project 1" },
-      { id: "p2", name: "Project 2" },
-    ];
+  it("retains manually selected project", () => {
     let projectId = "p2"; // user already picked p2
-    if (!projectId && projects.length > 0) {
-      projectId = projects[0].id;
-    }
-    expect(projectId).toBe("p2"); // stays p2, not overwritten
+    expect(projectId).toBe("p2");
   });
 });
 

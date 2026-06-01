@@ -15,6 +15,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    // Auto-redirect to login on 401 (expired/missing token)
+    if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("perf_user");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
     throw new Error(`API ${res.status}: ${body}`);
   }
   const contentLength = res.headers.get("content-length");

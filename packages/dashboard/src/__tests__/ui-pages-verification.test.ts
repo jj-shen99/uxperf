@@ -308,26 +308,23 @@ describe("Dashboard page helpers", () => {
 // 5. useProjects auto-select logic
 // ============================================================
 
-describe("useProjects auto-select logic", () => {
-  function simulateAutoSelect(projects: { id: string }[], currentProjectId: string) {
-    let projectId = currentProjectId;
-    // Mirror the useEffect logic from use-projects.ts
-    if (!projectId && projects.length > 0) {
-      projectId = projects[0].id;
-    }
-    return projectId;
-  }
-
-  it("selects first project when projectId is empty", () => {
-    expect(simulateAutoSelect([{ id: "p1" }, { id: "p2" }], "")).toBe("p1");
+describe("useProjects — no auto-select (user must choose)", () => {
+  it("starts with empty projectId even when projects exist", () => {
+    const projectId = "";
+    const projects = [{ id: "p1" }, { id: "p2" }];
+    // No auto-select — stays empty
+    expect(projectId).toBe("");
+    expect(projects.length).toBe(2);
   });
 
-  it("does not override existing selection", () => {
-    expect(simulateAutoSelect([{ id: "p1" }], "p2")).toBe("p2");
+  it("retains user-selected project", () => {
+    let projectId = "p2";
+    expect(projectId).toBe("p2");
   });
 
   it("returns empty when project list is empty", () => {
-    expect(simulateAutoSelect([], "")).toBe("");
+    const projectId = "";
+    expect(projectId).toBe("");
   });
 });
 

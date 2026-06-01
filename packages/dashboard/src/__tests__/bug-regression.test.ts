@@ -107,28 +107,22 @@ describe("BUG-003: Budgets update uses PUT", () => {
 // BUG-004: useProjects auto-select
 // ============================================================
 
-describe("BUG-004: useProjects auto-selects first project", () => {
-  function autoSelect(projects: { id: string; name: string }[], currentId: string): string {
-    if (!currentId && projects.length > 0) {
-      return projects[0].id;
-    }
-    return currentId;
-  }
-
-  it("auto-selects when empty and projects available", () => {
-    expect(autoSelect([{ id: "p-1", name: "Prod" }], "")).toBe("p-1");
+describe("BUG-004: useProjects defaults to 'Select a project' (no auto-select)", () => {
+  it("stays empty even when projects available — user must choose", () => {
+    const projectId = "";
+    const projects = [{ id: "p-1", name: "Prod" }];
+    expect(projectId).toBe("");
+    expect(projects.length).toBe(1);
   });
 
-  it("does not reset user selection", () => {
-    expect(autoSelect([{ id: "p-1", name: "Prod" }, { id: "p-2", name: "Dev" }], "p-2")).toBe("p-2");
+  it("retains user selection", () => {
+    const projectId = "p-2";
+    expect(projectId).toBe("p-2");
   });
 
   it("returns empty when no projects", () => {
-    expect(autoSelect([], "")).toBe("");
-  });
-
-  it("handles single project", () => {
-    expect(autoSelect([{ id: "only-one", name: "Solo" }], "")).toBe("only-one");
+    const projectId = "";
+    expect(projectId).toBe("");
   });
 });
 

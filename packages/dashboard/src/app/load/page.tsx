@@ -73,7 +73,7 @@ function StagePreview({ stages }: { stages: Stage[] }) {
 
 export default function LoadTestingPage() {
   const queryClient = useQueryClient();
-  const { projectId } = useProjects();
+  const { projects, projectId, setProjectId } = useProjects();
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [showCreateProfile, setShowCreateProfile] = useState(false);
   const [showQuickRun, setShowQuickRun] = useState(false);
@@ -223,16 +223,28 @@ export default function LoadTestingPage() {
             Concurrent browser load tests with k6, server telemetry correlation, and VU-parameterized gates
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+          >
+            <option value="">Select a project</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <button
             onClick={() => setShowQuickRun(!showQuickRun)}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+            disabled={!projectId}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
           >
             Quick Run
           </button>
           <button
             onClick={() => setShowCreateProfile(!showCreateProfile)}
-            className="rounded-md border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+            disabled={!projectId}
+            className="rounded-md border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-colors"
           >
             New Profile
           </button>
