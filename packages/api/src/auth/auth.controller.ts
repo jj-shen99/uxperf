@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from "@nestjs/common";
+import { Controller, Post, Body, UnauthorizedException } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
   AuthService,
@@ -10,6 +10,7 @@ import {
 } from "./auth.service";
 import { JwtService } from "./jwt.service";
 import { Public } from "./auth.guard";
+import { DatabaseService } from "../database/database.service";
 
 @Throttle({ default: { ttl: 60000, limit: 5 } })
 @Controller("auth")
@@ -17,6 +18,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly jwt: JwtService,
+    private readonly db: DatabaseService,
   ) {}
 
   @Public()
@@ -50,5 +52,25 @@ export class AuthController {
   @Post("change-password")
   changePassword(@Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(dto);
+  }
+
+  /**
+   * Session upgrade: existing dashboard sessions (pre-JWT) can exchange
+   * their stored user ID for a JWT. Verifies user exists in DB.
+   */
+  @Public()
+  @Post("session-upgrade")
+  async sessionUpgrade(@Body() body: { user_id: string; email?: string }) {
+    if (!body.user_id) throw new UnauthorizedException("user_id required");
+    const result = await this.db.query<{ id: string; email: string; role: string; is_active: boolean }>(
+      "SELECT id, email, role, is_active FROM users WHERE id = $1",
+      [body.user_id],
+    );
+    const user = result.rows[0];
+    if (!user || !user.is_active) {
+      throw new UnauthorizedException("User not found or inactive");
+    }
+    const token = this.jwt.sign({ sub: user.id, email: user.email, role: user.role });
+    return { token, id: user.id, email: user.email, role: user.role };
   }
 }

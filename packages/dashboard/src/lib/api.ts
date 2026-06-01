@@ -16,7 +16,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     // Auto-redirect to login on 401 (expired/missing token)
-    if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
+    if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth")) {
       localStorage.removeItem("auth_token");
       localStorage.removeItem("perf_user");
       if (window.location.pathname !== "/login") {
@@ -281,6 +281,8 @@ export const api = {
       request<any>("/auth/reset-password", { method: "POST", body: JSON.stringify(data) }),
     changePassword: (data: { user_id: string; current_password: string; new_password: string }) =>
       request<any>("/auth/change-password", { method: "POST", body: JSON.stringify(data) }),
+    sessionUpgrade: (data: { user_id: string; email?: string }) =>
+      request<any>("/auth/session-upgrade", { method: "POST", body: JSON.stringify(data) }),
   },
   rbac: {
     users: {

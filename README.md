@@ -124,27 +124,45 @@ After running `npm run db:seed`, these accounts are available:
 
 ---
 
-## Authentication
+## Authentication & Security
 
-The framework uses **password-based authentication** with session persistence via `localStorage`.
+The framework uses **JWT-based authentication** with a global auth guard on all API endpoints.
 
 ### Login flow
 
 1. Navigate to `http://localhost:4200` — unauthenticated users are redirected to `/login`
 2. Enter email and password → `POST /api/v1/auth/login`
-3. On success, the user session is stored in `localStorage` and you are redirected to the dashboard
-4. The sidebar shows the current user avatar, name, email, and role
-5. Admin users see a **Switch User** dropdown to impersonate other accounts
+3. On success, the API returns a **JWT token**. The dashboard stores it in `localStorage` and attaches it as `Authorization: Bearer <token>` on every API request
+4. If a 401 is received (expired/missing token), the dashboard clears the session and redirects to `/login`
+5. Pre-existing sessions (created before JWT was enabled) are auto-upgraded via `/auth/session-upgrade`
+6. The sidebar shows the current user avatar, name, email, and role
+7. Admin users see a **Switch User** dropdown to impersonate other accounts
 
 ### Available auth endpoints
 
-| Action | Endpoint | Description |
-|--------|----------|-------------|
-| Register | `POST /auth/register` | Create a new account (default role: `viewer`) |
-| Login | `POST /auth/login` | Authenticate and receive user profile |
-| Forgot password | `POST /auth/forgot-password` | Request a reset token (shown in dev mode) |
-| Reset password | `POST /auth/reset-password` | Set new password using reset token |
-| Change password | `POST /auth/change-password` | Change password for current user |
+| Action | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| Register | `POST /auth/register` | Public | Create a new account (default role: `viewer`) |
+| Login | `POST /auth/login` | Public | Authenticate and receive JWT + user profile |
+| Session upgrade | `POST /auth/session-upgrade` | Public | Exchange existing user ID for a JWT (migration) |
+| Forgot password | `POST /auth/forgot-password` | Public | Request a reset token (shown in dev mode) |
+| Reset password | `POST /auth/reset-password` | Public | Set new password using reset token |
+| Change password | `POST /auth/change-password` | Bearer | Change password for current user |
+
+### Security hardening
+
+| Feature | Details |
+|---------|--------|
+| **Global JWT auth guard** | `AuthGuard` + `JwtService` — all endpoints require `Bearer` token unless marked `@Public()` |
+| **Public endpoints** | Health check, RUM ingest, worker claim/log/complete, all `/auth/*` routes |
+| **Rate limiting** | Auth endpoints throttled to 5 requests per 60 seconds (`@nestjs/throttler`) |
+| **Security headers** | Helmet middleware (X-Frame-Options, CSP, HSTS, etc.) |
+| **Token encryption** | GitHub tokens encrypted at rest with AES-256-GCM (`CryptoService`) |
+| **Reset token suppression** | Reset tokens hidden from API responses in production (`NODE_ENV=production`) |
+| **Input validation** | Global `ValidationPipe` with `class-validator` DTOs |
+| **Body size limit** | JSON body limit reduced to 1 MB |
+| **Unified error messages** | Login errors don't reveal whether an account exists or is inactive |
+| **DB credentials** | `DATABASE_URL` required in production — no hardcoded fallback |
 
 ### Password requirements
 
@@ -256,7 +274,7 @@ All gates use **3-of-5 quorum** — a metric must fail 3 of the last 5 runs to t
 npm test
 
 # API unit tests (Jest)
-npm test --workspace=packages/api       # 56 spec files
+npm test --workspace=packages/api       # 80 suites, 890 tests
 
 # Shared validators (Vitest)
 npm test --workspace=packages/shared     # 135 tests
@@ -264,8 +282,8 @@ npm test --workspace=packages/shared     # 135 tests
 # Worker engine + stats (Vitest)
 npm test --workspace=packages/worker     # 52 tests
 
-# Dashboard logic tests (Vitest)
-npm test --workspace=packages/dashboard  # 6 test suites
+# Dashboard logic tests (Jest)
+npm test --workspace=packages/dashboard  # 18 suites, 660 tests
 ```
 
 The CI pipeline (`.github/workflows/ci.yml`) is configured for manual dispatch (`workflow_dispatch`). It runs all tests, linting, builds, and database migration verification.
@@ -377,9 +395,10 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 |--------|------|-------------|
 | POST | `/auth/register` | Register user |
 | POST | `/auth/login` | Login |
-| POST | `/auth/change-password` | Change password |
+| POST | `/auth/change-password` | Change password (requires Bearer token) |
 | POST | `/auth/forgot-password` | Forgot password |
 | POST | `/auth/reset-password` | Reset password |
+| POST | `/auth/session-upgrade` | Exchange user ID for JWT (session migration) |
 | GET | `/rbac/users` | List users |
 | POST | `/rbac/users` | Create user |
 | PATCH | `/rbac/users/:id` | Update user (display_name, email, role, is_active) |
@@ -409,10 +428,12 @@ All endpoints are prefixed with `/api/v1`. See the full endpoint reference below
 | `API_URL` | `http://localhost:4000/api/v1` | Worker → API URL |
 | `SCHEDULE_POLL_INTERVAL_MS` | `30000` | Schedule dispatcher interval |
 | `POLL_INTERVAL_MS` | `5000` | Worker poll interval |
-| `NODE_ENV` | `development` | Set to `production` to hide reset tokens in forgot-password response |
+| `NODE_ENV` | `development` | Set to `production` to hide reset tokens, enforce `DATABASE_URL`, etc. |
+| `JWT_SECRET` | auto-generated | Secret for signing JWT tokens (auto-generated with warning if not set) |
+| `TOKEN_ENCRYPTION_KEY` | auto-generated | 32-byte hex key for AES-256-GCM encryption of GitHub tokens |
 | `WPT_SERVER` | — | WebPageTest server URL (opt-in) |
 | `WPT_API_KEY` | — | WebPageTest API key |
-| `CRUX_API_KEY` | — | Chrome UX Report API key |
+| `CRUX_API_KEY` | — | Chrome UX Report API key (server-side only) |
 
 ---
 

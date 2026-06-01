@@ -17,17 +17,35 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  // On mount, restore session from localStorage
+  // On mount, restore session from localStorage and auto-upgrade to JWT if needed
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setCurrentUser(JSON.parse(stored));
+    let cancelled = false;
+    async function init() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const user = JSON.parse(stored);
+          setCurrentUser(user);
+
+          // If we have a stored user but no JWT, upgrade the session
+          if (!localStorage.getItem("auth_token") && user.id) {
+            try {
+              const res = await api.auth.sessionUpgrade({ user_id: user.id, email: user.email });
+              if (!cancelled && res.token) {
+                localStorage.setItem("auth_token", res.token);
+              }
+            } catch {
+              // Upgrade failed — user will need to re-login
+            }
+          }
+        }
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      if (!cancelled) setInitialized(true);
     }
-    setInitialized(true);
+    init();
+    return () => { cancelled = true; };
   }, []);
 
   // Redirect to login if not authenticated and not on an auth page
