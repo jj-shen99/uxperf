@@ -24,6 +24,7 @@ import { EnvironmentsModule } from "./environments/environments.module";
 import { BudgetsModule } from "./budgets/budgets.module";
 import { ConfigModule } from "./config/config.module";
 import { HealthController } from "./health.controller";
+import { PlatformHealthModule } from "./health/platform-health.module";
 import { AuthGuard } from "./auth/auth.guard";
 
 @Module({
@@ -51,6 +52,7 @@ import { AuthGuard } from "./auth/auth.guard";
     EnvironmentsModule,
     BudgetsModule,
     ConfigModule,
+    PlatformHealthModule,
   ],
   controllers: [HealthController],
   providers: [

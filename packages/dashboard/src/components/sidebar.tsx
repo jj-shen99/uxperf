@@ -23,6 +23,8 @@ import {
   BarChart2,
   BookOpen,
   LogOut,
+  ClipboardCheck,
+  HeartPulse,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -61,6 +63,7 @@ const navGroups: NavGroup[] = [
       { href: "/anomalies", label: "Anomalies", icon: AlertTriangle },
       { href: "/investigation", label: "Investigation", icon: FileSearch },
       { href: "/intelligence", label: "Intelligence", icon: Brain },
+      { href: "/audit", label: "Audit", icon: ClipboardCheck },
     ],
   },
   {
@@ -68,6 +71,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/users", label: "Users", icon: Users },
       { href: "/settings", label: "Settings", icon: Sliders },
+      { href: "/platform-health", label: "Health", icon: HeartPulse },
     ],
   },
 ];

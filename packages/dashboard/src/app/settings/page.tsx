@@ -182,6 +182,14 @@ export default function SettingsPage() {
     },
   });
 
+  // --- Engine Configuration (k6) ---
+  const [k6BinaryPath, setK6BinaryPath] = useState(engineConfig["engine.k6_binary"] ?? "");
+  const [k6Msg, setK6Msg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    setK6BinaryPath(engineConfig["engine.k6_binary"] ?? "");
+  }, [engineConfig["engine.k6_binary"]]);
+
   // --- Environments ---
   const { data: environments = [] } = useQuery({
     queryKey: ["environments"],
@@ -626,6 +634,94 @@ export default function SettingsPage() {
                 {wptMsg.text}
               </p>
             )}
+          </div>
+        </section>
+      )}
+
+      {/* Engine Configuration — k6 Browser */}
+      {isAdmin && (
+        <section className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+          <div className="mb-4">
+            <h2 className="text-sm font-medium text-gray-400">Engine Configuration — k6 Browser</h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Enable k6 browser engine for concurrent load testing. Requires the k6 binary to be installed on the worker machine.
+            </p>
+          </div>
+          <div className="space-y-3 max-w-lg">
+            <div className="flex items-center justify-between rounded-md border border-gray-700 bg-gray-800 px-4 py-3">
+              <div>
+                <p className="text-sm text-gray-200">k6 Browser Engine</p>
+                <p className="text-xs text-gray-500">
+                  {engineConfig["engine.k6_browser_enabled"] === "true"
+                    ? "Enabled — load tests will use k6 browser module"
+                    : "Disabled — k6 load tests will be unavailable"}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const next = engineConfig["engine.k6_browser_enabled"] === "true" ? "false" : "true";
+                  api.config.set("engine.k6_browser_enabled", next).then(() => {
+                    qc.invalidateQueries({ queryKey: ["config", "engine"] });
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  engineConfig["engine.k6_browser_enabled"] === "true" ? "bg-indigo-600" : "bg-gray-700"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    engineConfig["engine.k6_browser_enabled"] === "true" ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">k6 Binary Path (optional)</label>
+              <div className="flex gap-2">
+                <input
+                  placeholder="k6 (default)"
+                  value={k6BinaryPath}
+                  onChange={(e) => setK6BinaryPath(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 font-mono"
+                />
+                <button
+                  onClick={() => {
+                    setK6Msg(null);
+                    const value = k6BinaryPath.trim() || "k6";
+                    api.config.set("engine.k6_binary", value).then(() => {
+                      qc.invalidateQueries({ queryKey: ["config", "engine"] });
+                      setK6Msg({ type: "success", text: "k6 binary path saved" });
+                    }).catch((err: Error) => setK6Msg({ type: "error", text: err.message }));
+                  }}
+                  disabled={k6BinaryPath === (engineConfig["engine.k6_binary"] ?? "")}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                {engineConfig["engine.k6_binary"] && engineConfig["engine.k6_binary"] !== "k6" && (
+                  <button
+                    onClick={() => {
+                      api.config.delete("engine.k6_binary").then(() => {
+                        setK6BinaryPath("");
+                        qc.invalidateQueries({ queryKey: ["config", "engine"] });
+                        setK6Msg({ type: "success", text: "k6 binary path reset to default" });
+                      });
+                    }}
+                    className="rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:text-red-400 hover:border-red-800"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-600 mt-1">
+                Path to k6 binary. Leave empty to use the default system path.
+              </p>
+              {k6Msg && (
+                <p className={`text-xs mt-1 ${k6Msg.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                  {k6Msg.text}
+                </p>
+              )}
+            </div>
           </div>
         </section>
       )}

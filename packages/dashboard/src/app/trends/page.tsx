@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import {
   LineChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -13,6 +14,28 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
+const IQR_WINDOW = 5; // sliding window for IQR computation
+
+/** Compute rolling p25/p75 (IQR band) for a metric across data points. */
+function computeRollingIQR(
+  data: any[],
+  metricKey: string,
+  windowSize: number = IQR_WINDOW,
+): { lower: number | null; upper: number | null }[] {
+  return data.map((_, idx) => {
+    const start = Math.max(0, idx - Math.floor(windowSize / 2));
+    const end = Math.min(data.length, idx + Math.ceil(windowSize / 2));
+    const values = data.slice(start, end)
+      .map((d) => d[metricKey] as number | null)
+      .filter((v): v is number => v != null)
+      .sort((a, b) => a - b);
+    if (values.length < 2) return { lower: null, upper: null };
+    const p25Idx = Math.floor(values.length * 0.25);
+    const p75Idx = Math.floor(values.length * 0.75);
+    return { lower: values[p25Idx], upper: values[Math.min(p75Idx, values.length - 1)] };
+  });
+}
 
 const METRICS = [
   { key: "lcp_ms", label: "LCP (ms)", color: "#818cf8" },
@@ -67,15 +90,26 @@ export default function TrendsPage() {
     [completedRuns, filterUrl, filterScript]
   );
 
-  const chartData = filteredRuns.map((r: any, idx: number) => ({
-    name: `#${idx + 1} ${new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
-    date: r.created_at,
-    ...r.metrics,
-    // Scale lighthouse score to 0-100 for readability
-    lighthouse_performance_score: r.metrics?.lighthouse_performance_score != null
-      ? Math.round(r.metrics.lighthouse_performance_score * 100)
-      : null,
-  }));
+  const chartData = useMemo(() => {
+    const base = filteredRuns.map((r: any, idx: number) => ({
+      name: `#${idx + 1} ${new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+      date: r.created_at,
+      ...r.metrics,
+      lighthouse_performance_score: r.metrics?.lighthouse_performance_score != null
+        ? Math.round(r.metrics.lighthouse_performance_score * 100)
+        : null,
+    }));
+    // E-63: Compute IQR bands for each selected metric
+    for (const key of selectedMetrics) {
+      const iqr = computeRollingIQR(base, key);
+      base.forEach((d: any, i: number) => {
+        d[`${key}_iqr`] = iqr[i].lower != null && iqr[i].upper != null
+          ? [iqr[i].lower, iqr[i].upper]
+          : null;
+      });
+    }
+    return base;
+  }, [filteredRuns, selectedMetrics]);
 
   const toggleMetric = (key: string) => {
     setSelectedMetrics((prev) =>
@@ -219,6 +253,21 @@ export default function TrendsPage() {
                 labelStyle={{ color: "#9ca3af" }}
               />
               <Legend />
+              {METRICS.filter((m) => selectedMetrics.includes(m.key)).map((m) => (
+                <Area
+                  key={`${m.key}_iqr`}
+                  type="monotone"
+                  dataKey={`${m.key}_iqr`}
+                  name={`${m.label} IQR`}
+                  stroke="none"
+                  fill={m.color}
+                  fillOpacity={0.12}
+                  connectNulls
+                  legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
+                />
+              ))}
               {METRICS.filter((m) => selectedMetrics.includes(m.key)).map((m) => (
                 <Line
                   key={m.key}

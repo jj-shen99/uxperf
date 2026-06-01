@@ -344,6 +344,43 @@ export const api = {
   health: {
     check: () => request<{ status: string; timestamp: string }>("/health"),
   },
+  platformHealth: {
+    check: () => request<any>("/platform-health"),
+    gatePolicy: () => request<{ policy: string }>("/platform-health/gate-policy"),
+    setGatePolicy: (policy: string | null) =>
+      request<any>("/platform-health/gate-policy", { method: "POST", body: JSON.stringify({ policy }) }),
+    config: () => request<any>("/platform-health/config"),
+    setConfig: (data: any) =>
+      request<any>("/platform-health/config", { method: "POST", body: JSON.stringify(data) }),
+  },
+  onCall: {
+    list: () => request<any[]>("/platform-health/oncall"),
+    create: (data: any) => request<any>("/platform-health/oncall", { method: "POST", body: JSON.stringify(data) }),
+    get: (id: string) => request<any>(`/platform-health/oncall/${id}`),
+    delete: (id: string) => request<void>(`/platform-health/oncall/${id}`, { method: "DELETE" }),
+    current: (id: string) => request<any>(`/platform-health/oncall/${id}/current`),
+    rotate: (id: string) => request<any>(`/platform-health/oncall/${id}/rotate`, { method: "POST" }),
+    addOverride: (id: string, data: any) =>
+      request<any>(`/platform-health/oncall/${id}/override`, { method: "POST", body: JSON.stringify(data) }),
+    overrides: (id: string) => request<any[]>(`/platform-health/oncall/${id}/overrides`),
+    removeOverride: (overrideId: string) =>
+      request<any>(`/platform-health/oncall/override/${overrideId}`, { method: "DELETE" }),
+    events: (id: string) => request<any[]>(`/platform-health/oncall/${id}/events`),
+    updatePolicy: (id: string, data: any) =>
+      request<any>(`/platform-health/oncall/${id}/paging-policy`, { method: "POST", body: JSON.stringify(data) }),
+  },
+  practiceReview: {
+    questions: (category?: string) =>
+      request<any[]>(`/platform-health/reviews/questions${category ? `?category=${category}` : ""}`),
+    list: (projectId: string) => request<any[]>(`/platform-health/reviews/${projectId}`),
+    create: (projectId: string, quarter?: string) =>
+      request<any>(`/platform-health/reviews/${projectId}`, { method: "POST", body: JSON.stringify({ quarter }) }),
+    respond: (reviewId: string, data: any) =>
+      request<any>(`/platform-health/reviews/${reviewId}/respond`, { method: "POST", body: JSON.stringify(data) }),
+    summary: (reviewId: string) => request<any>(`/platform-health/reviews/${reviewId}/summary`),
+    overdue: (projectIds: string[]) =>
+      request<any[]>("/platform-health/reviews/overdue", { method: "POST", body: JSON.stringify({ project_ids: projectIds }) }),
+  },
   config: {
     getAll: (prefix?: string) => request<Record<string, string>>(`/config${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`),
     get: (key: string) => request<{ key: string; value: string | null }>(`/config/${encodeURIComponent(key)}`),
