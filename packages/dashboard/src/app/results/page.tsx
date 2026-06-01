@@ -244,90 +244,131 @@ export default function ResultsPage() {
               </div>
 
               {/* Per-link breakdown */}
-              {linkGroups.length > 1 && (
-                <div className="space-y-1 pt-2 border-t border-gray-800">
-                  <p className="text-xs font-medium text-gray-400 mb-2">Per-Link Results</p>
-                  {linkGroups.map((g, idx) => {
-                    const isExpanded = expandedStep === idx;
-                    const wv = g.measurement?.web_vitals;
-                    return (
-                      <div key={idx} className="rounded-md border border-gray-800 bg-gray-800/40">
-                        <button
-                          onClick={() => setExpandedStep(isExpanded ? null : idx)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-800/60 transition"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-600/30 text-[10px] text-indigo-300">
-                              {idx + 1}
-                            </span>
-                            <span className="text-sm text-gray-200 truncate max-w-xs">
-                              {g.label || g.clickIntent || `Link ${idx + 1}`}
-                            </span>
+              <div className="space-y-1 pt-2 border-t border-gray-800">
+                <p className="text-xs font-medium text-gray-400 mb-2">Per-Link Results</p>
+
+                {linkGroups.length === 0 && (
+                  <div className="rounded-md border border-dashed border-gray-700 bg-gray-800/20 px-4 py-5 text-center">
+                    <p className="text-sm text-gray-400">No per-link measurements available</p>
+                    <p className="mt-1.5 text-xs text-gray-600 max-w-md mx-auto">
+                      {scriptSteps.length === 0
+                        ? "This script has no steps defined. Edit the script in the Author page to add navigation and measure steps."
+                        : scriptSteps.some((s: any) => (s.intent ?? "").toLowerCase().includes("measure"))
+                          ? `This run has ${scriptSteps.length} step(s) with measure intents, but the worker did not produce measurement data. ` +
+                            "This can happen if the journey executor failed or timed out. Check the run logs for errors."
+                          : `This script has ${scriptSteps.length} step(s) but none include a "measure" intent. ` +
+                            "Add measure steps after each navigation to capture per-link web vitals (e.g., \"measure: Homepage\")."}
+                    </p>
+                    {scriptSteps.length > 0 && (
+                      <details className="mt-3 text-left max-w-md mx-auto">
+                        <summary className="text-[10px] text-gray-600 cursor-pointer hover:text-gray-400">Show script steps ({scriptSteps.length})</summary>
+                        <ol className="mt-1 space-y-0.5 text-[10px] text-gray-600 list-decimal list-inside">
+                          {scriptSteps.map((s: any, i: number) => (
+                            <li key={i} className={((s.intent ?? "").toLowerCase().includes("measure")) ? "text-indigo-400" : ""}>
+                              {s.intent ?? `Step ${i + 1}`}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {linkGroups.map((g, idx) => {
+                  const isExpanded = expandedStep === idx;
+                  const wv = g.measurement?.web_vitals;
+                  const hasAnyMetric = wv && Object.values(wv).some((v) => v != null);
+                  return (
+                    <div key={idx} className="rounded-md border border-gray-800 bg-gray-800/40">
+                      <button
+                        onClick={() => setExpandedStep(isExpanded ? null : idx)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-800/60 transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-600/30 text-[10px] text-indigo-300">
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm text-gray-200 truncate max-w-xs">
+                            {g.label || g.clickIntent || `Link ${idx + 1}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {hasAnyMetric ? (
+                            <>
+                              <span className={`text-xs font-mono ${wv.lcp_ms != null && wv.lcp_ms <= 2500 ? "text-green-400" : wv.lcp_ms != null && wv.lcp_ms <= 4000 ? "text-yellow-400" : "text-red-400"}`}>
+                                LCP: {wv.lcp_ms != null ? Math.round(wv.lcp_ms) + "ms" : "—"}
+                              </span>
+                              <span className={`text-xs font-mono ${wv.fcp_ms != null && wv.fcp_ms <= 1800 ? "text-green-400" : wv.fcp_ms != null && wv.fcp_ms <= 3000 ? "text-yellow-400" : "text-red-400"}`}>
+                                FCP: {wv.fcp_ms != null ? Math.round(wv.fcp_ms) + "ms" : "—"}
+                              </span>
+                              <span className="text-xs font-mono text-gray-500">
+                                CLS: {wv.cls != null ? wv.cls.toFixed(3) : "—"}
+                              </span>
+                            </>
+                          ) : wv ? (
+                            <span className="text-[10px] text-yellow-500/70">metrics empty — page may not have loaded</span>
+                          ) : (
+                            <span className="text-[10px] text-gray-600">no measurement data</span>
+                          )}
+                          <span className="text-xs text-gray-600">{isExpanded ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+                      {isExpanded && hasAnyMetric && (
+                        <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            {[
+                              { k: "lcp_ms", l: "LCP", u: "ms", g: 2500, p: 4000 },
+                              { k: "fcp_ms", l: "FCP", u: "ms", g: 1800, p: 3000 },
+                              { k: "cls", l: "CLS", u: "", g: 0.1, p: 0.25 },
+                              { k: "ttfb_ms", l: "TTFB", u: "ms", g: 800, p: 1800 },
+                              { k: "inp_ms", l: "INP", u: "ms", g: 200, p: 500 },
+                            ].map((m) => {
+                              const v = wv[m.k] as number | undefined;
+                              const col = v != null ? (v <= m.g ? "text-green-400" : v <= m.p ? "text-yellow-400" : "text-red-400") : "text-gray-600";
+                              return (
+                                <div key={m.k} className="rounded bg-gray-900 p-2">
+                                  <p className="text-[10px] text-gray-500">{m.l}</p>
+                                  <p className={`text-sm font-bold ${col}`}>
+                                    {v != null ? (m.u === "ms" ? Math.round(v) + " ms" : v.toFixed(3)) : "—"}
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <div className="flex items-center gap-3">
-                            {wv ? (
-                              <>
-                                <span className={`text-xs font-mono ${wv.lcp_ms != null && wv.lcp_ms <= 2500 ? "text-green-400" : wv.lcp_ms != null && wv.lcp_ms <= 4000 ? "text-yellow-400" : "text-red-400"}`}>
-                                  LCP: {wv.lcp_ms != null ? Math.round(wv.lcp_ms) + "ms" : "—"}
-                                </span>
-                                <span className={`text-xs font-mono ${wv.fcp_ms != null && wv.fcp_ms <= 1800 ? "text-green-400" : wv.fcp_ms != null && wv.fcp_ms <= 3000 ? "text-yellow-400" : "text-red-400"}`}>
-                                  FCP: {wv.fcp_ms != null ? Math.round(wv.fcp_ms) + "ms" : "—"}
-                                </span>
-                                <span className="text-xs font-mono text-gray-500">
-                                  CLS: {wv.cls != null ? wv.cls.toFixed(3) : "—"}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-gray-600">awaiting execution</span>
-                            )}
-                            <span className="text-xs text-gray-600">{isExpanded ? "▲" : "▼"}</span>
-                          </div>
-                        </button>
-                        {isExpanded && wv && (
-                          <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                              {[
-                                { k: "lcp_ms", l: "LCP", u: "ms", g: 2500, p: 4000 },
-                                { k: "fcp_ms", l: "FCP", u: "ms", g: 1800, p: 3000 },
-                                { k: "cls", l: "CLS", u: "", g: 0.1, p: 0.25 },
-                                { k: "ttfb_ms", l: "TTFB", u: "ms", g: 800, p: 1800 },
-                                { k: "inp_ms", l: "INP", u: "ms", g: 200, p: 500 },
-                              ].map((m) => {
-                                const v = wv[m.k] as number | undefined;
-                                const col = v != null ? (v <= m.g ? "text-green-400" : v <= m.p ? "text-yellow-400" : "text-red-400") : "text-gray-600";
-                                return (
-                                  <div key={m.k} className="rounded bg-gray-900 p-2">
-                                    <p className="text-[10px] text-gray-500">{m.l}</p>
-                                    <p className={`text-sm font-bold ${col}`}>
-                                      {v != null ? (m.u === "ms" ? Math.round(v) + " ms" : v.toFixed(3)) : "—"}
-                                    </p>
-                                  </div>
-                                );
-                              })}
+                          {g.measurement?.dom_content_loaded_ms != null && (
+                            <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                              <span>DOM Loaded: {Math.round(g.measurement.dom_content_loaded_ms)} ms</span>
+                              {g.measurement.load_event_ms != null && <span>Load: {Math.round(g.measurement.load_event_ms)} ms</span>}
+                              {g.measurement.total_requests != null && <span>Requests: {g.measurement.total_requests}</span>}
+                              {g.measurement.total_transfer_size_bytes != null && <span>Transfer: {(g.measurement.total_transfer_size_bytes / 1024).toFixed(0)} KB</span>}
                             </div>
-                            {g.measurement?.dom_content_loaded_ms != null && (
-                              <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
-                                <span>DOM Loaded: {Math.round(g.measurement.dom_content_loaded_ms)} ms</span>
-                                {g.measurement.load_event_ms != null && <span>Load: {Math.round(g.measurement.load_event_ms)} ms</span>}
-                                {g.measurement.total_requests != null && <span>Requests: {g.measurement.total_requests}</span>}
-                                {g.measurement.total_transfer_size_bytes != null && <span>Transfer: {(g.measurement.total_transfer_size_bytes / 1024).toFixed(0)} KB</span>}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {isExpanded && !wv && (
-                          <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
-                            <p className="text-xs text-gray-600">
-                              No measurements captured yet. Run this script to collect per-link metrics.
-                              {g.clickIntent && <span className="block mt-0.5 text-gray-500">Target: {g.clickIntent}</span>}
+                          )}
+                        </div>
+                      )}
+                      {isExpanded && !hasAnyMetric && (
+                        <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
+                          <div className="rounded bg-yellow-900/10 border border-yellow-800/30 p-3">
+                            <p className="text-xs text-yellow-400/80 font-medium">No metrics captured for this measurement</p>
+                            <p className="mt-1 text-[11px] text-gray-500">
+                              {wv
+                                ? "The measurement step ran but returned empty web vitals. The page may not have fully loaded, or the navigation was intercepted (e.g., single-page app route change)."
+                                : "This measurement step was defined in the script but no data was returned by the worker. Possible causes:"}
                             </p>
+                            {!wv && (
+                              <ul className="mt-1.5 text-[11px] text-gray-600 space-y-0.5 list-disc list-inside">
+                                <li>The run used the single-URL engine instead of the journey executor</li>
+                                <li>The worker crashed or timed out before reaching this step</li>
+                                <li>The script's measure step has a typo or unrecognized intent</li>
+                              </ul>
+                            )}
+                            {g.clickIntent && <p className="mt-1.5 text-[10px] text-gray-600">Target: {g.clickIntent}</p>}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -164,13 +164,13 @@ describe("Results page — per-link groups logic", () => {
   // === Regression: single-link scripts don't show breakdown ===
 
   describe("regression: single-link scripts", () => {
-    it("single measurement group is still returned (UI decides to hide < 2)", () => {
+    it("single measurement group is returned and shown in UI", () => {
       const steps = [
         { step: 1, intent: "navigate to https://shop.com" },
         { step: 2, intent: "measure page load" },
       ];
       const groups = buildLinkGroups(steps, []);
-      // Returns 1 group — the UI conditionally hides if linkGroups.length <= 1
+      // Returns 1 group — the UI now shows even single-link results
       expect(groups).toHaveLength(1);
     });
   });
