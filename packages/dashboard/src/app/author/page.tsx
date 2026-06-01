@@ -9,6 +9,7 @@ export default function AuthorPage() {
   const [prompt, setPrompt] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [device, setDevice] = useState("desktop");
+  const [scriptName, setScriptName] = useState("");
   const [result, setResult] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [scriptTab, setScriptTab] = useState<"playwright" | "json">("playwright");
@@ -30,7 +31,7 @@ export default function AuthorPage() {
     mutationFn: () =>
       api.scripts.create({
         project_id: projectId,
-        name: result?.generated_script?.id ?? `NL Script ${new Date().toLocaleString()}`,
+        name: scriptName.trim() || result?.generated_script?.id || `NL Script ${new Date().toLocaleString()}`,
         canonical_json: result?.generated_script ?? {},
         source_prompt: prompt,
         authoring_mode: "describe",
@@ -68,7 +69,30 @@ export default function AuthorPage() {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Script Name</label>
+            <input
+              type="text"
+              value={scriptName}
+              onChange={(e) => setScriptName(e.target.value)}
+              placeholder="e.g., Amazon Author Page — Book Links"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Target URL</label>
+            <input
+              type="url"
+              value={targetUrl}
+              onChange={(e) => setTargetUrl(e.target.value)}
+              placeholder="https://shop.example.com"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Project</label>
             <select
@@ -81,16 +105,6 @@ export default function AuthorPage() {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Target URL</label>
-            <input
-              type="url"
-              value={targetUrl}
-              onChange={(e) => setTargetUrl(e.target.value)}
-              placeholder="https://shop.example.com"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Device</label>

@@ -81,10 +81,16 @@ function scoreRating(score: number) {
 export default function ResultsPage() {
   const { currentUser, isAdmin } = useCurrentUser();
   const [selectedRunId, setSelectedRunId] = useState<string>("");
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
   const { data: allRuns = [], isLoading } = useQuery({
     queryKey: ["runs", currentUser?.id, isAdmin],
     queryFn: () => api.runs.list(undefined, currentUser?.id, isAdmin),
+  });
+
+  const { data: scripts = [] } = useQuery({
+    queryKey: ["scripts"],
+    queryFn: () => api.scripts.list(),
   });
 
   // Filter: only completed runs; non-admin users see only their project runs
@@ -97,6 +103,53 @@ export default function ResultsPage() {
   });
 
   const metrics = selectedRun?.metrics ?? {};
+
+  // Resolve script for the selected run
+  const runScript = selectedRun?.script_id
+    ? scripts.find((s: any) => s.id === selectedRun.script_id)
+    : null;
+
+  // Extract step definitions and measurements from the script/metrics
+  const scriptSteps: any[] = runScript?.canonical_json?.steps ?? [];
+  const journeyMeasurements: any[] = (metrics as any).measurements ?? (metrics as any).step_measurements ?? [];
+
+  // Build per-link groups: pair click steps with their measure steps
+  const linkGroups = (() => {
+    if (scriptSteps.length === 0 && journeyMeasurements.length === 0) return [];
+    const groups: { label: string; clickIntent: string; measurement: any | null; stepIndex: number }[] = [];
+
+    // If we have journey measurements, use those directly
+    if (journeyMeasurements.length > 0) {
+      journeyMeasurements.forEach((m: any, i: number) => {
+        groups.push({
+          label: m.label?.replace(/^measure:?\s*/i, "") || `Measurement ${i + 1}`,
+          clickIntent: "",
+          measurement: m,
+          stepIndex: m.step_index ?? i,
+        });
+      });
+      return groups;
+    }
+
+    // Otherwise, derive from script steps (click → measure pairs)
+    for (let i = 0; i < scriptSteps.length; i++) {
+      const step = scriptSteps[i];
+      const intent = (step.intent ?? "").toLowerCase();
+      if (intent.startsWith("measure") || intent.includes("measure")) {
+        const label = (step.intent ?? "").replace(/^measure:?\s*/i, "").replace(/^["']|["']$/g, "") || `Step ${i + 1}`;
+        // Find the preceding click step
+        const prevClick = i > 0 ? scriptSteps[i - 1] : null;
+        const clickLabel = prevClick?.intent?.match?.(/["'](.+?)["']/)?.[1] ?? "";
+        groups.push({
+          label,
+          clickIntent: clickLabel || prevClick?.intent || "",
+          measurement: null,
+          stepIndex: step.step ?? i,
+        });
+      }
+    }
+    return groups;
+  })();
 
   // Build chart data
   const webVitalsData = Object.entries(METRIC_META)
@@ -135,15 +188,19 @@ export default function ResultsPage() {
         <label className="block text-xs text-gray-400 mb-2">Select Test Execution</label>
         <select
           value={selectedRunId}
-          onChange={(e) => setSelectedRunId(e.target.value)}
+          onChange={(e) => { setSelectedRunId(e.target.value); setExpandedStep(null); }}
           className="w-full max-w-xl rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
         >
           <option value="">Choose a completed run...</option>
-          {completedRuns.map((r: any) => (
-            <option key={r.id} value={r.id}>
-              {new Date(r.created_at).toLocaleString()} — {r.config?.url || "unknown"} ({r.id.slice(0, 8)})
-            </option>
-          ))}
+          {completedRuns.map((r: any) => {
+            const script = r.script_id ? scripts.find((s: any) => s.id === r.script_id) : null;
+            const scriptLabel = script?.name ? ` [${script.name}]` : "";
+            return (
+              <option key={r.id} value={r.id}>
+                {new Date(r.created_at).toLocaleString()} — {r.config?.url || "unknown"}{scriptLabel} ({r.id.slice(0, 8)})
+              </option>
+            );
+          })}
         </select>
         {isLoading && <p className="mt-2 text-xs text-gray-500">Loading runs...</p>}
       </div>
@@ -171,6 +228,108 @@ export default function ResultsPage() {
               </p>
             </div>
           </div>
+
+          {/* Script info & per-link breakdown */}
+          {runScript && (
+            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500">Script</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-200">{runScript.name}</p>
+                </div>
+                <span className="rounded-full bg-indigo-900/40 px-2 py-0.5 text-[11px] text-indigo-300">
+                  {scriptSteps.length} steps
+                  {linkGroups.length > 0 && ` · ${linkGroups.length} measurement${linkGroups.length > 1 ? "s" : ""}`}
+                </span>
+              </div>
+
+              {/* Per-link breakdown */}
+              {linkGroups.length > 1 && (
+                <div className="space-y-1 pt-2 border-t border-gray-800">
+                  <p className="text-xs font-medium text-gray-400 mb-2">Per-Link Results</p>
+                  {linkGroups.map((g, idx) => {
+                    const isExpanded = expandedStep === idx;
+                    const wv = g.measurement?.web_vitals;
+                    return (
+                      <div key={idx} className="rounded-md border border-gray-800 bg-gray-800/40">
+                        <button
+                          onClick={() => setExpandedStep(isExpanded ? null : idx)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-800/60 transition"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-600/30 text-[10px] text-indigo-300">
+                              {idx + 1}
+                            </span>
+                            <span className="text-sm text-gray-200 truncate max-w-xs">
+                              {g.label || g.clickIntent || `Link ${idx + 1}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {wv ? (
+                              <>
+                                <span className={`text-xs font-mono ${wv.lcp_ms != null && wv.lcp_ms <= 2500 ? "text-green-400" : wv.lcp_ms != null && wv.lcp_ms <= 4000 ? "text-yellow-400" : "text-red-400"}`}>
+                                  LCP: {wv.lcp_ms != null ? Math.round(wv.lcp_ms) + "ms" : "—"}
+                                </span>
+                                <span className={`text-xs font-mono ${wv.fcp_ms != null && wv.fcp_ms <= 1800 ? "text-green-400" : wv.fcp_ms != null && wv.fcp_ms <= 3000 ? "text-yellow-400" : "text-red-400"}`}>
+                                  FCP: {wv.fcp_ms != null ? Math.round(wv.fcp_ms) + "ms" : "—"}
+                                </span>
+                                <span className="text-xs font-mono text-gray-500">
+                                  CLS: {wv.cls != null ? wv.cls.toFixed(3) : "—"}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-gray-600">awaiting execution</span>
+                            )}
+                            <span className="text-xs text-gray-600">{isExpanded ? "▲" : "▼"}</span>
+                          </div>
+                        </button>
+                        {isExpanded && wv && (
+                          <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                              {[
+                                { k: "lcp_ms", l: "LCP", u: "ms", g: 2500, p: 4000 },
+                                { k: "fcp_ms", l: "FCP", u: "ms", g: 1800, p: 3000 },
+                                { k: "cls", l: "CLS", u: "", g: 0.1, p: 0.25 },
+                                { k: "ttfb_ms", l: "TTFB", u: "ms", g: 800, p: 1800 },
+                                { k: "inp_ms", l: "INP", u: "ms", g: 200, p: 500 },
+                              ].map((m) => {
+                                const v = wv[m.k] as number | undefined;
+                                const col = v != null ? (v <= m.g ? "text-green-400" : v <= m.p ? "text-yellow-400" : "text-red-400") : "text-gray-600";
+                                return (
+                                  <div key={m.k} className="rounded bg-gray-900 p-2">
+                                    <p className="text-[10px] text-gray-500">{m.l}</p>
+                                    <p className={`text-sm font-bold ${col}`}>
+                                      {v != null ? (m.u === "ms" ? Math.round(v) + " ms" : v.toFixed(3)) : "—"}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {g.measurement?.dom_content_loaded_ms != null && (
+                              <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                                <span>DOM Loaded: {Math.round(g.measurement.dom_content_loaded_ms)} ms</span>
+                                {g.measurement.load_event_ms != null && <span>Load: {Math.round(g.measurement.load_event_ms)} ms</span>}
+                                {g.measurement.total_requests != null && <span>Requests: {g.measurement.total_requests}</span>}
+                                {g.measurement.total_transfer_size_bytes != null && <span>Transfer: {(g.measurement.total_transfer_size_bytes / 1024).toFixed(0)} KB</span>}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {isExpanded && !wv && (
+                          <div className="px-3 pb-3 pt-1 border-t border-gray-800/60">
+                            <p className="text-xs text-gray-600">
+                              No measurements captured yet. Run this script to collect per-link metrics.
+                              {g.clickIntent && <span className="block mt-0.5 text-gray-500">Target: {g.clickIntent}</span>}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Metric cards with tooltips */}
           <div>
