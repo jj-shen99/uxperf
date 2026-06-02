@@ -334,13 +334,13 @@ describe("CORS origin parsing", () => {
   });
 
   it("returns array for comma-separated origins", () => {
-    const result = parseCorsOrigin("http://localhost:4200,http://localhost:3000");
-    expect(result).toEqual(["http://localhost:4200", "http://localhost:3000"]);
+    const result = parseCorsOrigin("http://localhost:4200,http://localhost:4201");
+    expect(result).toEqual(["http://localhost:4200", "http://localhost:4201"]);
   });
 
   it("trims whitespace in comma-separated origins", () => {
-    const result = parseCorsOrigin("http://localhost:4200 , http://localhost:3000");
-    expect(result).toEqual(["http://localhost:4200", "http://localhost:3000"]);
+    const result = parseCorsOrigin("http://localhost:4200 , http://localhost:4201");
+    expect(result).toEqual(["http://localhost:4200", "http://localhost:4201"]);
   });
 });
 
