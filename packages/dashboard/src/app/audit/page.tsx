@@ -12,7 +12,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useProjects } from "@/hooks/use-projects";
 import { CheckCircle2, Circle, AlertTriangle, HelpCircle, ChevronDown, ChevronRight, Info } from "lucide-react";
-import { MetricTooltip, METRIC_GLOSSARY } from "@/components/metric-tooltip";
 import {
   AUDIT_CATEGORIES,
   CHECKLIST_ITEMS,
@@ -201,35 +200,34 @@ export default function AuditChecklistPage() {
             <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-gray-800/40 transition select-none">
               <Info className="h-4 w-4 text-indigo-400" />
               <span className="text-sm font-medium text-gray-200">KPI Reference Guide</span>
-              <span className="ml-auto text-[10px] text-gray-500">Hover any metric name for details</span>
+              <span className="ml-auto text-[10px] text-gray-500">Scoring methodology for audit categories</span>
             </summary>
             <div className="border-t border-gray-800 p-4">
-              <p className="text-xs text-gray-500 mb-3">These are the key performance indicators referenced throughout the audit checklist. Hover or tap any metric for its full definition and threshold.</p>
+              <p className="text-xs text-gray-500 mb-3">These are the audit KPIs shown on this page. Each category score is a weighted average of its checklist items (critical ×3, important ×2, advisory ×1).</p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {(["LCP", "FCP", "CLS", "TTFB", "INP", "TBT", "TTI", "SI", "Lighthouse Score"] as const).map((key) => {
-                  const info = METRIC_GLOSSARY[key];
-                  if (!info) return null;
-                  return (
-                    <div key={key} className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
-                      <MetricTooltip metricKey={key} className="text-xs font-semibold text-indigo-400" />
-                      <p className="mt-0.5 text-[10px] text-gray-500">{info.full}</p>
-                      <p className="mt-1 text-[10px] text-gray-400 leading-relaxed line-clamp-2">{info.description}</p>
-                      <p className="mt-1 text-[9px] text-green-500/70">Good: {info.good}</p>
-                    </div>
-                  );
-                })}
+                <div className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
+                  <p className="text-xs font-semibold text-indigo-400">Overall Score</p>
+                  <p className="mt-0.5 text-[10px] text-gray-500">Weighted Audit Score</p>
+                  <p className="mt-1 text-[10px] text-gray-400 leading-relaxed line-clamp-2">Aggregate score across all 7 audit categories, weighted by item severity. Reflects overall performance practice maturity.</p>
+                  <p className="mt-1 text-[9px] text-green-500/70">Good: ≥ 80%</p>
+                </div>
+                {AUDIT_CATEGORIES.map((cat) => (
+                  <div key={cat.key} className="rounded-md border border-gray-800 bg-gray-800/40 p-3">
+                    <p className="text-xs font-semibold text-indigo-400">{cat.icon} {cat.label}</p>
+                    <p className="mt-0.5 text-[10px] text-gray-500">Category Score (0–100%)</p>
+                    <p className="mt-1 text-[10px] text-gray-400 leading-relaxed line-clamp-2">
+                      {CHECKLIST_ITEMS.filter((i) => i.category === cat.key).length} checklist items. Pass = full weight, partial = 50%, fail/unchecked = 0.
+                    </p>
+                    <p className="mt-1 text-[9px] text-green-500/70">Good: ≥ 80%</p>
+                  </div>
+                ))}
               </div>
-              <div className="mt-4 rounded-md border border-yellow-800/30 bg-yellow-900/10 p-3">
-                <p className="text-xs font-medium text-yellow-400/80">Why "No metrics captured"?</p>
-                <p className="mt-1 text-[11px] text-gray-500">
-                  If a measurement step shows no data, it means the step was defined in the test script but the worker returned no metrics for it. Common causes:
-                </p>
+              <div className="mt-4 rounded-md border border-gray-800/50 bg-gray-800/20 p-3">
+                <p className="text-xs font-medium text-gray-300">Severity Weights</p>
                 <ul className="mt-1.5 text-[11px] text-gray-500 space-y-0.5 list-disc list-inside">
-                  <li><strong className="text-gray-400">Single-URL engine</strong> — The run used the simple URL engine instead of the journey executor, so multi-step measurements weren't collected</li>
-                  <li><strong className="text-gray-400">Worker timeout</strong> — The worker crashed or timed out before reaching the measurement step</li>
-                  <li><strong className="text-gray-400">Script mismatch</strong> — The script's measure step has a typo, unrecognized intent, or targets an element that doesn't exist on the page</li>
-                  <li><strong className="text-gray-400">SPA navigation</strong> — A single-page app route change intercepted the browser navigation, preventing web vitals collection</li>
-                  <li><strong className="text-gray-400">Element not found</strong> — The click target (e.g., "Kindle Books") may not match the actual page element text or selector</li>
+                  <li><strong className="text-red-400">Critical (×3)</strong> — Must-have items that significantly impact performance practice quality</li>
+                  <li><strong className="text-yellow-400">Important (×2)</strong> — Best-practice items that improve reliability and coverage</li>
+                  <li><strong className="text-gray-400">Advisory (×1)</strong> — Nice-to-have improvements for mature teams</li>
                 </ul>
               </div>
             </div>

@@ -101,6 +101,11 @@ export default function RunsPage() {
     enabled: !!formProjectId,
   });
 
+  const { data: environments = [] } = useQuery<{ id: string; name: string; slug: string }[]>({
+    queryKey: ["environments"],
+    queryFn: () => api.environments.list(),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.runs.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
@@ -198,10 +203,13 @@ export default function RunsPage() {
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, environment: e.target.value })}
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
               >
-                <option value="staging">staging</option>
-                <option value="production">production</option>
-                <option value="development">development</option>
-                <option value="preview">preview</option>
+                {environments.length > 0 ? (
+                  environments.map((env) => (
+                    <option key={env.id} value={env.slug}>{env.name}</option>
+                  ))
+                ) : (
+                  <option value="staging">staging</option>
+                )}
               </select>
             </div>
           </div>

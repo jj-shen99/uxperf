@@ -64,6 +64,11 @@ export default function IntelligencePage() {
     queryFn: () => api.scripts.list(),
   });
 
+  const { data: dbEnvironments = [] } = useQuery<{ id: string; name: string; slug: string; description: string }[]>({
+    queryKey: ["environments"],
+    queryFn: () => api.environments.list(),
+  });
+
   const completed = useMemo(() =>
     runs
       .filter((r: any) => r.status === "completed" && r.metrics && (!projectId || r.project_id === projectId))
@@ -139,27 +144,34 @@ export default function IntelligencePage() {
       .slice(0, 10);
   }, [completed]);
 
-  // Environment comparison
+  // Environment comparison — merge DB environments with run data
   const envComparison = useMemo(() => {
     const envMap: Record<string, any[]> = {};
+    // Seed with all DB-configured environments so they always appear
+    for (const dbEnv of dbEnvironments) {
+      envMap[dbEnv.slug] = [];
+    }
     completed.forEach((r: any) => {
       const env = r.environment ?? "staging";
       if (!envMap[env]) envMap[env] = [];
       envMap[env].push(r);
     });
     return Object.entries(envMap).map(([env, envRuns]) => {
+      const dbEnv = dbEnvironments.find((e) => e.slug === env);
       const lcps = envRuns.map((r) => r.metrics?.lcp_ms).filter((v: any) => v != null) as number[];
       const fcps = envRuns.map((r) => r.metrics?.fcp_ms).filter((v: any) => v != null) as number[];
       const perfs = envRuns.map((r) => r.metrics?.lighthouse_performance_score).filter((v: any) => v != null) as number[];
       return {
         env,
+        envName: dbEnv?.name ?? env,
+        description: dbEnv?.description ?? "",
         count: envRuns.length,
         avgLcp: lcps.length > 0 ? lcps.reduce((a, b) => a + b, 0) / lcps.length : null,
         avgFcp: fcps.length > 0 ? fcps.reduce((a, b) => a + b, 0) / fcps.length : null,
         avgPerf: perfs.length > 0 ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null,
       };
     });
-  }, [completed]);
+  }, [completed, dbEnvironments]);
 
   // Score distribution
   const scoreDistribution = useMemo(() => {
@@ -536,10 +548,12 @@ export default function IntelligencePage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {envComparison.map((e) => (
                     <div key={e.env} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-semibold text-gray-200 capitalize">{e.env}</span>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-gray-200">{e.envName}</span>
                         <span className="text-xs text-gray-500">{e.count} runs</span>
                       </div>
+                      {e.description && <p className="text-[10px] text-gray-600 mb-3">{e.description}</p>}
+                      {!e.description && <div className="mb-2" />}
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">Avg LCP</span>
