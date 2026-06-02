@@ -41,6 +41,43 @@ describe("CapacityPlanningService", () => {
       expect(report.load_runs_analyzed).toHaveLength(2);
       expect(report.recommendations.length).toBeGreaterThan(0);
     });
+
+    it("returns empty report gracefully when DB query fails", async () => {
+      mockDb.query.mockRejectedValueOnce(new Error("relation \"load_runs\" does not exist"));
+      const report = await service.generateReport("p-1");
+      expect(report.max_sustainable_vus).toBeNull();
+      expect(report.load_runs_analyzed).toHaveLength(0);
+      expect(report.recommendations).toHaveLength(0);
+    });
+
+    it("returns report even when saveReport fails", async () => {
+      mockDb.query
+        .mockResolvedValueOnce({
+          rows: [
+            { id: "lr-1", target_vus: 20, actual_peak_vus: 20, metrics_summary: { http_req_duration_p95: 500 }, saturation_warnings: [] },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ peak_cpu: 60, peak_memory: 50, peak_lag: 30 }] }) // analyzeResources
+        .mockRejectedValueOnce(new Error("relation \"capacity_reports\" does not exist")); // saveReport fails
+
+      const report = await service.generateReport("p-1");
+      expect(report.max_sustainable_vus).toBe(20);
+      expect(report.load_runs_analyzed).toHaveLength(1);
+    });
+  });
+
+  describe("listReports", () => {
+    it("returns empty array when DB query fails", async () => {
+      mockDb.query.mockRejectedValueOnce(new Error("connection refused"));
+      const result = await service.listReports("p-1");
+      expect(result).toEqual([]);
+    });
+
+    it("returns rows on success", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "cap-1" }] });
+      const result = await service.listReports("p-1");
+      expect(result).toHaveLength(1);
+    });
   });
 
   describe("evaluateResourceFloor", () => {

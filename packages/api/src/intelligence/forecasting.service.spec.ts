@@ -46,6 +46,57 @@ describe("ForecastingService", () => {
       expect(result.trend_component.direction).toBeDefined();
       expect(result.accuracy.mape).toBeGreaterThanOrEqual(0);
     });
+
+    it("returns empty forecast gracefully when DB query fails", async () => {
+      mockDb.query.mockRejectedValueOnce(new Error("relation \"runs\" does not exist"));
+      const result = await service.generateForecast({
+        project_id: "p-1",
+        metric: "lcp_ms",
+      });
+      expect(result.forecast_data).toHaveLength(0);
+      expect(result.project_id).toBe("p-1");
+      expect(result.metric).toBe("lcp_ms");
+    });
+
+    it("returns forecast even when saveForecast fails", async () => {
+      const days = Array.from({ length: 10 }, (_, i) => ({
+        day: new Date(2024, 0, i + 1).toISOString().split("T")[0],
+        avg_value: 200 + i * 3,
+      }));
+      mockDb.query
+        .mockResolvedValueOnce({ rows: days }) // fetchHistory
+        .mockRejectedValueOnce(new Error("relation \"forecasts\" does not exist")); // saveForecast fails
+
+      const result = await service.generateForecast({
+        project_id: "p-1",
+        metric: "lcp_ms",
+        horizon_days: 7,
+      });
+      expect(result.forecast_data.length).toBeGreaterThan(0);
+      expect(result.trend_component).toBeDefined();
+    });
+  });
+
+  describe("listForecasts", () => {
+    it("returns empty array when DB query fails", async () => {
+      mockDb.query.mockRejectedValueOnce(new Error("connection refused"));
+      const result = await service.listForecasts("p-1");
+      expect(result).toEqual([]);
+    });
+
+    it("returns rows on success", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [{ id: "f-1", metric: "lcp_ms" }] });
+      const result = await service.listForecasts("p-1");
+      expect(result).toHaveLength(1);
+    });
+
+    it("filters by metric when provided", async () => {
+      mockDb.query.mockResolvedValueOnce({ rows: [] });
+      await service.listForecasts("p-1", "fcp_ms");
+      const call = mockDb.query.mock.calls[0];
+      expect(call[0]).toContain("metric = $2");
+      expect(call[1]).toEqual(["p-1", "fcp_ms"]);
+    });
   });
 
   describe("fitTrend", () => {

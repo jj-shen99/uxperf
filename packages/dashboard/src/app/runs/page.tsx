@@ -47,7 +47,7 @@ export default function RunsPage() {
   const { projects, projectId: defaultProjectId } = useProjects();
   const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
-  const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging" });
+  const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -116,7 +116,7 @@ export default function RunsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["runs"] });
       setShowCreate(false);
-      setForm({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging" });
+      setForm({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
     },
   });
 
@@ -212,6 +212,17 @@ export default function RunsPage() {
                 )}
               </select>
             </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Device</label>
+              <select
+                value={form.device}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, device: e.target.value })}
+                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+              >
+                <option value="desktop">Desktop</option>
+                <option value="mobile">Mobile</option>
+              </select>
+            </div>
           </div>
           <button
             onClick={() =>
@@ -219,7 +230,7 @@ export default function RunsPage() {
                 project_id: formProjectId,
                 script_id: form.script_id || undefined,
                 environment: form.environment,
-                config: { url: form.url, n_runs: parseInt(form.n_runs) || 5 },
+                config: { url: form.url, n_runs: parseInt(form.n_runs) || 5, device: form.device },
                 user_id: currentUser?.id,
               })
             }

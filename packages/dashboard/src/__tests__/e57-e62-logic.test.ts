@@ -293,3 +293,83 @@ describe("E-62: Multi-Geo — TTFB physics floor", () => {
     expect(compareRegions(results, "ttfb_ms")).toBeNull();
   });
 });
+
+// ── Decision Dashboard — projectId filtering (regression) ──
+
+describe("E-60: Decision Dashboard — projectId filtering", () => {
+  const runs = [
+    { project_id: "p-1", status: "completed", metrics: { lcp_ms: 2000 }, created_at: new Date().toISOString() },
+    { project_id: "p-2", status: "completed", metrics: { lcp_ms: 4000 }, created_at: new Date().toISOString() },
+    { project_id: "p-1", status: "completed", metrics: { lcp_ms: 2200 }, created_at: new Date().toISOString() },
+  ];
+
+  function filterByProject(allRuns: any[], projectId?: string): any[] {
+    return projectId ? allRuns.filter((r: any) => r.project_id === projectId) : allRuns;
+  }
+
+  it("returns all runs when no projectId", () => {
+    expect(filterByProject(runs)).toHaveLength(3);
+  });
+
+  it("filters to project p-1 only", () => {
+    const filtered = filterByProject(runs, "p-1");
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every((r: any) => r.project_id === "p-1")).toBe(true);
+  });
+
+  it("filters to project p-2 only", () => {
+    const filtered = filterByProject(runs, "p-2");
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].metrics.lcp_ms).toBe(4000);
+  });
+
+  it("returns empty for unknown project", () => {
+    expect(filterByProject(runs, "p-unknown")).toHaveLength(0);
+  });
+});
+
+// ── Runs form — device config field ──
+
+describe("Runs form — device config in mutation payload", () => {
+  function buildRunPayload(form: {
+    url: string;
+    n_runs: string;
+    environment: string;
+    device: string;
+    project_id: string;
+    script_id: string;
+  }) {
+    return {
+      project_id: form.project_id,
+      script_id: form.script_id || undefined,
+      environment: form.environment,
+      config: { url: form.url, n_runs: parseInt(form.n_runs) || 5, device: form.device },
+    };
+  }
+
+  it("includes device: desktop by default", () => {
+    const payload = buildRunPayload({
+      url: "https://example.com", n_runs: "5", environment: "staging",
+      device: "desktop", project_id: "p-1", script_id: "",
+    });
+    expect(payload.config.device).toBe("desktop");
+  });
+
+  it("includes device: mobile when selected", () => {
+    const payload = buildRunPayload({
+      url: "https://example.com", n_runs: "3", environment: "production",
+      device: "mobile", project_id: "p-1", script_id: "s-1",
+    });
+    expect(payload.config.device).toBe("mobile");
+    expect(payload.script_id).toBe("s-1");
+  });
+
+  it("device field propagates to config not top-level", () => {
+    const payload = buildRunPayload({
+      url: "https://example.com", n_runs: "5", environment: "staging",
+      device: "mobile", project_id: "p-1", script_id: "",
+    });
+    expect((payload as any).device).toBeUndefined();
+    expect(payload.config.device).toBe("mobile");
+  });
+});
