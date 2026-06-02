@@ -369,7 +369,7 @@ export default function IntelligencePage() {
             <div className="space-y-4">
               <h2 className="text-sm font-medium text-gray-400">Decision-Driving Dashboard</h2>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Executive summary for performance review meetings (Ch 16, Practice Four).
+                Executive summary for performance review meetings.
                 Shows <strong className="text-gray-400">metric deltas since last review</strong> — how LCP, FCP, CLS, and Lighthouse scores
                 changed compared to the previous period. Highlights degradations exceeding 15% as <strong className="text-red-400">action items</strong>.
                 Below, <strong className="text-gray-400">Team KPIs</strong> break down performance by team (owner_team on projects),
@@ -379,13 +379,23 @@ export default function IntelligencePage() {
               <DecisionDashboard
                 runs={runs}
                 projects={projects}
+                projectId={projectId}
               />
             </div>
           )}
 
           {/* Mobile vs Desktop Tab (E-61) */}
           {tab === "mobile" && (
-            <MobileSegmentView runs={runs} />
+            <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Mobile vs Desktop</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Side-by-side comparison of desktop and mobile performance with device-aware thresholds.
+                Mobile runs are detected from <code className="text-gray-400">config.device</code> or <code className="text-gray-400">config.formFactor</code> on each run.
+                To produce mobile data, create a run with <code className="text-gray-400">device: &quot;mobile&quot;</code> in the config — either via the API
+                or by setting the device/form-factor in your test script.
+              </p>
+              <MobileSegmentView runs={projectId ? runs.filter((r: any) => r.project_id === projectId) : runs} />
+            </div>
           )}
 
           {/* Multi-Geo Tab (E-62) */}

@@ -31,6 +31,7 @@ interface TeamKpi {
 interface DecisionDashboardProps {
   runs: any[];
   projects: any[];
+  projectId?: string;
   gateResults?: any[];
   reviewWindowDays?: number;
 }
@@ -67,24 +68,31 @@ function trendBadge(trend: string) {
 export function DecisionDashboard({
   runs,
   projects,
+  projectId,
   gateResults = [],
   reviewWindowDays = 7,
 }: DecisionDashboardProps) {
   const cutoff = Date.now() - reviewWindowDays * 86_400_000;
   const prevCutoff = cutoff - reviewWindowDays * 86_400_000;
 
+  // Filter by project if selected
+  const scopedRuns = useMemo(
+    () => projectId ? runs.filter((r: any) => r.project_id === projectId) : runs,
+    [runs, projectId],
+  );
+
   // Split runs into current and previous review windows
   const currentRuns = useMemo(
-    () => runs.filter((r: any) => r.status === "completed" && r.metrics && new Date(r.created_at).getTime() >= cutoff),
-    [runs, cutoff],
+    () => scopedRuns.filter((r: any) => r.status === "completed" && r.metrics && new Date(r.created_at).getTime() >= cutoff),
+    [scopedRuns, cutoff],
   );
   const previousRuns = useMemo(
-    () => runs.filter((r: any) =>
+    () => scopedRuns.filter((r: any) =>
       r.status === "completed" && r.metrics &&
       new Date(r.created_at).getTime() >= prevCutoff &&
       new Date(r.created_at).getTime() < cutoff,
     ),
-    [runs, prevCutoff, cutoff],
+    [scopedRuns, prevCutoff, cutoff],
   );
 
   // Compute headline deltas
