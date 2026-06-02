@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { attachIQRBands } from "@/lib/iqr-utils";
 import { useState, useMemo } from "react";
 import { useProjects } from "@/hooks/use-projects";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -13,6 +14,7 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  Area,
 } from "recharts";
 
 const metricLabels: Record<string, string> = {
@@ -93,16 +95,17 @@ export default function ReportsPage() {
     return completedRuns.filter((r: any) => new Date(r.created_at) >= cutoff);
   }, [completedRuns, days]);
 
-  // Build run trend sparkline data
-  const trendData = useMemo(() =>
-    completedRuns.slice(-20).map((r: any, i: number) => ({
+  // Build run trend sparkline data with IQR bands (E-63)
+  const trendData = useMemo(() => {
+    const data = completedRuns.slice(-20).map((r: any, i: number) => ({
       idx: i + 1,
       lcp: r.metrics?.lcp_ms ?? null,
       fcp: r.metrics?.fcp_ms ?? null,
       lh: r.metrics?.lighthouse_performance_score != null ? Math.round(r.metrics.lighthouse_performance_score * 100) : null,
-    })),
-    [completedRuns]
-  );
+    }));
+    attachIQRBands(data, ["lcp", "fcp", "lh"]);
+    return data;
+  }, [completedRuns]);
 
   // Performance distribution: count good/needs-improvement/poor for each CWV
   const distribution = useMemo(() => {
@@ -313,6 +316,8 @@ export default function ReportsPage() {
                   <Tooltip
                     contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: "12px" }}
                   />
+                  <Area type="monotone" dataKey="lcp_iqr" name="LCP IQR" stroke="none" fill="#818cf8" fillOpacity={0.12} connectNulls legendType="none" tooltipType="none" isAnimationActive={false} />
+                  <Area type="monotone" dataKey="fcp_iqr" name="FCP IQR" stroke="none" fill="#34d399" fillOpacity={0.12} connectNulls legendType="none" tooltipType="none" isAnimationActive={false} />
                   <Line type="monotone" dataKey="lcp" name="LCP (ms)" stroke="#818cf8" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                   <Line type="monotone" dataKey="fcp" name="FCP (ms)" stroke="#34d399" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 </LineChart>
@@ -332,6 +337,7 @@ export default function ReportsPage() {
                   <Tooltip
                     contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: "12px" }}
                   />
+                  <Area type="monotone" dataKey="lh_iqr" name="LH IQR" stroke="none" fill="#fb923c" fillOpacity={0.12} connectNulls legendType="none" tooltipType="none" isAnimationActive={false} />
                   <Line type="monotone" dataKey="lh" name="LH Score" stroke="#fb923c" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 </LineChart>
               </ResponsiveContainer>

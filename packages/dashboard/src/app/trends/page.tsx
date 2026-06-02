@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { computeRollingIQR } from "@/lib/iqr-utils";
 import {
   LineChart,
   Line,
@@ -14,28 +15,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-
-const IQR_WINDOW = 5; // sliding window for IQR computation
-
-/** Compute rolling p25/p75 (IQR band) for a metric across data points. */
-function computeRollingIQR(
-  data: any[],
-  metricKey: string,
-  windowSize: number = IQR_WINDOW,
-): { lower: number | null; upper: number | null }[] {
-  return data.map((_, idx) => {
-    const start = Math.max(0, idx - Math.floor(windowSize / 2));
-    const end = Math.min(data.length, idx + Math.ceil(windowSize / 2));
-    const values = data.slice(start, end)
-      .map((d) => d[metricKey] as number | null)
-      .filter((v): v is number => v != null)
-      .sort((a, b) => a - b);
-    if (values.length < 2) return { lower: null, upper: null };
-    const p25Idx = Math.floor(values.length * 0.25);
-    const p75Idx = Math.floor(values.length * 0.75);
-    return { lower: values[p25Idx], upper: values[Math.min(p75Idx, values.length - 1)] };
-  });
-}
 
 const METRICS = [
   { key: "lcp_ms", label: "LCP (ms)", color: "#818cf8" },
