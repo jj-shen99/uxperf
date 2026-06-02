@@ -15,6 +15,12 @@ export interface CreateRunDto {
     network?: string;
     n_runs?: number;
     viewport?: { width: number; height: number };
+    auth?: {
+      type: "none" | "http_header" | "cookie";
+      header_name?: string;
+      header_value?: string;
+      cookies?: { name: string; value: string; domain?: string; path?: string }[];
+    };
   };
 }
 

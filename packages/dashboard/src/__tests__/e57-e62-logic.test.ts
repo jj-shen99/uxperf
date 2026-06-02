@@ -373,3 +373,58 @@ describe("Runs form — device config in mutation payload", () => {
     expect(payload.config.device).toBe("mobile");
   });
 });
+
+// ── Runs form — auth config payload ──
+
+describe("Runs form — auth config in mutation payload", () => {
+  function buildAuthConfig(auth: {
+    type: string;
+    header_name: string;
+    header_value: string;
+    cookie_name: string;
+    cookie_value: string;
+  }) {
+    if (auth.type === "http_header") {
+      return { type: "http_header" as const, header_name: auth.header_name, header_value: auth.header_value };
+    }
+    if (auth.type === "cookie" && auth.cookie_name) {
+      return { type: "cookie" as const, cookies: [{ name: auth.cookie_name, value: auth.cookie_value }] };
+    }
+    return undefined;
+  }
+
+  it("returns undefined for auth type none", () => {
+    expect(buildAuthConfig({
+      type: "none", header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "",
+    })).toBeUndefined();
+  });
+
+  it("builds http_header auth config", () => {
+    const result = buildAuthConfig({
+      type: "http_header", header_name: "Authorization", header_value: "Bearer tok", cookie_name: "", cookie_value: "",
+    });
+    expect(result).toEqual({ type: "http_header", header_name: "Authorization", header_value: "Bearer tok" });
+  });
+
+  it("builds cookie auth config", () => {
+    const result = buildAuthConfig({
+      type: "cookie", header_name: "", header_value: "", cookie_name: "session", cookie_value: "abc",
+    });
+    expect(result).toEqual({ type: "cookie", cookies: [{ name: "session", value: "abc" }] });
+  });
+
+  it("returns undefined for cookie type with empty cookie name", () => {
+    expect(buildAuthConfig({
+      type: "cookie", header_name: "", header_value: "", cookie_name: "", cookie_value: "abc",
+    })).toBeUndefined();
+  });
+
+  it("auth is not included at top-level config", () => {
+    const authConfig = buildAuthConfig({
+      type: "http_header", header_name: "X-API-Key", header_value: "key123", cookie_name: "", cookie_value: "",
+    });
+    const config = { url: "https://example.com", n_runs: 5, device: "desktop", ...(authConfig ? { auth: authConfig } : {}) };
+    expect(config.auth).toBeDefined();
+    expect(config.auth!.header_name).toBe("X-API-Key");
+  });
+});

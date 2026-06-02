@@ -104,13 +104,31 @@ async function executeSingleRun(
   });
 
   try {
+    const extraHTTPHeaders: Record<string, string> = {};
+    if (request.auth?.type === "http_header" && request.auth.header_name && request.auth.header_value) {
+      extraHTTPHeaders[request.auth.header_name] = request.auth.header_value;
+    }
+
     const context = await browser.newContext({
       viewport: request.viewport,
       userAgent:
         request.device === "mobile"
           ? "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
           : undefined,
+      extraHTTPHeaders: Object.keys(extraHTTPHeaders).length > 0 ? extraHTTPHeaders : undefined,
     });
+
+    if (request.auth?.type === "cookie" && request.auth.cookies?.length) {
+      const url = new URL(request.url);
+      await context.addCookies(
+        request.auth.cookies.map((c) => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain ?? url.hostname,
+          path: c.path ?? "/",
+        })),
+      );
+    }
 
     const page = await context.newPage();
 

@@ -59,13 +59,31 @@ export async function executeJourney(
   const measurements: MeasureResult[] = [];
 
   const viewport = definition.viewport ?? { width: 1280, height: 720 };
+  const extraHTTPHeaders: Record<string, string> = {};
+  if (definition.auth?.type === "http_header" && definition.auth.header_name && definition.auth.header_value) {
+    extraHTTPHeaders[definition.auth.header_name] = definition.auth.header_value;
+  }
+
   const context: BrowserContext = await browser.newContext({
     viewport,
     userAgent:
       definition.device === "mobile"
         ? "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         : undefined,
+    extraHTTPHeaders: Object.keys(extraHTTPHeaders).length > 0 ? extraHTTPHeaders : undefined,
   });
+
+  if (definition.auth?.type === "cookie" && definition.auth.cookies?.length) {
+    const url = new URL(definition.target);
+    await context.addCookies(
+      definition.auth.cookies.map((c) => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain ?? url.hostname,
+        path: c.path ?? "/",
+      })),
+    );
+  }
 
   const page: Page = await context.newPage();
   let lastError: string | undefined;

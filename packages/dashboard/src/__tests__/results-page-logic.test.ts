@@ -104,3 +104,83 @@ describe("Results page chart logic", () => {
     });
   });
 });
+
+// ── Results page — project filtering and historyRuns scoping ──
+
+describe("Results page — project and script filtering", () => {
+  const allRuns = [
+    { id: "r1", status: "completed", project_id: "p1", script_id: "s1", config: { url: "https://a.com" }, metrics: { lighthouse_performance_score: 0.92 } },
+    { id: "r2", status: "completed", project_id: "p1", script_id: "s1", config: { url: "https://a.com" }, metrics: { lighthouse_performance_score: 0.88 } },
+    { id: "r3", status: "completed", project_id: "p1", script_id: "s2", config: { url: "https://b.com" }, metrics: { lighthouse_performance_score: 0.72 } },
+    { id: "r4", status: "completed", project_id: "p2", script_id: null, config: { url: "https://c.com" }, metrics: { lighthouse_performance_score: 0.55 } },
+    { id: "r5", status: "completed", project_id: "p2", script_id: null, config: { url: "https://c.com" }, metrics: { lighthouse_performance_score: 0.60 } },
+    { id: "r6", status: "queued", project_id: "p1", script_id: "s1", config: { url: "https://a.com" }, metrics: null },
+  ];
+
+  function filterByProject(runs: any[], projectId?: string) {
+    return runs.filter((r: any) => r.status === "completed" && (!projectId || r.project_id === projectId));
+  }
+
+  function filterHistory(completedRuns: any[], selectedRunId?: string) {
+    if (!selectedRunId) return completedRuns;
+    const selected = completedRuns.find((r: any) => r.id === selectedRunId);
+    if (!selected) return completedRuns;
+    if (selected.script_id) {
+      return completedRuns.filter((r: any) => r.script_id === selected.script_id);
+    }
+    return completedRuns.filter((r: any) => !r.script_id && r.config?.url === selected.config?.url);
+  }
+
+  describe("project filtering", () => {
+    it("returns all completed runs when no project selected", () => {
+      const result = filterByProject(allRuns);
+      expect(result).toHaveLength(5);
+    });
+
+    it("filters to project p1 only", () => {
+      const result = filterByProject(allRuns, "p1");
+      expect(result).toHaveLength(3);
+      expect(result.every((r: any) => r.project_id === "p1")).toBe(true);
+    });
+
+    it("excludes queued runs", () => {
+      const result = filterByProject(allRuns, "p1");
+      expect(result.find((r: any) => r.id === "r6")).toBeUndefined();
+    });
+  });
+
+  describe("history filtering by script_id", () => {
+    const p1Runs = filterByProject(allRuns, "p1");
+
+    it("returns all completed runs when no run selected", () => {
+      expect(filterHistory(p1Runs)).toHaveLength(3);
+    });
+
+    it("filters to same script_id when run with script is selected", () => {
+      const result = filterHistory(p1Runs, "r1");
+      expect(result).toHaveLength(2);
+      expect(result.every((r: any) => r.script_id === "s1")).toBe(true);
+    });
+
+    it("filters to different script when different run selected", () => {
+      const result = filterHistory(p1Runs, "r3");
+      expect(result).toHaveLength(1);
+      expect(result[0].script_id).toBe("s2");
+    });
+  });
+
+  describe("history filtering by URL (no script)", () => {
+    const p2Runs = filterByProject(allRuns, "p2");
+
+    it("filters to same URL when run without script is selected", () => {
+      const result = filterHistory(p2Runs, "r4");
+      expect(result).toHaveLength(2);
+      expect(result.every((r: any) => r.config.url === "https://c.com")).toBe(true);
+    });
+
+    it("returns all when selectedRunId not found", () => {
+      const result = filterHistory(p2Runs, "nonexistent");
+      expect(result).toHaveLength(2);
+    });
+  });
+});

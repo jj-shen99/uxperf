@@ -1,8 +1,16 @@
+export interface RunAuth {
+  type: "none" | "http_header" | "cookie";
+  header_name?: string;   // e.g. "Authorization"
+  header_value?: string;  // e.g. "Bearer eyJ..."
+  cookies?: { name: string; value: string; domain?: string; path?: string }[];
+}
+
 export interface EngineRunRequest {
   url: string;
   n_runs: number;
   device: "desktop" | "mobile";
   viewport: { width: number; height: number };
+  auth?: RunAuth;
   throttling?: {
     cpu_slowdown?: number;
     download_kbps?: number;

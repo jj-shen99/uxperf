@@ -13,6 +13,12 @@ export interface JourneyDefinition {
   target: string;
   device?: "desktop" | "mobile";
   viewport?: { width: number; height: number };
+  auth?: {
+    type: "none" | "http_header" | "cookie";
+    header_name?: string;
+    header_value?: string;
+    cookies?: { name: string; value: string; domain?: string; path?: string }[];
+  };
   throttling?: {
     cpu_slowdown?: number;
     download_kbps?: number;

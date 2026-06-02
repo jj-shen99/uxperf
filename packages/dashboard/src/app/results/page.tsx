@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useProjects } from "@/hooks/use-projects";
 import { MetricTooltip } from "@/components/metric-tooltip";
 import {
   BarChart,
@@ -80,6 +81,7 @@ function scoreRating(score: number) {
 
 export default function ResultsPage() {
   const { currentUser, isAdmin } = useCurrentUser();
+  const { projects, projectId, setProjectId } = useProjects();
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
@@ -93,8 +95,22 @@ export default function ResultsPage() {
     queryFn: () => api.scripts.list(),
   });
 
-  // Filter: only completed runs; non-admin users see only their project runs
-  const completedRuns = allRuns.filter((r: any) => r.status === "completed");
+  // Filter: only completed runs, scoped to selected project
+  const completedRuns = useMemo(() =>
+    allRuns.filter((r: any) => r.status === "completed" && (!projectId || r.project_id === projectId)),
+    [allRuns, projectId],
+  );
+
+  // Runs that share the same script (or same URL if no script) as the selected run — for history charts
+  const historyRuns = useMemo(() => {
+    if (!selectedRunId) return completedRuns;
+    const selected = completedRuns.find((r: any) => r.id === selectedRunId);
+    if (!selected) return completedRuns;
+    if (selected.script_id) {
+      return completedRuns.filter((r: any) => r.script_id === selected.script_id);
+    }
+    return completedRuns.filter((r: any) => !r.script_id && r.config?.url === selected.config?.url);
+  }, [completedRuns, selectedRunId]);
 
   const { data: selectedRun } = useQuery({
     queryKey: ["run", selectedRunId],
@@ -183,25 +199,42 @@ export default function ResultsPage() {
         </p>
       </div>
 
-      {/* Run selector */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-        <label className="block text-xs text-gray-400 mb-2">Select Test Execution</label>
-        <select
-          value={selectedRunId}
-          onChange={(e) => { setSelectedRunId(e.target.value); setExpandedStep(null); }}
-          className="w-full max-w-xl rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
-        >
-          <option value="">Choose a completed run...</option>
-          {completedRuns.map((r: any) => {
-            const script = r.script_id ? scripts.find((s: any) => s.id === r.script_id) : null;
-            const scriptLabel = script?.name ? ` [${script.name}]` : "";
-            return (
-              <option key={r.id} value={r.id}>
-                {new Date(r.created_at).toLocaleString()} — {r.config?.url || "unknown"}{scriptLabel} ({r.id.slice(0, 8)})
-              </option>
-            );
-          })}
-        </select>
+      {/* Project & Run selector */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Project</label>
+            <select
+              value={projectId}
+              onChange={(e) => { setProjectId(e.target.value); setSelectedRunId(""); }}
+              className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+            >
+              <option value="">All Projects</option>
+              {projects.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Test Execution</label>
+            <select
+              value={selectedRunId}
+              onChange={(e) => { setSelectedRunId(e.target.value); setExpandedStep(null); }}
+              className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+            >
+              <option value="">Choose a completed run...</option>
+              {completedRuns.map((r: any) => {
+                const script = r.script_id ? scripts.find((s: any) => s.id === r.script_id) : null;
+                const scriptLabel = script?.name ? ` [${script.name}]` : "";
+                return (
+                  <option key={r.id} value={r.id}>
+                    {new Date(r.created_at).toLocaleString()} — {r.config?.url || "unknown"}{scriptLabel} ({r.id.slice(0, 8)})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
         {isLoading && <p className="mt-2 text-xs text-gray-500">Loading runs...</p>}
       </div>
 
@@ -670,9 +703,20 @@ export default function ResultsPage() {
         </>
       )}
 
-      {/* Cross-run comparison charts (always visible when runs exist) */}
-      {completedRuns.length >= 2 && (() => {
-        const scatterData = completedRuns
+      {/* Cross-run comparison charts — scoped to same script/URL when a run is selected */}
+      {historyRuns.length >= 2 && (() => {
+        const historyLabel = (() => {
+          if (!selectedRunId) return "All Completed Runs";
+          const sel = completedRuns.find((r: any) => r.id === selectedRunId);
+          if (!sel) return "All Completed Runs";
+          if (sel.script_id) {
+            const s = scripts.find((sc: any) => sc.id === sel.script_id);
+            return s?.name ? `Script: ${s.name}` : "Same Script";
+          }
+          return `URL: ${(sel.config?.url ?? "").replace(/^https?:\/\//, "").slice(0, 40)}`;
+        })();
+
+        const scatterData = historyRuns
           .filter((r: any) => r.metrics?.fcp_ms != null && r.metrics?.lcp_ms != null)
           .map((r: any) => ({
             fcp: Math.round(r.metrics.fcp_ms),
@@ -682,7 +726,7 @@ export default function ResultsPage() {
             id: r.id.slice(0, 8),
           }));
 
-        const lhDistribution = completedRuns
+        const lhDistribution = historyRuns
           .filter((r: any) => r.metrics?.lighthouse_performance_score != null)
           .map((r: any) => {
             const score = Math.round((r.metrics.lighthouse_performance_score as number) * 100);
@@ -698,7 +742,7 @@ export default function ResultsPage() {
           <div className="space-y-6">
             {scatterData.length >= 2 && (
               <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-                <h2 className="mb-1 text-sm font-medium text-gray-300">FCP vs LCP Scatter — All Completed Runs</h2>
+                <h2 className="mb-1 text-sm font-medium text-gray-300">FCP vs LCP Scatter — {historyLabel}</h2>
                 <p className="mb-4 text-xs text-gray-500">Each dot is a completed run. Color shows Lighthouse Performance score.</p>
                 <ResponsiveContainer width="100%" height={320}>
                   <ScatterChart margin={{ top: 10, right: 30, bottom: 10, left: 10 }}>
@@ -724,8 +768,8 @@ export default function ResultsPage() {
 
             {lhDistribution.length >= 2 && (
               <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-                <h2 className="mb-1 text-sm font-medium text-gray-300">Lighthouse Performance Score History</h2>
-                <p className="mb-4 text-xs text-gray-500">Recent completed runs. Green ≥ 90, Yellow ≥ 50, Red &lt; 50.</p>
+                <h2 className="mb-1 text-sm font-medium text-gray-300">Lighthouse Performance Score History — {historyLabel}</h2>
+                <p className="mb-4 text-xs text-gray-500">Showing runs for the same {selectedRunId ? "script/URL" : "project"}. Green ≥ 90, Yellow ≥ 50, Red &lt; 50.</p>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={lhDistribution} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />

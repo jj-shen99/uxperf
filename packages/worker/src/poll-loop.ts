@@ -25,6 +25,12 @@ interface ClaimedRun {
     device?: string;
     n_runs?: number;
     viewport?: { width: number; height: number };
+    auth?: {
+      type: "none" | "http_header" | "cookie";
+      header_name?: string;
+      header_value?: string;
+      cookies?: { name: string; value: string; domain?: string; path?: string }[];
+    };
   };
   environment: string;
 }
@@ -228,6 +234,7 @@ async function executeJourneyRun(
       target: targetUrl,
       device,
       viewport: run.config.viewport ?? (device === "mobile" ? { width: 375, height: 812 } : { width: 1920, height: 1080 }),
+      auth: run.config.auth?.type && run.config.auth.type !== "none" ? run.config.auth : undefined,
       screenshots: true,
       stages: [],
     };
@@ -308,6 +315,7 @@ async function executeSingleUrlRun(
         n_runs: nRuns,
         device: (run.config.device as "desktop" | "mobile") ?? "desktop",
         viewport: run.config.viewport ?? { width: 1920, height: 1080 },
+        auth: run.config.auth?.type && run.config.auth.type !== "none" ? run.config.auth : undefined,
       },
       (msg) => postLog(run.id, msg),
     );

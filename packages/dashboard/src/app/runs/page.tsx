@@ -48,6 +48,7 @@ export default function RunsPage() {
   const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
   const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
+  const [auth, setAuth] = useState({ type: "none" as string, header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "" });
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -117,6 +118,7 @@ export default function RunsPage() {
       qc.invalidateQueries({ queryKey: ["runs"] });
       setShowCreate(false);
       setForm({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
+      setAuth({ type: "none", header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "" });
     },
   });
 
@@ -224,16 +226,84 @@ export default function RunsPage() {
               </select>
             </div>
           </div>
+          <div className="space-y-2">
+            <label className="block text-xs text-gray-400">Authentication</label>
+            <select
+              value={auth.type}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAuth({ ...auth, type: e.target.value })}
+              className="w-full sm:w-48 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
+            >
+              <option value="none">None</option>
+              <option value="http_header">HTTP Header</option>
+              <option value="cookie">Cookie</option>
+            </select>
+            {auth.type === "http_header" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Header Name</label>
+                  <input
+                    value={auth.header_name}
+                    onChange={(e) => setAuth({ ...auth, header_name: e.target.value })}
+                    placeholder="Authorization"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Header Value</label>
+                  <input
+                    value={auth.header_value}
+                    onChange={(e) => setAuth({ ...auth, header_value: e.target.value })}
+                    placeholder="Bearer eyJ..."
+                    type="password"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+              </div>
+            )}
+            {auth.type === "cookie" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Cookie Name</label>
+                  <input
+                    value={auth.cookie_name}
+                    onChange={(e) => setAuth({ ...auth, cookie_name: e.target.value })}
+                    placeholder="session_id"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Cookie Value</label>
+                  <input
+                    value={auth.cookie_value}
+                    onChange={(e) => setAuth({ ...auth, cookie_value: e.target.value })}
+                    placeholder="abc123..."
+                    type="password"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
           <button
-            onClick={() =>
+            onClick={() => {
+              const authConfig = auth.type === "http_header"
+                ? { type: "http_header" as const, header_name: auth.header_name, header_value: auth.header_value }
+                : auth.type === "cookie" && auth.cookie_name
+                ? { type: "cookie" as const, cookies: [{ name: auth.cookie_name, value: auth.cookie_value }] }
+                : undefined;
               createMut.mutate({
                 project_id: formProjectId,
                 script_id: form.script_id || undefined,
                 environment: form.environment,
-                config: { url: form.url, n_runs: parseInt(form.n_runs) || 5, device: form.device },
+                config: {
+                  url: form.url,
+                  n_runs: parseInt(form.n_runs) || 5,
+                  device: form.device,
+                  ...(authConfig ? { auth: authConfig } : {}),
+                },
                 user_id: currentUser?.id,
-              })
-            }
+              });
+            }}
             disabled={!formProjectId || !form.url}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >

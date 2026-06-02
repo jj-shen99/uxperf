@@ -97,12 +97,15 @@ function createMockPage() {
 }
 
 function createMockBrowser(page: ReturnType<typeof createMockPage>) {
+  const addCookies = vi.fn().mockResolvedValue(undefined);
   return {
     newContext: vi.fn().mockResolvedValue({
       newPage: vi.fn().mockResolvedValue(page),
+      addCookies,
       close: vi.fn().mockResolvedValue(undefined),
     }),
     close: vi.fn().mockResolvedValue(undefined),
+    __addCookies: addCookies,
   } as any;
 }
 
@@ -480,6 +483,50 @@ describe("executeJourney", () => {
       const result = await executeJourney(mockBrowser, baseDef, steps, { captureHar: false });
 
       expect(result.har).toBeUndefined();
+    });
+  });
+
+  // ── Authentication handling ──
+
+  describe("auth", () => {
+    it("passes HTTP header auth as extraHTTPHeaders to browser context", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const def: JourneyDefinition = {
+        ...baseDef,
+        auth: { type: "http_header", header_name: "Authorization", header_value: "Bearer tok123" },
+      };
+      await executeJourney(mockBrowser, def, steps);
+
+      const ctxCall = mockBrowser.newContext.mock.calls[0][0];
+      expect(ctxCall.extraHTTPHeaders).toEqual({ Authorization: "Bearer tok123" });
+    });
+
+    it("injects cookies via addCookies for cookie auth", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com/app", label: "visit" },
+      ];
+      const def: JourneyDefinition = {
+        ...baseDef,
+        auth: { type: "cookie", cookies: [{ name: "sid", value: "abc123" }] },
+      };
+      await executeJourney(mockBrowser, def, steps);
+
+      expect(mockBrowser.__addCookies).toHaveBeenCalledWith([
+        { name: "sid", value: "abc123", domain: "example.com", path: "/" },
+      ]);
+    });
+
+    it("does not set extraHTTPHeaders or cookies when auth is none", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      await executeJourney(mockBrowser, baseDef, steps);
+
+      const ctxCall = mockBrowser.newContext.mock.calls[0][0];
+      expect(ctxCall.extraHTTPHeaders).toBeUndefined();
+      expect(mockBrowser.__addCookies).not.toHaveBeenCalled();
     });
   });
 });

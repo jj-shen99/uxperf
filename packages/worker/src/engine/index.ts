@@ -15,6 +15,7 @@ import "./adapters/wpt-adapter";
 import "./adapters/sitespeed-adapter";
 
 export type {
+  RunAuth,
   EngineRunRequest,
   EngineRunResult,
   SingleRunResult,
