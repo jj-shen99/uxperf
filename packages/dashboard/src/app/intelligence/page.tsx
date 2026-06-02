@@ -366,10 +366,21 @@ export default function IntelligencePage() {
         <>
           {/* Decisions Tab (E-60) */}
           {tab === "decisions" && (
-            <DecisionDashboard
-              runs={runs}
-              projects={projects}
-            />
+            <div className="space-y-4">
+              <h2 className="text-sm font-medium text-gray-400">Decision-Driving Dashboard</h2>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Executive summary for performance review meetings (Ch 16, Practice Four).
+                Shows <strong className="text-gray-400">metric deltas since last review</strong> — how LCP, FCP, CLS, and Lighthouse scores
+                changed compared to the previous period. Highlights degradations exceeding 15% as <strong className="text-red-400">action items</strong>.
+                Below, <strong className="text-gray-400">Team KPIs</strong> break down performance by team (owner_team on projects),
+                showing average metrics, gate pass rate, and trend direction.
+                Use this tab in weekly/bi-weekly performance syncs to quickly answer: &quot;Are we getting better or worse?&quot;
+              </p>
+              <DecisionDashboard
+                runs={runs}
+                projects={projects}
+              />
+            </div>
           )}
 
           {/* Mobile vs Desktop Tab (E-61) */}
@@ -765,12 +776,18 @@ export default function IntelligencePage() {
               {forecastMut.isError && (
                 <p className="text-sm text-red-400">Error generating forecast: {(forecastMut.error as any)?.message ?? "Unknown error"}</p>
               )}
+              {forecastMut.isSuccess && forecastMut.data && (forecastMut.data as any).forecast_data?.length === 0 && (
+                <div className="rounded-lg border border-yellow-800/30 bg-yellow-900/10 p-4">
+                  <p className="text-sm text-yellow-400">Insufficient data for forecast.</p>
+                  <p className="mt-1 text-xs text-gray-500">Need at least 7 days of completed runs for this metric and environment. Run more performance tests and try again.</p>
+                </div>
+              )}
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view forecasts.</p>
-              ) : forecasts.length === 0 ? (
+              ) : forecasts.length === 0 && !forecastMut.isSuccess ? (
                 <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
                   <p className="text-sm">No forecasts generated yet.</p>
-                  <p className="mt-1 text-xs">Select a metric and click &quot;Generate Forecast&quot; to create a prediction.</p>
+                  <p className="mt-1 text-xs">Select a metric and click &quot;Generate Forecast&quot; to create a 14-day prediction based on your historical runs.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -928,12 +945,21 @@ export default function IntelligencePage() {
                   </button>
                 )}
               </div>
+              {capacityMut.isError && (
+                <p className="text-sm text-red-400">Error generating report: {(capacityMut.error as any)?.message ?? "Unknown error"}</p>
+              )}
+              {capacityMut.isSuccess && capacityMut.data && (capacityMut.data as any).load_runs_analyzed?.length === 0 && (
+                <div className="rounded-lg border border-yellow-800/30 bg-yellow-900/10 p-4">
+                  <p className="text-sm text-yellow-400">No load test data available.</p>
+                  <p className="mt-1 text-xs text-gray-500">Run load tests using the k6 Browser engine first, then generate a capacity report.</p>
+                </div>
+              )}
               {!projectId ? (
                 <p className="text-sm text-gray-500">Select a project to view capacity reports.</p>
-              ) : capacityReports.length === 0 ? (
+              ) : capacityReports.length === 0 && !capacityMut.isSuccess ? (
                 <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
                   <p className="text-sm">No capacity reports generated yet.</p>
-                  <p className="mt-1 text-xs">Click &quot;Generate Report&quot; to create a capacity analysis.</p>
+                  <p className="mt-1 text-xs">Click &quot;Generate Report&quot; to create a capacity analysis based on your k6 Browser load tests.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

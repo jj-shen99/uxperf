@@ -65,20 +65,26 @@ export class CapacityPlanningService {
    */
   async generateReport(projectId: string, horizonDays = 90): Promise<CapacityReport> {
     // Fetch completed load runs
-    const loadRuns = await this.db.query<{
-      id: string;
-      target_vus: number;
-      actual_peak_vus: number | null;
-      metrics_summary: Record<string, number> | null;
-      saturation_warnings: any[];
-    }>(
-      `SELECT id, target_vus, actual_peak_vus, metrics_summary, saturation_warnings
-       FROM load_runs WHERE project_id = $1 AND status = 'completed'
-       ORDER BY created_at DESC LIMIT 20`,
-      [projectId],
-    );
+    let runs: { id: string; target_vus: number; actual_peak_vus: number | null; metrics_summary: Record<string, number> | null; saturation_warnings: any[] }[];
+    try {
+      const loadRuns = await this.db.query<{
+        id: string;
+        target_vus: number;
+        actual_peak_vus: number | null;
+        metrics_summary: Record<string, number> | null;
+        saturation_warnings: any[];
+      }>(
+        `SELECT id, target_vus, actual_peak_vus, metrics_summary, saturation_warnings
+         FROM load_runs WHERE project_id = $1 AND status = 'completed'
+         ORDER BY created_at DESC LIMIT 20`,
+        [projectId],
+      );
+      runs = loadRuns.rows;
+    } catch (err: any) {
+      this.logger.warn(`Failed to fetch load runs: ${err.message}`);
+      return this.emptyReport(projectId, horizonDays);
+    }
 
-    const runs = loadRuns.rows;
     if (runs.length === 0) {
       return this.emptyReport(projectId, horizonDays);
     }
@@ -108,8 +114,12 @@ export class CapacityPlanningService {
       projected_growth: growth,
     };
 
-    // Persist
-    await this.saveReport(report);
+    // Persist (best-effort)
+    try {
+      await this.saveReport(report);
+    } catch (err: any) {
+      this.logger.warn(`saveReport failed: ${err.message}`);
+    }
 
     return report;
   }
@@ -383,10 +393,14 @@ export class CapacityPlanningService {
   }
 
   async listReports(projectId: string, limit = 10): Promise<any[]> {
-    const r = await this.db.query(
-      "SELECT * FROM capacity_reports WHERE project_id = $1 ORDER BY computed_at DESC LIMIT $2",
-      [projectId, limit],
-    );
-    return r.rows;
+    try {
+      const r = await this.db.query(
+        "SELECT * FROM capacity_reports WHERE project_id = $1 ORDER BY computed_at DESC LIMIT $2",
+        [projectId, limit],
+      );
+      return r.rows;
+    } catch {
+      return [];
+    }
   }
 }

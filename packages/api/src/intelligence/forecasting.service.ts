@@ -91,7 +91,14 @@ export class ForecastingService {
     } = input;
 
     // Step 1: Fetch historical data
-    const history = await this.fetchHistory(project_id, metric, environment, history_days);
+    let history: { date: string; value: number }[];
+    try {
+      history = await this.fetchHistory(project_id, metric, environment, history_days);
+    } catch (err: any) {
+      this.logger.warn(`fetchHistory failed: ${err.message}`);
+      return this.emptyForecast(project_id, metric, environment, horizon_days,
+        "No historical data available — run some performance tests first");
+    }
 
     if (history.length < 7) {
       return this.emptyForecast(project_id, metric, environment, horizon_days,
@@ -123,8 +130,12 @@ export class ForecastingService {
       accuracy,
     };
 
-    // Persist
-    await this.saveForecast(result);
+    // Persist (best-effort — don't fail the response)
+    try {
+      await this.saveForecast(result);
+    } catch (err: any) {
+      this.logger.warn(`saveForecast failed: ${err.message}`);
+    }
 
     return result;
   }
@@ -510,16 +521,20 @@ export class ForecastingService {
   }
 
   async listForecasts(projectId: string, metric?: string): Promise<any[]> {
-    const params: unknown[] = [projectId];
-    let where = "project_id = $1";
-    if (metric) {
-      params.push(metric);
-      where += ` AND metric = $${params.length}`;
+    try {
+      const params: unknown[] = [projectId];
+      let where = "project_id = $1";
+      if (metric) {
+        params.push(metric);
+        where += ` AND metric = $${params.length}`;
+      }
+      const r = await this.db.query(
+        `SELECT * FROM forecasts WHERE ${where} ORDER BY computed_at DESC LIMIT 20`,
+        params,
+      );
+      return r.rows;
+    } catch {
+      return [];
     }
-    const r = await this.db.query(
-      `SELECT * FROM forecasts WHERE ${where} ORDER BY computed_at DESC LIMIT 20`,
-      params,
-    );
-    return r.rows;
   }
 }
