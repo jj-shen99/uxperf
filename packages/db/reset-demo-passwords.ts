@@ -13,10 +13,11 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
+// Override demo passwords via env vars; defaults are for local development only
 const DEMO_ACCOUNTS: { email: string; password: string; role: string }[] = [
-  { email: "admin@perftest.io", password: "admin123!", role: "admin" },
-  { email: "editor@perftest.io", password: "editor123!", role: "editor" },
-  { email: "viewer@perftest.io", password: "viewer123!", role: "viewer" },
+  { email: "admin@perftest.io", password: process.env.DEMO_ADMIN_PASSWORD || "admin123!", role: "admin" },
+  { email: "editor@perftest.io", password: process.env.DEMO_EDITOR_PASSWORD || "editor123!", role: "editor" },
+  { email: "viewer@perftest.io", password: process.env.DEMO_VIEWER_PASSWORD || "viewer123!", role: "viewer" },
 ];
 
 async function main() {
@@ -44,7 +45,7 @@ async function main() {
     "SELECT id, email FROM users WHERE password_hash IS NULL OR password_hash = ''",
   );
   for (const user of rows) {
-    const hash = hashPassword("admin123!");
+    const hash = hashPassword(process.env.DEMO_PASSWORD || "admin123!");
     await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, user.id]);
     console.log(`  ✓ ${user.email} — set default password`);
   }

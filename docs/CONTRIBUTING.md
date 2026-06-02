@@ -4,8 +4,8 @@
 
 ```bash
 # Clone and install
-git clone https://github.com/jj-shen99/ui_performance_testing_and_analysis.git
-cd ui_performance_testing_and_analysis
+git clone https://github.com/jj-shen99/uxperf.git
+cd uxperf
 npm install
 
 # Start Postgres
@@ -64,16 +64,17 @@ npm run dev:dashboard    # Terminal 2 → http://localhost:4200
 npm test
 
 # Individual packages
-npm test --workspace=packages/api         # Jest (56 spec files)
-npm test --workspace=packages/shared      # Vitest (135 tests)
-npm test --workspace=packages/worker      # Vitest (52 tests)
-npm test --workspace=packages/dashboard   # Vitest (6 test suites)
+npm test --workspace=packages/api         # Jest (87 suites, 1050 tests)
+npm test --workspace=packages/dashboard   # Jest (24 suites, 771 tests)
+npm test --workspace=packages/worker      # Vitest (10 suites, 205 tests)
+npm test --workspace=packages/shared      # Vitest (1 suite, 135 tests)
 ```
 
 ### Test Conventions
 
 - **API**: Jest with `.spec.ts` files co-located with source
-- **Shared/Worker/Dashboard**: Vitest with `__tests__/` directories
+- **Dashboard**: Jest with `__tests__/` directory
+- **Worker/Shared**: Vitest with `__tests__/` directories
 - New features must include tests
 - Tests should not be deleted or weakened without explicit approval
 

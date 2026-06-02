@@ -1,7 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { createHmac, randomBytes } from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME_IN_PRODUCTION_" + randomBytes(16).toString("hex");
+if (!process.env.JWT_SECRET) {
+  const logger = new Logger("JwtService");
+  logger.warn("JWT_SECRET not set — using an auto-generated fallback. Tokens will not survive restarts. Set JWT_SECRET in production.");
+}
 const JWT_EXPIRES_SECONDS = parseInt(process.env.JWT_EXPIRES_SECONDS || "86400", 10); // 24h
 
 export interface JwtPayload {

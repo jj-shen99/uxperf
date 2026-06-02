@@ -91,7 +91,7 @@ Sign in with one of the seed accounts above (e.g., `admin@perftest.io` / `admin1
 
 ## Authentication
 
-The framework uses password-based authentication. All dashboard pages (except login, register, forgot-password, and reset-password) require an active session.
+The framework uses **JWT-based authentication**. All API endpoints require a `Bearer` token unless explicitly marked public. All dashboard pages (except login, register, forgot-password, and reset-password) require an active session.
 
 ### Logging in
 
@@ -124,9 +124,17 @@ Click the **Logout** button at the bottom of the sidebar. This clears your sessi
 
 ### Session management
 
-- Sessions are stored in `localStorage` as `perf_user`
-- The session includes user ID, email, display name, and role
+- Sessions are stored in `localStorage` as `perf_user` (profile) and `auth_token` (JWT)
+- The JWT token is sent as `Authorization: Bearer <token>` on every API request
+- If the API returns 401 (expired/missing token), the dashboard clears the session and redirects to `/login`
 - If the API reports updated user data (e.g., role change by admin), the session auto-refreshes
+- JWT tokens expire after 24 hours by default (configurable via `JWT_EXPIRES_SECONDS`)
+
+### Security notes
+
+- **Production:** Set `JWT_SECRET` and `TOKEN_ENCRYPTION_KEY` in your `.env` file. The API logs warnings at startup if these are missing.
+- **Demo passwords** (`admin123!`, etc.) are for local development only. Override via `DEMO_ADMIN_PASSWORD`, `DEMO_EDITOR_PASSWORD`, `DEMO_VIEWER_PASSWORD` env vars.
+- Auth endpoints are rate-limited to **5 requests per 60 seconds**. Session-upgrade is limited to **2 per 60s**.
 
 ---
 
@@ -152,11 +160,14 @@ The sidebar organizes 18 pages into four groups:
 - **Gates** — Quality gate configuration (threshold, baseline, statistical, VU-tiered) with on-demand "Check Against Run" evaluation
 - **Compare** — Side-by-side run comparison with bar charts and diff table
 - **Anomalies** — Anomaly feed with filters (project, time range, metric), trend charts, resolution actions
-- **Intelligence** — SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning
+- **Intelligence** — SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning, mobile-vs-desktop, multi-geo
+- **Investigation** — Regression timeline, attribution panel, gate status, baseline comparison
+- **Audit** — Interactive Appendix C checklist with auto-evaluation and KPI reference guide
 
 ### Admin
 - **Users** — User management (admin-only, sortable columns)
-- **Settings** — Project management, notification channels, environments, user profile
+- **Settings** — Project management, notification channels, environments, WPT configuration, user profile
+- **Platform Health** — Platform self-monitoring, on-call rotation management, quarterly practice reviews
 
 ---
 
@@ -544,3 +555,11 @@ Token requires `checks:write` or `repo:status` permission.
 ### Scripts page shows "No scripts yet" after creating
 - Verify the API returned the script: `curl http://localhost:4000/api/v1/scripts`
 - If non-admin, ensure project memberships are configured or check project access
+
+### "JWT_SECRET not set" warning at startup
+- This is expected in development — a random secret is auto-generated
+- In production, set `JWT_SECRET` in your `.env` file: `openssl rand -hex 32`
+
+### "TOKEN_ENCRYPTION_KEY not set" warning
+- Same as above — set `TOKEN_ENCRYPTION_KEY` in `.env` for production
+- Without it, GitHub token encryption uses a known default key

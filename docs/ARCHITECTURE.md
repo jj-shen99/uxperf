@@ -302,7 +302,7 @@ src/
 ├── lib/
 │   └── api.ts               API client with typed endpoints
 │
-└── __tests__/               6 test suites (Vitest)
+└── __tests__/               24 test suites (Jest)
 ```
 
 ### `packages/worker` — Test Execution Engine
@@ -324,7 +324,7 @@ src/
     │   ├── playwright-adapter.ts    Playwright adapter (built-in)
     │   ├── k6-browser-adapter.ts    k6 browser module adapter
     │   ├── wpt-adapter.ts           WebPageTest adapter
-    │   └── sitespeed-adapter.ts     sitespeed.io placeholder
+    │   └── sitespeed-adapter.ts     sitespeed.io adapter (CLI/Docker)
     │
     └── __tests__/            Unit tests (Vitest)
 ```
@@ -339,7 +339,11 @@ migrations/
 ├── 004_phase3_intelligence   Anomalies, per-request data, reports, authoring logs
 ├── 005_phase35_load          Load profiles, load runs, telemetry, load gates
 ├── 006_phase4_ga_scale       RUM events, CrUX snapshots, API keys, audit log, forecasts
-└── 007_auth_password         Password hashing fields
+├── 007_auth_password         Password hashing fields
+├── 008–009                   Budgets, gate overrides, capacity, canary analysis
+├── 010–011                   Gate overrides audit trail, deploy watches
+├── 012                       RUM hourly aggregates, custom metrics
+└── 013–014                   Seasonal baselines, bundle-size checks
 ```
 
 ---

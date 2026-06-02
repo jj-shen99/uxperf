@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
@@ -16,6 +16,11 @@ export class CryptoService {
 
   constructor() {
     const envKey = process.env.TOKEN_ENCRYPTION_KEY || "CHANGE_ME_default_dev_key_32chars!!";
+    if (!process.env.TOKEN_ENCRYPTION_KEY) {
+      new Logger("CryptoService").warn(
+        "TOKEN_ENCRYPTION_KEY not set — using insecure default. Set TOKEN_ENCRYPTION_KEY in production.",
+      );
+    }
     this.key = scryptSync(envKey, SALT, 32);
   }
 

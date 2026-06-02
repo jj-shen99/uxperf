@@ -14,7 +14,8 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
-const DEFAULT_PASSWORD = "admin123!";
+// Default password for demo accounts — override via DEMO_PASSWORD env var
+const DEFAULT_PASSWORD = process.env.DEMO_PASSWORD || "admin123!";
 
 async function main() {
   const pool = new Pool({

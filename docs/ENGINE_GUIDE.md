@@ -11,7 +11,7 @@ Which engine to use, when, how, and where to configure it.
 | **Playwright + Lighthouse** | Synthetic single-user performance testing | ✅ Built-in (default) | CWV measurement, Lighthouse audits, CI gates, regression detection |
 | **k6 Browser** | Concurrent load testing with real browsers | ✅ Built-in (opt-in) | Load testing, VU ramp, saturation detection, capacity planning |
 | **WebPageTest (WPT)** | Synthetic testing via private WPT instance | ✅ Built-in (opt-in) | Waterfall analysis, filmstrip comparison, multi-location testing, third-party validation |
-| **sitespeed.io** | Alternative synthetic runner | 🔲 Placeholder | Future — Docker-based testing alternative |
+| **sitespeed.io** | Alternative synthetic runner | ✅ Built-in (opt-in) | Docker-based testing with CLI/JSON parsing and metric aggregation |
 
 ---
 
@@ -262,28 +262,31 @@ curl -X POST http://localhost:4000/api/v1/runs \
 
 ---
 
-## 4. sitespeed.io (Placeholder)
+## 4. sitespeed.io
 
 ### When to use
 
 - Alternative open-source synthetic runner
 - Docker-based testing for containerized CI environments
 - HAR-based analysis and Coach recommendations
+- When you need browsertime-level detail for metric aggregation
 
-### Status
+### What it measures
 
-Currently a **placeholder adapter**. The adapter interface exists but `run()` returns an error:
+| Metric | Source |
+|--------|--------|
+| LCP, FCP, CLS, TTFB, TBT | browsertime JSON (statistics median or browserScripts fallback) |
+| Speed Index | sitespeed.io visual metrics |
+| Total requests, transfer size | HAR data |
 
-```
-sitespeed.io adapter not yet implemented
-```
-
-### How to enable (future)
+### How to enable
 
 ```bash
 export SITESPEED_ENABLED=true
 export SITESPEED_DOCKER_IMAGE=sitespeedio/sitespeed.io:latest  # optional
 ```
+
+The adapter supports both CLI execution (`sitespeed.io` binary) and Docker execution. It parses the `pages/*/data/browsertime.pageSummary.json` output, aggregates metrics using statistics medians, and builds individual run results.
 
 ---
 
@@ -308,13 +311,13 @@ Is this a load/capacity test?
 
 | Feature | Playwright+LH | k6 Browser | WPT | sitespeed.io |
 |---------|:---:|:---:|:---:|:---:|
-| Core Web Vitals | ✅ | ✅ | ✅ | 🔲 |
+| Core Web Vitals | ✅ | ✅ | ✅ | ✅ |
 | Lighthouse scores | ✅ | — | ✅ (if enabled) | — |
 | Concurrent VUs | — | ✅ | — | — |
 | VU ramp stages | — | ✅ | — | — |
 | Saturation detection | — | ✅ | — | — |
-| Waterfall analysis | — | — | ✅ | 🔲 |
-| Filmstrip / video | — | — | ✅ | 🔲 |
+| Waterfall analysis | — | — | ✅ | ✅ |
+| Filmstrip / video | — | — | ✅ | — |
 | Multi-location | — | — | ✅ | — |
 | Repeat-view (cached) | — | — | ✅ | — |
 | No external deps | ✅ | — | — | — |

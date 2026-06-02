@@ -166,8 +166,8 @@ sectionDivider("Architecture", "Monorepo with 5 packages, Docker Compose orchest
 tableSlide("Tech Stack", ["Layer", "Technology"], [
   ["Frontend", "Next.js 15, React 19, TanStack Query, Tailwind CSS 4, Recharts, Lucide React"],
   ["Backend", "NestJS 10, TypeScript 5, Node.js 20"],
-  ["Database", "PostgreSQL 16 (9 migration sets, 18 migration files)"],
-  ["Test Engines", "Playwright + Lighthouse (built-in), k6 Browser (built-in), WebPageTest (opt-in)"],
+  ["Database", "PostgreSQL 16 (11 migration sets)"],
+  ["Test Engines", "Playwright + Lighthouse, k6 Browser, WebPageTest, sitespeed.io"],
   ["Containerization", "Docker, Docker Compose (Postgres, API, Dashboard, Worker services)"],
   ["CI/CD", "GitHub Actions — test → lint → build → migration verification"],
   ["Object Storage", "Local filesystem (S3-ready abstraction)"],
@@ -260,7 +260,7 @@ contentSlide("Parameters That Influence Scores", [
 // ════════════════════════════════════════════════════════════════
 // SLIDE — Quality Gates
 // ════════════════════════════════════════════════════════════════
-sectionDivider("Quality Gates", "Automated pass/fail gating with 3-of-5 quorum");
+sectionDivider("Quality Gates", "Automated pass/fail gating with configurable quorum");
 
 tableSlide("Gate Types", ["Gate Type", "Description"], [
   ["Threshold", "Static metric limits (e.g., LCP ≤ 2500ms, Performance ≥ 90)"],
@@ -271,11 +271,13 @@ tableSlide("Gate Types", ["Gate Type", "Description"], [
   ["Capacity-Floor", "Minimum sustainable VUs with headroom calculation"],
 ], { colW: [2.5, 9.2] });
 
-contentSlide("Gating Strategy: 3-of-5 Quorum", [
-  "A metric must fail 3 of the last 5 runs to trigger a gate failure",
-  "Prevents flaky, one-off regressions from blocking pipelines",
-  "Gates are evaluated per-run and results stored with the run",
+contentSlide("Gating Strategy: Configurable Quorum", [
+  "Default: 3-of-5 — a metric must fail 3 of the last 5 runs to trigger",
+  "Per-severity defaults: warn/advisory = 1-of-3, block = 3-of-5, page = 4-of-5",
+  "Gate-level overrides for window_size and required_failures",
+  "Gate overrides with audit trail — engineers can acknowledge and proceed",
   "CI/CD integration: gate results posted as GitHub Check Runs and commit statuses",
+  "PR gate-summary comments with collapsible blocking/warning/passed sections",
   "Slack/webhook notifications on gate failures for immediate visibility",
 ]);
 
@@ -298,7 +300,7 @@ contentSlide("Intelligence Features", [
 // ════════════════════════════════════════════════════════════════
 // SLIDE — Dashboard Pages
 // ════════════════════════════════════════════════════════════════
-sectionDivider("Dashboard", "18 pages organized into 4 navigation groups");
+sectionDivider("Dashboard", "20 pages organized into 4 navigation groups");
 
 tableSlide("Overview Pages", ["Page", "Description"], [
   ["Dashboard", "Home view — overview counters, recent runs, KPI averages, metric relationship diagram"],
@@ -317,20 +319,27 @@ tableSlide("Testing & Analysis Pages", ["Page", "Description"], [
   ["Gates", "Quality gate configuration (threshold, baseline, statistical, VU-tiered)"],
   ["Compare", "Side-by-side run comparison with bar charts, diff table, waterfall/filmstrip"],
   ["Anomalies", "Anomaly feed with filters, trend chart, severity badges, resolution actions"],
-  ["Intelligence", "SHAP, Prophet forecasting, RUM summary, CrUX snapshots, capacity planning"],
+  ["Intelligence", "SHAP, Prophet forecasting, RUM, CrUX, capacity, mobile-vs-desktop, multi-geo"],
+  ["Investigation", "Regression timeline, attribution panel, gate status, baseline comparison"],
+  ["Audit", "Interactive Appendix C checklist with auto-evaluation and KPI reference guide"],
 ], { colW: [2.0, 9.7] });
 
 // ════════════════════════════════════════════════════════════════
 // SLIDE — Auth & RBAC
 // ════════════════════════════════════════════════════════════════
-sectionDivider("Authentication & Access Control", "Password-based auth with role-based access");
+sectionDivider("Authentication & Security", "JWT auth with security hardening");
 
-contentSlide("Authentication", [
-  "Password-based login with session persistence via localStorage",
+contentSlide("Authentication & Security", [
+  "JWT-based authentication — global AuthGuard on all API endpoints",
   "Passwords hashed with scryptSync (64-byte key, 32-byte random salt)",
-  "Forgot/reset password flow (reset tokens shown in dev mode)",
-  "5 seed accounts: admin, editor (×2), viewer (×2)",
-  "Admin can switch between user accounts via sidebar dropdown",
+  "Rate limiting: auth endpoints 5 req/60s, session-upgrade 2 req/60s",
+  "Helmet security headers (X-Frame-Options, CSP, HSTS)",
+  "Token encryption: GitHub tokens encrypted at rest with AES-256-GCM",
+  "Startup warnings when JWT_SECRET or TOKEN_ENCRYPTION_KEY use insecure defaults",
+  "Reset tokens suppressed in production (NODE_ENV=production)",
+  "Unified login errors — never reveal whether an account exists",
+  "Parameterized SQL throughout — no string interpolation",
+  "UUID validation on session-upgrade to prevent enumeration",
 ]);
 
 tableSlide("Role-Based Access Control", ["Role", "Permissions"], [
@@ -370,13 +379,13 @@ tableSlide("API Endpoint Summary", ["Resource Group", "Endpoints", "Key Operatio
 // SLIDE — Testing
 // ════════════════════════════════════════════════════════════════
 contentSlide("Testing & Quality", [
-  "API: Jest unit tests — 56 spec files covering controllers, services, guards",
-  "Shared: Vitest — 135 tests for validators and shared utilities",
-  "Worker: Vitest — 52 tests for engine, stats, and runner logic",
-  "Dashboard: Vitest — 8 test suites, 173 tests for component logic",
-  "CI: GitHub Actions runs all tests, linting, and builds on every push/PR",
-  "Security audit completed: SQL injection, auth bypass, XSS, CORS, input validation",
-  "Regression tests added for cron parser, admin role validation, URI encoding",
+  "API: Jest — 87 suites, 1050 tests (controllers, services, guards, security)",
+  "Dashboard: Jest — 24 suites, 771 tests (page logic, anomalies, trends, auth)",
+  "Worker: Vitest — 10 suites, 205 tests (engine, stats, adapters, journey)",
+  "Shared: Vitest — 1 suite, 135 tests (validators, shared utilities)",
+  "Total: 122 suites, 2161 tests across all packages",
+  "CI: GitHub Actions — test → lint → build → DB migration verification",
+  "Security audit: session-upgrade hardened, startup warnings, UUID validation, parameterized SQL",
 ]);
 
 // ════════════════════════════════════════════════════════════════
@@ -403,7 +412,7 @@ tableSlide("Core Web Vitals — Threshold Reference", ["Metric", "Good", "Needs 
   slide.addShape(pptx.ShapeType.rect, { x: 0, y: 3.2, w: "100%", h: 0.06, fill: { color: ACCENT } });
   slide.addText("Thank You", { x: 0.8, y: 2.0, w: 11.7, h: 1.0, fontSize: 42, bold: true, color: WHITE, fontFace: "Arial", align: "center" });
   slide.addText("Questions & Demo", { x: 0.8, y: 3.5, w: 11.7, h: 0.6, fontSize: 20, color: ACCENT2, fontFace: "Arial", align: "center" });
-  slide.addText("github.com/jj-shen99/ui_performance_testing_and_analysis", {
+  slide.addText("github.com/jj-shen99/uxperf", {
     x: 0.8, y: 5.5, w: 11.7, h: 0.4, fontSize: 13, color: GRAY, fontFace: "Arial", align: "center",
   });
 }
