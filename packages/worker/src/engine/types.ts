@@ -1,7 +1,9 @@
 export interface RunAuth {
-  type: "none" | "http_header" | "cookie";
+  type: "none" | "http_header" | "cookie" | "basic";
   header_name?: string;   // e.g. "Authorization"
   header_value?: string;  // e.g. "Bearer eyJ..."
+  username?: string;      // basic auth
+  password?: string;      // basic auth
   cookies?: { name: string; value: string; domain?: string; path?: string }[];
 }
 
@@ -56,6 +58,18 @@ export interface SingleRunResult {
   lighthouse_report_json?: unknown;
 }
 
+export interface MetricBreakdown {
+  min?: number;
+  med?: number;
+  avg?: number;
+  p75?: number;
+  p90?: number;
+  p95?: number;
+  p99?: number;
+  max?: number;
+  count?: number;
+}
+
 export interface AggregatedMetrics {
   lcp_ms?: number;
   fcp_ms?: number;
@@ -73,6 +87,7 @@ export interface AggregatedMetrics {
   total_transfer_size_bytes?: number;
   dom_content_loaded_ms?: number;
   load_event_ms?: number;
+  percentiles?: Record<string, MetricBreakdown | undefined>;
 }
 
 export interface EngineRunResult {

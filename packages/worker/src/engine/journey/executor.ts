@@ -62,6 +62,9 @@ export async function executeJourney(
   const extraHTTPHeaders: Record<string, string> = {};
   if (definition.auth?.type === "http_header" && definition.auth.header_name && definition.auth.header_value) {
     extraHTTPHeaders[definition.auth.header_name] = definition.auth.header_value;
+  } else if (definition.auth?.type === "basic" && definition.auth.username) {
+    const encoded = Buffer.from(`${definition.auth.username}:${definition.auth.password ?? ""}`).toString("base64");
+    extraHTTPHeaders["Authorization"] = `Basic ${encoded}`;
   }
 
   const context: BrowserContext = await browser.newContext({

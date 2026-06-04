@@ -295,6 +295,11 @@ function ReviewTab({ projectId, setProjectId, projects, currentUser }: any) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["practice-reviews", projectId] }),
   });
 
+  const completeMut = useMutation({
+    mutationFn: (reviewId: string) => api.practiceReview.complete(reviewId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["practice-reviews", projectId] }),
+  });
+
   const activeReview = reviews[0];
 
   const categorized = questions.reduce((acc: Record<string, any[]>, q: any) => {
@@ -315,15 +320,26 @@ function ReviewTab({ projectId, setProjectId, projects, currentUser }: any) {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        {projectId && (
-          <button
-            onClick={() => createMut.mutate()}
-            disabled={createMut.isPending}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
-            Start Review
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {activeReview && activeReview.status !== "completed" && activeReview.responses?.length > 0 && (
+            <button
+              onClick={() => completeMut.mutate(activeReview.id)}
+              disabled={completeMut.isPending}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {completeMut.isPending ? "Saving..." : "Save Results"}
+            </button>
+          )}
+          {projectId && (
+            <button
+              onClick={() => createMut.mutate()}
+              disabled={createMut.isPending}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              Start Review
+            </button>
+          )}
+        </div>
       </div>
 
       {!projectId && (

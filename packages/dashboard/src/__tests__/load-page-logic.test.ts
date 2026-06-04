@@ -21,7 +21,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const CACHE_OPTIONS = ["warm", "cold", "production_replay"] as const;
-const ENGINE_OPTIONS = ["k6_browser", "playwright_lighthouse", "sitespeed"] as const;
+const ENGINE_OPTIONS = ["k6_browser", "playwright_lighthouse", "wpt", "sitespeed"] as const;
 
 function buildStagePoints(stages: Stage[]) {
   const points: { time: number; vus: number }[] = [];
@@ -77,8 +77,8 @@ describe("Load Test — Cache & Engine Options", () => {
     expect(CACHE_OPTIONS).toContain("production_replay");
   });
 
-  it("has 3 engine options", () => {
-    expect(ENGINE_OPTIONS).toHaveLength(3);
+  it("has 4 engine options", () => {
+    expect(ENGINE_OPTIONS).toHaveLength(4);
     expect(ENGINE_OPTIONS).toContain("k6_browser");
   });
 });

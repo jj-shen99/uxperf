@@ -233,6 +233,57 @@ describe("PracticeReviewService", () => {
     });
   });
 
+  // === Manual Completion ===
+
+  describe("completeReview", () => {
+    it("manually completes a review and computes score", () => {
+      const review = service.getOrCreateReview("proj-1", "2026-Q2");
+      service.submitResponse(review.id, {
+        question_id: "q_budget_1",
+        answer: "yes",
+        notes: "",
+        respondent_id: "u1",
+      });
+      const result = service.completeReview(review.id);
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe("completed");
+      expect(result!.completed_at).toBeTruthy();
+      expect(result!.score).toBeGreaterThanOrEqual(0);
+    });
+
+    it("completes with 0 score when no responses", () => {
+      const review = service.getOrCreateReview("proj-1", "2026-Q2");
+      const result = service.completeReview(review.id);
+      expect(result!.status).toBe("completed");
+      expect(result!.score).toBe(0);
+    });
+
+    it("returns null for unknown review ID", () => {
+      expect(service.completeReview("nonexistent")).toBeNull();
+    });
+
+    it("can complete an already in_progress review", () => {
+      const review = service.getOrCreateReview("proj-1", "2026-Q2");
+      service.submitResponse(review.id, {
+        question_id: "q_budget_1",
+        answer: "partial",
+        notes: "",
+        respondent_id: "u1",
+      });
+      expect(review.status).toBe("in_progress");
+      const result = service.completeReview(review.id);
+      expect(result!.status).toBe("completed");
+    });
+
+    it("completing a pending review (no responses) sets score to 0", () => {
+      const review = service.getOrCreateReview("proj-1", "2026-Q2");
+      expect(review.status).toBe("pending");
+      const result = service.completeReview(review.id);
+      expect(result!.status).toBe("completed");
+      expect(result!.score).toBe(0);
+    });
+  });
+
   // === List & Due ===
 
   describe("listReviews", () => {

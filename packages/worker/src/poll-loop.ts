@@ -26,9 +26,11 @@ interface ClaimedRun {
     n_runs?: number;
     viewport?: { width: number; height: number };
     auth?: {
-      type: "none" | "http_header" | "cookie";
+      type: "none" | "http_header" | "cookie" | "basic";
       header_name?: string;
       header_value?: string;
+      username?: string;
+      password?: string;
       cookies?: { name: string; value: string; domain?: string; path?: string }[];
     };
   };

@@ -60,7 +60,7 @@ const SCRIPT_TEMPLATES = [
         { action: "navigate", url: "{{TARGET_URL}}/login" },
         { action: "measure", metrics: ["lcp", "fcp", "ttfb", "cls"] },
         { action: "type", selector: "input[name='email']", text: "test@example.com" },
-        { action: "type", selector: "input[name='password']", text: "password123" },
+        { action: "type", selector: "input[name='password']", text: "{{TEST_PASSWORD}}" },
         { action: "click", selector: "button[type='submit']" },
         { action: "wait", selector: "[data-page='dashboard']", timeout_ms: 10000 },
         { action: "measure", metrics: ["lcp", "fcp", "tti", "tbt"] },

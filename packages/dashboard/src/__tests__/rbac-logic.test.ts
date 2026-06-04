@@ -151,6 +151,13 @@ describe("Users page — Access guard", () => {
 
 // --- Password validation logic ---
 
+// Test-only credential constants — not real passwords
+const TEST_PW_VALID = "T3st_P@ss!9";
+const TEST_PW_CURRENT = "Curr3nt_P@ss";
+const TEST_PW_MISMATCH = "M1sm@tch_Val";
+const TEST_PW_SHORT = "abc";
+const TEST_PW_MIN = "abcdef";
+
 interface PasswordValidation {
   valid: boolean;
   error?: string;
@@ -170,37 +177,37 @@ function validatePasswordChange(
 
 describe("Password validation", () => {
   it("valid when all fields correct", () => {
-    const result = validatePasswordChange("newpass123", "newpass123", "oldpass");
+    const result = validatePasswordChange(TEST_PW_VALID, TEST_PW_VALID, TEST_PW_CURRENT);
     expect(result.valid).toBe(true);
     expect(result.error).toBeUndefined();
   });
 
   it("fails when passwords do not match", () => {
-    const result = validatePasswordChange("newpass123", "different", "oldpass");
+    const result = validatePasswordChange(TEST_PW_VALID, TEST_PW_MISMATCH, TEST_PW_CURRENT);
     expect(result.valid).toBe(false);
     expect(result.error).toBe("Passwords do not match");
   });
 
   it("fails when new password too short", () => {
-    const result = validatePasswordChange("abc", "abc", "oldpass");
+    const result = validatePasswordChange(TEST_PW_SHORT, TEST_PW_SHORT, TEST_PW_CURRENT);
     expect(result.valid).toBe(false);
     expect(result.error).toBe("Password must be at least 6 characters");
   });
 
   it("fails when current password is empty", () => {
-    const result = validatePasswordChange("newpass123", "newpass123", "");
+    const result = validatePasswordChange(TEST_PW_VALID, TEST_PW_VALID, "");
     expect(result.valid).toBe(false);
     expect(result.error).toBe("Current password is required");
   });
 
   it("fails when new password is empty", () => {
-    const result = validatePasswordChange("", "", "oldpass");
+    const result = validatePasswordChange("", "", TEST_PW_CURRENT);
     expect(result.valid).toBe(false);
     expect(result.error).toBe("New password is required");
   });
 
   it("exactly 6 characters is valid", () => {
-    const result = validatePasswordChange("abcdef", "abcdef", "oldpass");
+    const result = validatePasswordChange(TEST_PW_MIN, TEST_PW_MIN, TEST_PW_CURRENT);
     expect(result.valid).toBe(true);
   });
 });

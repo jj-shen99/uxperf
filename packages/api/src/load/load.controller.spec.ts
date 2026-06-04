@@ -5,6 +5,7 @@ import { LoadOrchestratorService } from "./load-orchestrator.service";
 import { ServerTelemetryService } from "./server-telemetry.service";
 import { LoadCorrelationService } from "./load-correlation.service";
 import { LoadGatesService } from "./load-gates.service";
+import { LoadResultsService } from "./load-results.service";
 
 describe("LoadController", () => {
   let controller: LoadController;
@@ -39,6 +40,9 @@ describe("LoadController", () => {
   const mockGates: Record<string, jest.Mock> = {
     evaluateForLoadRun: jest.fn().mockResolvedValue([]),
   };
+  const mockResults: Record<string, jest.Mock> = {
+    analyse: jest.fn().mockResolvedValue({ project_id: "p-1", total_completed_runs: 5 }),
+  };
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -49,6 +53,7 @@ describe("LoadController", () => {
         { provide: ServerTelemetryService, useValue: mockTelemetry },
         { provide: LoadCorrelationService, useValue: mockCorrelation },
         { provide: LoadGatesService, useValue: mockGates },
+        { provide: LoadResultsService, useValue: mockResults },
       ],
     }).compile();
     controller = module.get(LoadController);
@@ -98,5 +103,11 @@ describe("LoadController", () => {
   it("times out stale runs", async () => {
     const result = await controller.timeoutStaleRuns();
     expect(result).toEqual({ timed_out: 2 });
+  });
+
+  it("gets results analysis", async () => {
+    const result = await controller.getResultsAnalysis("p-1");
+    expect(mockResults.analyse).toHaveBeenCalledWith("p-1");
+    expect(result.total_completed_runs).toBe(5);
   });
 });

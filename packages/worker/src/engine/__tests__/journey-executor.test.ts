@@ -518,6 +518,36 @@ describe("executeJourney", () => {
       ]);
     });
 
+    it("encodes basic auth as Base64 Authorization header", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const def: JourneyDefinition = {
+        ...baseDef,
+        auth: { type: "basic", username: "admin", password: "<test-credential>" },
+      };
+      await executeJourney(mockBrowser, def, steps);
+
+      const ctxCall = mockBrowser.newContext.mock.calls[0][0];
+      const expected = Buffer.from("admin:<test-credential>").toString("base64");
+      expect(ctxCall.extraHTTPHeaders).toEqual({ Authorization: `Basic ${expected}` });
+    });
+
+    it("handles basic auth with empty password", async () => {
+      const steps: CompiledStep[] = [
+        { index: 0, action: "visit", target: "https://example.com", label: "visit" },
+      ];
+      const def: JourneyDefinition = {
+        ...baseDef,
+        auth: { type: "basic", username: "user" },
+      };
+      await executeJourney(mockBrowser, def, steps);
+
+      const ctxCall = mockBrowser.newContext.mock.calls[0][0];
+      const expected = Buffer.from("user:").toString("base64");
+      expect(ctxCall.extraHTTPHeaders).toEqual({ Authorization: `Basic ${expected}` });
+    });
+
     it("does not set extraHTTPHeaders or cookies when auth is none", async () => {
       const steps: CompiledStep[] = [
         { index: 0, action: "visit", target: "https://example.com", label: "visit" },

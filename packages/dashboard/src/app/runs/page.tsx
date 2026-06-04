@@ -48,7 +48,7 @@ export default function RunsPage() {
   const { currentUser, isAdmin } = useCurrentUser();
   const { accessibleProjectIds } = useUserProjects();
   const [form, setForm] = useState({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
-  const [auth, setAuth] = useState({ type: "none" as string, header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "" });
+  const [auth, setAuth] = useState({ type: "none" as string, header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "", username: "", password: "" });
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -118,7 +118,7 @@ export default function RunsPage() {
       qc.invalidateQueries({ queryKey: ["runs"] });
       setShowCreate(false);
       setForm({ project_id: "", script_id: "", url: "", n_runs: "5", environment: "staging", device: "desktop" });
-      setAuth({ type: "none", header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "" });
+      setAuth({ type: "none", header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "", username: "", password: "" });
     },
   });
 
@@ -234,9 +234,35 @@ export default function RunsPage() {
               className="w-full sm:w-48 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200"
             >
               <option value="none">None</option>
+              <option value="basic">Basic (Username / Password)</option>
               <option value="http_header">HTTP Header</option>
               <option value="cookie">Cookie</option>
             </select>
+            {auth.type === "basic" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Username</label>
+                  <input
+                    value={auth.username}
+                    onChange={(e) => setAuth({ ...auth, username: e.target.value })}
+                    placeholder="admin"
+                    autoComplete="username"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">Password</label>
+                  <input
+                    value={auth.password}
+                    onChange={(e) => setAuth({ ...auth, password: e.target.value })}
+                    placeholder="••••••••"
+                    type="password"
+                    autoComplete="current-password"
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+                  />
+                </div>
+              </div>
+            )}
             {auth.type === "http_header" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -286,7 +312,9 @@ export default function RunsPage() {
           </div>
           <button
             onClick={() => {
-              const authConfig = auth.type === "http_header"
+              const authConfig = auth.type === "basic" && auth.username
+                ? { type: "basic" as const, username: auth.username, password: auth.password }
+                : auth.type === "http_header"
                 ? { type: "http_header" as const, header_name: auth.header_name, header_value: auth.header_value }
                 : auth.type === "cookie" && auth.cookie_name
                 ? { type: "cookie" as const, cookies: [{ name: auth.cookie_name, value: auth.cookie_value }] }

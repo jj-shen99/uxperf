@@ -107,6 +107,9 @@ async function executeSingleRun(
     const extraHTTPHeaders: Record<string, string> = {};
     if (request.auth?.type === "http_header" && request.auth.header_name && request.auth.header_value) {
       extraHTTPHeaders[request.auth.header_name] = request.auth.header_value;
+    } else if (request.auth?.type === "basic" && request.auth.username) {
+      const encoded = Buffer.from(`${request.auth.username}:${request.auth.password ?? ""}`).toString("base64");
+      extraHTTPHeaders["Authorization"] = `Basic ${encoded}`;
     }
 
     const context = await browser.newContext({

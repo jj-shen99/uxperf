@@ -5,6 +5,7 @@ import { LoadOrchestratorService } from "./load-orchestrator.service";
 import { ServerTelemetryService } from "./server-telemetry.service";
 import { LoadCorrelationService } from "./load-correlation.service";
 import { LoadGatesService } from "./load-gates.service";
+import { LoadResultsService } from "./load-results.service";
 
 @Module({
   controllers: [LoadController],
@@ -14,6 +15,7 @@ import { LoadGatesService } from "./load-gates.service";
     ServerTelemetryService,
     LoadCorrelationService,
     LoadGatesService,
+    LoadResultsService,
   ],
   exports: [
     LoadProfilesService,
@@ -21,6 +23,7 @@ import { LoadGatesService } from "./load-gates.service";
     ServerTelemetryService,
     LoadCorrelationService,
     LoadGatesService,
+    LoadResultsService,
   ],
 })
 export class LoadModule {}

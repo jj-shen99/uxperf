@@ -8,6 +8,13 @@ import {
 import { AuthService } from "./auth.service";
 import { DatabaseService } from "../database/database.service";
 
+// Test-only credential constants — not real passwords
+const TEST_PW = "T3st_P@ss_F4ke!";
+const TEST_PW_ALT = "Alt_T3st_P@ss!9";
+const TEST_PW_WRONG = "Wr0ng_P@ss_F4ke";
+const TEST_PW_SHORT = "short";
+const TEST_PW_PLACEHOLDER = "x";
+
 describe("AuthService", () => {
   let service: AuthService;
   let mockDb: { query: jest.Mock };
@@ -34,7 +41,7 @@ describe("AuthService", () => {
       const result = await service.register({
         email: "a@b.com",
         display_name: "Alice",
-        password: "securepass123",
+        password: TEST_PW,
       });
       expect(result.email).toBe("a@b.com");
       expect(result.role).toBe("viewer");
@@ -46,13 +53,13 @@ describe("AuthService", () => {
     it("throws ConflictException for duplicate email", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1" }] });
       await expect(
-        service.register({ email: "a@b.com", display_name: "Alice", password: "securepass123" }),
+        service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW }),
       ).rejects.toThrow(ConflictException);
     });
 
     it("throws BadRequestException for short password", async () => {
       await expect(
-        service.register({ email: "a@b.com", display_name: "Alice", password: "short" }),
+        service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW_SHORT }),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -66,7 +73,7 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer" }],
         }); // register insert
-      await service.register({ email: "a@b.com", display_name: "Alice", password: "securepass123" });
+      await service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       // Now login
@@ -75,7 +82,7 @@ describe("AuthService", () => {
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer", is_active: true, password_hash: storedHash }],
         }) // select user
         .mockResolvedValueOnce({ rows: [] }); // update last_login_at
-      const result = await service.login({ email: "a@b.com", password: "securepass123" });
+      const result = await service.login({ email: "a@b.com", password: TEST_PW });
       expect(result.email).toBe("a@b.com");
     });
 
@@ -85,21 +92,21 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer" }],
         });
-      await service.register({ email: "a@b.com", display_name: "Alice", password: "securepass123" });
+      await service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       mockDb.query.mockResolvedValueOnce({
         rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer", is_active: true, password_hash: storedHash }],
       });
       await expect(
-        service.login({ email: "a@b.com", password: "wrongpassword" }),
+        service.login({ email: "a@b.com", password: TEST_PW_WRONG }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it("rejects non-existent user", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [] });
       await expect(
-        service.login({ email: "nobody@b.com", password: "anything" }),
+        service.login({ email: "nobody@b.com", password: TEST_PW_PLACEHOLDER }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -109,14 +116,14 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer" }],
         });
-      await service.register({ email: "a@b.com", display_name: "Alice", password: "securepass123" });
+      await service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       mockDb.query.mockResolvedValueOnce({
         rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer", is_active: false, password_hash: storedHash }],
       });
       await expect(
-        service.login({ email: "a@b.com", password: "securepass123" }),
+        service.login({ email: "a@b.com", password: TEST_PW }),
       ).rejects.toThrow(UnauthorizedException);
     });
   });
@@ -145,20 +152,20 @@ describe("AuthService", () => {
       mockDb.query
         .mockResolvedValueOnce({ rows: [{ id: "u-1", reset_token_expires: new Date(Date.now() + 3600000) }] })
         .mockResolvedValueOnce({ rows: [] }); // update
-      const result = await service.resetPassword({ token: "validtoken", password: "newpassword123" });
+      const result = await service.resetPassword({ token: "validtoken", password: TEST_PW_ALT });
       expect(result.message).toContain("successfully");
     });
 
     it("rejects invalid token", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [] });
       await expect(
-        service.resetPassword({ token: "badtoken", password: "newpassword123" }),
+        service.resetPassword({ token: "badtoken", password: TEST_PW_ALT }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it("rejects short password", async () => {
       await expect(
-        service.resetPassword({ token: "anytoken", password: "short" }),
+        service.resetPassword({ token: "anytoken", password: TEST_PW_SHORT }),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -171,7 +178,7 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer" }],
         });
-      await service.register({ email: "a@b.com", display_name: "Alice", password: "oldpassword1" });
+      await service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       mockDb.query
@@ -179,8 +186,8 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({ rows: [] }); // update
       const result = await service.changePassword({
         user_id: "u-1",
-        current_password: "oldpassword1",
-        new_password: "newpassword1",
+        current_password: TEST_PW,
+        new_password: TEST_PW_ALT,
       });
       expect(result.message).toContain("changed");
     });
@@ -191,19 +198,19 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-1", email: "a@b.com", display_name: "Alice", role: "viewer" }],
         });
-      await service.register({ email: "a@b.com", display_name: "Alice", password: "oldpassword1" });
+      await service.register({ email: "a@b.com", display_name: "Alice", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       mockDb.query.mockResolvedValueOnce({ rows: [{ id: "u-1", password_hash: storedHash }] });
       await expect(
-        service.changePassword({ user_id: "u-1", current_password: "wrong", new_password: "newpassword1" }),
+        service.changePassword({ user_id: "u-1", current_password: TEST_PW_WRONG, new_password: TEST_PW_ALT }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it("rejects non-existent user", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [] });
       await expect(
-        service.changePassword({ user_id: "u-missing", current_password: "x", new_password: "newpassword1" }),
+        service.changePassword({ user_id: "u-missing", current_password: TEST_PW_PLACEHOLDER, new_password: TEST_PW_ALT }),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -214,7 +221,7 @@ describe("AuthService", () => {
       // The seed script uses: scryptSync(password, salt, 64) with randomBytes(32) salt
       const { randomBytes, scryptSync } = require("crypto");
       const salt = randomBytes(32).toString("hex");
-      const hash = scryptSync("admin123!", salt, 64).toString("hex");
+      const hash = scryptSync(TEST_PW, salt, 64).toString("hex");
       const seedHash = `${salt}:${hash}`;
 
       mockDb.query
@@ -222,7 +229,7 @@ describe("AuthService", () => {
           rows: [{ id: "u-seed", email: "admin@perftest.io", display_name: "Admin User", role: "admin", is_active: true, password_hash: seedHash }],
         })
         .mockResolvedValueOnce({ rows: [] }); // update last_login_at
-      const result = await service.login({ email: "admin@perftest.io", password: "admin123!" });
+      const result = await service.login({ email: "admin@perftest.io", password: TEST_PW });
       expect(result.email).toBe("admin@perftest.io");
       expect(result.role).toBe("admin");
     });
@@ -230,14 +237,14 @@ describe("AuthService", () => {
     it("login rejects wrong password against seed hash", async () => {
       const { randomBytes, scryptSync } = require("crypto");
       const salt = randomBytes(32).toString("hex");
-      const hash = scryptSync("admin123!", salt, 64).toString("hex");
+      const hash = scryptSync(TEST_PW, salt, 64).toString("hex");
       const seedHash = `${salt}:${hash}`;
 
       mockDb.query.mockResolvedValueOnce({
         rows: [{ id: "u-seed", email: "admin@perftest.io", display_name: "Admin User", role: "admin", is_active: true, password_hash: seedHash }],
       });
       await expect(
-        service.login({ email: "admin@perftest.io", password: "wrongpassword" }),
+        service.login({ email: "admin@perftest.io", password: TEST_PW_WRONG }),
       ).rejects.toThrow(UnauthorizedException);
     });
   });
@@ -249,7 +256,7 @@ describe("AuthService", () => {
     it("rejects expired reset token (DB returns no rows)", async () => {
       mockDb.query.mockResolvedValueOnce({ rows: [] });
       await expect(
-        service.resetPassword({ token: "expiredtoken", password: "newpassword123" }),
+        service.resetPassword({ token: "expiredtoken", password: TEST_PW_ALT }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -259,7 +266,7 @@ describe("AuthService", () => {
           rows: [{ id: "u-1", reset_token_expires: new Date(Date.now() + 3600000) }],
         })
         .mockResolvedValueOnce({ rows: [] }); // update password
-      const result = await service.resetPassword({ token: "validtoken", password: "newpassword123" });
+      const result = await service.resetPassword({ token: "validtoken", password: TEST_PW_ALT });
       expect(result.message).toContain("successfully");
     });
   });
@@ -273,7 +280,7 @@ describe("AuthService", () => {
         .mockResolvedValueOnce({
           rows: [{ id: "u-new", email: "new@test.io", display_name: "New User", role: "viewer" }],
         });
-      await service.register({ email: "new@test.io", display_name: "New User", password: "newuser123!" });
+      await service.register({ email: "new@test.io", display_name: "New User", password: TEST_PW });
       const storedHash = mockDb.query.mock.calls[1][1][2];
 
       // Login with same password
@@ -282,7 +289,7 @@ describe("AuthService", () => {
           rows: [{ id: "u-new", email: "new@test.io", display_name: "New User", role: "viewer", is_active: true, password_hash: storedHash }],
         })
         .mockResolvedValueOnce({ rows: [] });
-      const loginResult = await service.login({ email: "new@test.io", password: "newuser123!" });
+      const loginResult = await service.login({ email: "new@test.io", password: TEST_PW });
       expect(loginResult.id).toBe("u-new");
     });
   });

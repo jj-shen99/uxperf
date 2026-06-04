@@ -101,30 +101,32 @@ export class LoadProfilesService {
   }
 
   async update(id: string, dto: Partial<CreateLoadProfileDto>): Promise<LoadProfileRow> {
-    const existing = await this.findById(id);
+    await this.findById(id); // throws NotFoundException if missing
+
+    const sets: string[] = [];
+    const params: any[] = [id];
+    let idx = 2;
+
+    const field = (col: string, val: any) => {
+      sets.push(`${col} = $${idx}`);
+      params.push(val);
+      idx++;
+    };
+
+    if ("name" in dto && dto.name != null)       field("name", dto.name);
+    if ("description" in dto)                    field("description", dto.description ?? null);
+    if ("stages" in dto && dto.stages)           field("stages", JSON.stringify(dto.stages));
+    if ("target_vus" in dto && dto.target_vus != null) field("target_vus", dto.target_vus);
+    if ("cache_state" in dto && dto.cache_state) field("cache_state", dto.cache_state);
+    if ("ui_server_targets" in dto)              field("ui_server_targets", JSON.stringify(dto.ui_server_targets ?? []));
+    if ("concurrency_cap" in dto)                field("concurrency_cap", dto.concurrency_cap ?? 10);
+    if ("script_id" in dto)                      field("script_id", dto.script_id ?? null);
+
+    sets.push("updated_at = now()");
+
     const result = await this.db.query<LoadProfileRow>(
-      `UPDATE load_profiles SET
-        name = COALESCE($2, name),
-        description = COALESCE($3, description),
-        stages = COALESCE($4, stages),
-        target_vus = COALESCE($5, target_vus),
-        cache_state = COALESCE($6, cache_state),
-        ui_server_targets = COALESCE($7, ui_server_targets),
-        concurrency_cap = COALESCE($8, concurrency_cap),
-        script_id = COALESCE($9, script_id)
-       WHERE id = $1
-       RETURNING *`,
-      [
-        id,
-        dto.name ?? null,
-        dto.description ?? null,
-        dto.stages ? JSON.stringify(dto.stages) : null,
-        dto.target_vus ?? null,
-        dto.cache_state ?? null,
-        dto.ui_server_targets ? JSON.stringify(dto.ui_server_targets) : null,
-        dto.concurrency_cap ?? null,
-        dto.script_id ?? null,
-      ],
+      `UPDATE load_profiles SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,
+      params,
     );
     return result.rows[0];
   }

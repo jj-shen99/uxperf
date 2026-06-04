@@ -15,6 +15,11 @@ export class CryptoService {
   private readonly key: Buffer;
 
   constructor() {
+    if (!process.env.TOKEN_ENCRYPTION_KEY && process.env.NODE_ENV === "production") {
+      throw new Error(
+        "TOKEN_ENCRYPTION_KEY must be set in production. Generate one with: openssl rand -hex 32",
+      );
+    }
     const envKey = process.env.TOKEN_ENCRYPTION_KEY || "CHANGE_ME_default_dev_key_32chars!!";
     if (!process.env.TOKEN_ENCRYPTION_KEY) {
       new Logger("CryptoService").warn(

@@ -23,7 +23,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 const K6_BINARY = process.env.K6_BINARY ?? "k6";
-const K6_BROWSER_ENABLED = process.env.K6_BROWSER_ENABLED === "true";
+const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
 
 export interface K6LoadProfile {
   stages: K6Stage[];
@@ -59,18 +59,35 @@ export interface K6RunRequest extends EngineRunRequest {
   script_steps?: K6ScriptStep[];
 }
 
+/** Metric values may use "p95" (--summary-export) or "p(95)" (handleSummary) */
+interface K6MetricValues {
+  avg?: number;
+  med?: number;
+  min?: number;
+  max?: number;
+  p95?: number;
+  p99?: number;
+  "p(90)"?: number;
+  "p(95)"?: number;
+  "p(99)"?: number;
+  count?: number;
+  rate?: number;
+  value?: number;
+  [key: string]: number | undefined;
+}
+
 export interface K6Summary {
   metrics: {
-    browser_web_vital_lcp?: { values: { avg: number; p95: number; med: number } };
-    browser_web_vital_fcp?: { values: { avg: number; p95: number; med: number } };
-    browser_web_vital_cls?: { values: { avg: number; p95: number; med: number } };
-    browser_web_vital_ttfb?: { values: { avg: number; p95: number; med: number } };
-    browser_web_vital_inp?: { values: { avg: number; p95: number; med: number } };
-    http_req_duration?: { values: { avg: number; p95: number; p99: number; med: number } };
-    http_reqs?: { values: { count: number; rate: number } };
-    vus?: { values: { value: number; max: number } };
-    vus_max?: { values: { value: number } };
-    iterations?: { values: { count: number; rate: number } };
+    browser_web_vital_lcp?: { values: K6MetricValues };
+    browser_web_vital_fcp?: { values: K6MetricValues };
+    browser_web_vital_cls?: { values: K6MetricValues };
+    browser_web_vital_ttfb?: { values: K6MetricValues };
+    browser_web_vital_inp?: { values: K6MetricValues };
+    http_req_duration?: { values: K6MetricValues };
+    http_reqs?: { values: K6MetricValues };
+    vus?: { values: K6MetricValues };
+    vus_max?: { values: K6MetricValues };
+    iterations?: { values: K6MetricValues };
     [key: string]: any;
   };
   root_group?: {
@@ -83,9 +100,23 @@ export class K6BrowserAdapter implements TestRunner {
   readonly supports = ["desktop", "mobile"];
 
   async isAvailable(): Promise<boolean> {
-    if (!K6_BROWSER_ENABLED) return false;
+    // Check env var first (dynamic read so restarts with new env work)
+    let enabled = process.env.K6_BROWSER_ENABLED === "true";
+
+    // Fallback: check the config API (Settings UI toggle sets engine.k6_browser_enabled)
+    if (!enabled) {
+      try {
+        const res = await fetch(`${API_URL}/config/engine.k6_browser_enabled`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          enabled = data?.value === "true";
+        }
+      } catch { /* config API unreachable — use env only */ }
+    }
+
+    if (!enabled) return false;
     return new Promise((resolve) => {
-      execFile(K6_BINARY, ["version"], (err) => {
+      execFile(K6_BINARY, ["version"], { timeout: 5000 }, (err) => {
         resolve(!err);
       });
     });
@@ -111,7 +142,12 @@ export class K6BrowserAdapter implements TestRunner {
       writeFileSync(scriptPath, scriptContent, "utf-8");
 
       const summary = await this.executeK6(scriptPath, summaryPath);
+      console.log(`[k6-adapter] Summary metric keys: ${Object.keys(summary.metrics ?? {}).join(", ")}`);
+      const sampleKey = Object.keys(summary.metrics ?? {}).find(k => k.includes("lcp") || k.includes("LCP") || k.includes("web_vital"));
+      if (sampleKey) console.log(`[k6-adapter] Sample metric "${sampleKey}":`, JSON.stringify(summary.metrics[sampleKey]));
+      else console.log(`[k6-adapter] No web vital metrics found. Full keys:`, Object.keys(summary.metrics ?? {}));
       const metrics = this.extractMetrics(summary);
+      console.log(`[k6-adapter] Extracted metrics:`, JSON.stringify(metrics));
       const individualRuns = this.buildIndividualRuns(summary, loadProfile);
 
       // Cleanup
@@ -159,7 +195,13 @@ export class K6BrowserAdapter implements TestRunner {
    * Generate a single-URL k6 browser script.
    */
   private generateSingleUrlK6Script(request: EngineRunRequest, profile: K6LoadProfile): string {
-    const stages = profile.stages.map(
+    // Cap concurrent browser VUs — each Chromium takes ~300-500MB RAM
+    const maxBrowserVUs = parseInt(process.env.MAX_BROWSER_VUS || "2", 10);
+    const cappedStages = profile.stages.map((s) => ({
+      ...s,
+      target_vus: Math.min(s.target_vus, maxBrowserVUs),
+    }));
+    const stages = cappedStages.map(
       (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
     ).join(",\n      ");
 
@@ -168,14 +210,17 @@ export class K6BrowserAdapter implements TestRunner {
     return `
 import { browser } from 'k6/browser';
 import { check } from 'k6';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(75)', 'p(90)', 'p(95)', 'p(99)', 'count'],
   scenarios: {
     browser_test: {
       executor: 'ramping-vus',
       stages: [
       ${stages}
       ],
+      gracefulStop: '10s',
       options: {
         browser: {
           type: 'chromium',
@@ -184,11 +229,19 @@ export const options = {
     },
   },
   thresholds: {
-    'browser_web_vital_lcp': ['p(95)<2500'],
-    'browser_web_vital_fcp': ['p(95)<1800'],
-    'browser_web_vital_cls': ['p(95)<0.1'],
+    'browser_web_vital_lcp': [{ threshold: 'p(95)<2500', abortOnFail: false }],
+    'browser_web_vital_fcp': [{ threshold: 'p(95)<1800', abortOnFail: false }],
+    'browser_web_vital_cls': [{ threshold: 'p(95)<0.1', abortOnFail: false }],
   },
 };
+
+export function handleSummary(data) {
+  const path = __ENV.SUMMARY_PATH || '/tmp/k6-summary.json';
+  return {
+    [path]: JSON.stringify(data, null, 2),
+    stdout: textSummary(data, { indent: ' ', enableColors: false }),
+  };
+}
 
 export default async function () {
   const page = await browser.newPage();
@@ -201,7 +254,7 @@ export default async function () {
       'page loaded': (p) => p.url() !== 'about:blank',
     });
   } finally {
-    await page.close();
+    try { await page.close(); } catch (_) { /* browser context may already be gone */ }
   }
 }
 `;
@@ -216,7 +269,13 @@ export default async function () {
     profile: K6LoadProfile,
     steps: K6ScriptStep[],
   ): string {
-    const stages = profile.stages.map(
+    // Cap concurrent browser VUs — each Chromium takes ~300-500MB RAM
+    const maxBrowserVUs = parseInt(process.env.MAX_BROWSER_VUS || "2", 10);
+    const cappedStages = profile.stages.map((s) => ({
+      ...s,
+      target_vus: Math.min(s.target_vus, maxBrowserVUs),
+    }));
+    const stages = cappedStages.map(
       (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
     ).join(",\n      ");
 
@@ -248,14 +307,17 @@ export default async function () {
     return `
 import { browser } from 'k6/browser';
 import { check } from 'k6';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(75)', 'p(90)', 'p(95)', 'p(99)', 'count'],
   scenarios: {
     browser_journey: {
       executor: 'ramping-vus',
       stages: [
       ${stages}
       ],
+      gracefulStop: '10s',
       options: {
         browser: {
           type: 'chromium',
@@ -264,11 +326,19 @@ export const options = {
     },
   },
   thresholds: {
-    'browser_web_vital_lcp': ['p(95)<2500'],
-    'browser_web_vital_fcp': ['p(95)<1800'],
-    'browser_web_vital_cls': ['p(95)<0.1'],
+    'browser_web_vital_lcp': [{ threshold: 'p(95)<2500', abortOnFail: false }],
+    'browser_web_vital_fcp': [{ threshold: 'p(95)<1800', abortOnFail: false }],
+    'browser_web_vital_cls': [{ threshold: 'p(95)<0.1', abortOnFail: false }],
   },
 };
+
+export function handleSummary(data) {
+  const path = __ENV.SUMMARY_PATH || '/tmp/k6-summary.json';
+  return {
+    [path]: JSON.stringify(data, null, 2),
+    stdout: textSummary(data, { indent: ' ', enableColors: false }),
+  };
+}
 
 export default async function () {
   const page = await browser.newPage();
@@ -280,7 +350,7 @@ export default async function () {
 ${stepCode}
 
   } finally {
-    await page.close();
+    try { await page.close(); } catch (_) { /* browser context may already be gone */ }
   }
 }
 `;
@@ -293,38 +363,69 @@ ${stepCode}
     return new Promise((resolve, reject) => {
       const args = [
         "run",
-        "--summary-export", summaryPath,
-        "--out", "json=stdout",
         scriptPath,
       ];
+      const env = { ...process.env, SUMMARY_PATH: summaryPath };
 
-      execFile(K6_BINARY, args, { timeout: 600_000 }, (err, stdout, stderr) => {
+      execFile(K6_BINARY, args, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024, env }, (err, stdout, stderr) => {
+        // k6 exits non-zero on threshold violations (code 99) or warnings.
+        // If the summary file was written, the test completed — use it.
+        try {
+          const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
+          resolve(summary);
+          return;
+        } catch {
+          // Summary file missing or unparseable — fall through to error
+        }
         if (err) {
           reject(new Error(`k6 execution failed: ${stderr || err.message}`));
           return;
         }
-        try {
-          const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
-          resolve(summary);
-        } catch (parseErr: any) {
-          reject(new Error(`Failed to parse k6 summary: ${parseErr.message}`));
-        }
+        reject(new Error("k6 finished but produced no summary output"));
       });
     });
   }
 
   /**
    * Extract aggregated metrics from k6 summary.
+   * Stores both a top-level p95 value (backward-compat) and the full
+   * percentile breakdown so the load-results service can display rich data.
    */
   private extractMetrics(summary: K6Summary): AggregatedMetrics {
     const m = summary.metrics;
+    const pctVal = (v: any, p: string) => v?.[`p(${p})`] ?? v?.[`p${p}`];
+    const val = (metric: any) => pctVal(metric?.values, "95") ?? metric?.values?.avg;
+
+    const breakdown = (metric: any) => {
+      const v = metric?.values;
+      if (!v) return undefined;
+      return {
+        min: v.min,
+        med: v.med,
+        avg: v.avg,
+        p75: pctVal(v, "75"),
+        p90: pctVal(v, "90"),
+        p95: pctVal(v, "95"),
+        p99: pctVal(v, "99"),
+        max: v.max,
+        count: v.count,
+      };
+    };
+
     return {
-      lcp_ms: m.browser_web_vital_lcp?.values?.p95 ?? m.browser_web_vital_lcp?.values?.avg,
-      fcp_ms: m.browser_web_vital_fcp?.values?.p95 ?? m.browser_web_vital_fcp?.values?.avg,
-      cls: m.browser_web_vital_cls?.values?.p95 ?? m.browser_web_vital_cls?.values?.avg,
-      ttfb_ms: m.browser_web_vital_ttfb?.values?.p95 ?? m.browser_web_vital_ttfb?.values?.avg,
-      inp_ms: m.browser_web_vital_inp?.values?.p95 ?? m.browser_web_vital_inp?.values?.avg,
+      lcp_ms: val(m.browser_web_vital_lcp),
+      fcp_ms: val(m.browser_web_vital_fcp),
+      cls: val(m.browser_web_vital_cls),
+      ttfb_ms: val(m.browser_web_vital_ttfb),
+      inp_ms: val(m.browser_web_vital_inp),
       total_requests: m.http_reqs?.values?.count,
+      percentiles: {
+        lcp_ms: breakdown(m.browser_web_vital_lcp),
+        fcp_ms: breakdown(m.browser_web_vital_fcp),
+        cls: breakdown(m.browser_web_vital_cls),
+        ttfb_ms: breakdown(m.browser_web_vital_ttfb),
+        inp_ms: breakdown(m.browser_web_vital_inp),
+      },
     };
   }
 
@@ -334,14 +435,15 @@ ${stepCode}
    */
   private buildIndividualRuns(summary: K6Summary, profile: K6LoadProfile): SingleRunResult[] {
     const m = summary.metrics;
+    const med = (metric: any) => metric?.values?.med ?? metric?.values?.avg;
     return [{
       run_index: 0,
       web_vitals: {
-        lcp_ms: m.browser_web_vital_lcp?.values?.med,
-        fcp_ms: m.browser_web_vital_fcp?.values?.med,
-        cls: m.browser_web_vital_cls?.values?.med,
-        ttfb_ms: m.browser_web_vital_ttfb?.values?.med,
-        inp_ms: m.browser_web_vital_inp?.values?.med,
+        lcp_ms: med(m.browser_web_vital_lcp),
+        fcp_ms: med(m.browser_web_vital_fcp),
+        cls: med(m.browser_web_vital_cls),
+        ttfb_ms: med(m.browser_web_vital_ttfb),
+        inp_ms: med(m.browser_web_vital_inp),
       },
       lighthouse_scores: {},
       lighthouse_timings: {},
@@ -358,8 +460,9 @@ ${stepCode}
     const m = summary.metrics;
 
     // Check if http_req_duration p95 > 10s (likely saturated)
-    if (m.http_req_duration?.values?.p95 && m.http_req_duration.values.p95 > 10000) {
-      warnings.push(`HTTP request p95 duration ${m.http_req_duration.values.p95.toFixed(0)}ms exceeds 10s threshold`);
+    const reqP95 = m.http_req_duration?.values?.["p(95)"] ?? m.http_req_duration?.values?.p95;
+    if (reqP95 && reqP95 > 10000) {
+      warnings.push(`HTTP request p95 duration ${reqP95.toFixed(0)}ms exceeds 10s threshold`);
     }
 
     // Check dropped iterations

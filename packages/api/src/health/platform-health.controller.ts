@@ -126,6 +126,11 @@ export class PlatformHealthController {
     return this.reviewService.submitResponse(reviewId, body);
   }
 
+  @Post("reviews/:reviewId/complete")
+  completeReview(@Param("reviewId") reviewId: string) {
+    return this.reviewService.completeReview(reviewId);
+  }
+
   @Get("reviews/:reviewId/summary")
   getReviewSummary(@Param("reviewId") reviewId: string) {
     return this.reviewService.getSummary(reviewId);

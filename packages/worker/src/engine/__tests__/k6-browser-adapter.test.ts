@@ -22,11 +22,11 @@ describe("K6BrowserAdapter", () => {
         { url: "https://example.com", n_runs: 1, device: "desktop", viewport: { width: 1920, height: 1080 } },
         {
           stages: [
-            { duration_s: 30, target_vus: 5 },
-            { duration_s: 60, target_vus: 20 },
+            { duration_s: 30, target_vus: 2 },
+            { duration_s: 60, target_vus: 2 },
             { duration_s: 30, target_vus: 0 },
           ],
-          target_vus: 20,
+          target_vus: 2,
           cache_state: "warm",
         },
       );
@@ -34,8 +34,7 @@ describe("K6BrowserAdapter", () => {
       expect(script).toContain("import { browser } from 'k6/browser'");
       expect(script).toContain("ramping-vus");
       expect(script).toContain("https://example.com");
-      expect(script).toContain("target: 5");
-      expect(script).toContain("target: 20");
+      expect(script).toContain("target: 2");
       expect(script).toContain("target: 0");
       expect(script).toContain("width: 1920");
     });
@@ -191,6 +190,119 @@ describe("K6BrowserAdapter", () => {
       );
       expect(script).toContain("width: 1920");
       expect(script).toContain("height: 1080");
+    });
+  });
+
+  describe("VU capping", () => {
+    it("caps stage VUs to MAX_BROWSER_VUS default (2)", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [
+            { duration_s: 30, target_vus: 5 },
+            { duration_s: 60, target_vus: 20 },
+            { duration_s: 30, target_vus: 0 },
+          ],
+          target_vus: 20,
+          cache_state: "warm",
+        },
+      );
+      // Default MAX_BROWSER_VUS is 2, so 5 and 20 should be capped to 2
+      expect(script).toContain("target: 2");
+      expect(script).not.toContain("target: 5");
+      expect(script).not.toContain("target: 20");
+      // 0 stays 0 (min of 0 and 2 = 0)
+      expect(script).toContain("target: 0");
+    });
+
+    it("caps journey script VUs too", () => {
+      const steps = [
+        { intent: 'measure: "home"', action: "measure" as const, target: "measure", label: 'measure: "home"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [
+            { duration_s: 30, target_vus: 10 },
+            { duration_s: 30, target_vus: 0 },
+          ],
+          target_vus: 10,
+          cache_state: "warm",
+        },
+        steps,
+      );
+      expect(script).toContain("target: 2");
+      expect(script).not.toContain("target: 10");
+    });
+  });
+
+  describe("summaryTrendStats", () => {
+    it("includes summaryTrendStats in single-URL script", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+      );
+      expect(script).toContain("summaryTrendStats");
+      expect(script).toContain("p(75)");
+      expect(script).toContain("p(99)");
+    });
+
+    it("includes summaryTrendStats in journey script", () => {
+      const steps = [
+        { intent: 'measure: "home"', action: "measure" as const, target: "measure", label: 'measure: "home"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+        steps,
+      );
+      expect(script).toContain("summaryTrendStats");
+      expect(script).toContain("p(75)");
+      expect(script).toContain("p(99)");
+    });
+  });
+
+  describe("handleSummary export", () => {
+    it("includes handleSummary in single-URL script", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+      );
+      expect(script).toContain("export function handleSummary");
+      expect(script).toContain("SUMMARY_PATH");
+    });
+
+    it("includes handleSummary in journey script", () => {
+      const steps = [
+        { intent: 'measure: "home"', action: "measure" as const, target: "measure", label: 'measure: "home"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+        steps,
+      );
+      expect(script).toContain("export function handleSummary");
+      expect(script).toContain("SUMMARY_PATH");
+    });
+  });
+
+  describe("threshold abortOnFail", () => {
+    it("sets abortOnFail: false for thresholds", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+      );
+      expect(script).toContain("abortOnFail: false");
+    });
+  });
+
+  describe("gracefulStop", () => {
+    it("includes gracefulStop in scenario", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        { stages: [{ duration_s: 30, target_vus: 1 }], target_vus: 1, cache_state: "warm" },
+      );
+      expect(script).toContain("gracefulStop: '10s'");
     });
   });
 

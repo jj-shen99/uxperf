@@ -102,17 +102,39 @@ export default function LoadTestingPage() {
 
   // Profile script state
   const [pScriptId, setPScriptId] = useState<string>("");
+  const [profileLaunchUrl, setProfileLaunchUrl] = useState<string>("");
+  const [launchingProfileId, setLaunchingProfileId] = useState<string | null>(null);
+
+  // Edit profile state
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [eName, setEName] = useState("");
+  const [eDesc, setEDesc] = useState("");
+  const [eVUs, setEVUs] = useState(10);
+  const [eCache, setECache] = useState<string>("warm");
+  const [eScriptId, setEScriptId] = useState<string>("");
+  const [eStages, setEStages] = useState<Stage[]>([]);
+  const [eTotalDuration, setETotalDuration] = useState(120);
+
+  // Console log panel
+  const [expandedRunLogs, setExpandedRunLogs] = useState<Set<string>>(new Set());
 
   // Queries
+  const { data: engineConfig = {} } = useQuery({
+    queryKey: ["config", "engine"],
+    queryFn: () => api.config.getAll("engine."),
+  });
+  const k6Enabled = engineConfig["engine.k6_browser_enabled"] === "true";
+
   const { data: loadRuns = [], isLoading: runsLoading } = useQuery({
-    queryKey: ["load-runs"],
-    queryFn: () => api.load.runs.list(),
+    queryKey: ["load-runs", projectId],
+    queryFn: () => api.load.runs.list(projectId || undefined),
     refetchInterval: 5000,
   });
 
   const { data: profiles = [], isLoading: profilesLoading } = useQuery({
-    queryKey: ["load-profiles"],
-    queryFn: () => api.load.profiles.list(),
+    queryKey: ["load-profiles", projectId],
+    queryFn: () => api.load.profiles.list(projectId || undefined),
+    enabled: !!projectId,
   });
 
   const { data: scripts = [] } = useQuery({
@@ -148,6 +170,19 @@ export default function LoadTestingPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-profiles"] }),
   });
 
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const updateProfile = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.load.profiles.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["load-profiles"] });
+      setEditingProfileId(null);
+      setUpdateError(null);
+    },
+    onError: (err: any) => {
+      setUpdateError(err?.message ?? "Failed to update profile");
+    },
+  });
+
   const createRun = useMutation({
     mutationFn: (data: any) => api.load.runs.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["load-runs"] }),
@@ -168,6 +203,49 @@ export default function LoadTestingPage() {
   const updateStage = (i: number, field: keyof Stage, value: number | string) =>
     setPStages(pStages.map((s, idx) => idx === i ? { ...s, [field]: field === "ramp_type" ? value : Number(value) } : s));
 
+  // Edit profile stage helpers
+  const addEStage = () => setEStages([...eStages, { duration_s: 30, target_vus: eVUs, ramp_type: "linear" }]);
+  const removeEStage = (i: number) => setEStages(eStages.filter((_, idx) => idx !== i));
+  const updateEStage = (i: number, field: keyof Stage, value: number | string) =>
+    setEStages(eStages.map((s, idx) => idx === i ? { ...s, [field]: field === "ramp_type" ? value : Number(value) } : s));
+
+  const startEditing = (p: any) => {
+    setEditingProfileId(p.id);
+    setEName(p.name);
+    setEDesc(p.description ?? "");
+    setEVUs(p.target_vus);
+    setECache(p.cache_state ?? "warm");
+    setEScriptId(p.script_id ?? "");
+    setEStages(p.stages ?? []);
+    setETotalDuration(p.stages?.reduce((s: number, st: Stage) => s + st.duration_s, 0) ?? 120);
+  };
+
+  const handleUpdateProfile = () => {
+    if (!editingProfileId || !eName.trim()) return;
+    setUpdateError(null);
+    updateProfile.mutate({
+      id: editingProfileId,
+      data: {
+        name: eName,
+        description: eDesc || null,
+        stages: eStages,
+        target_vus: eVUs,
+        cache_state: eCache,
+        script_id: eScriptId || null,
+      },
+    });
+  };
+
+  const toggleRunLog = (runId: string) => {
+    setExpandedRunLogs((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) next.delete(runId); else next.add(runId);
+      return next;
+    });
+  };
+
+  const totalStageDuration = (stages: Stage[]) => stages.reduce((s, st) => s + st.duration_s, 0);
+
   const handleCreateProfile = () => {
     if (!pName.trim() || !projectId) return;
     createProfile.mutate({
@@ -182,7 +260,7 @@ export default function LoadTestingPage() {
   };
 
   const handleQuickRun = () => {
-    if (!projectId) return;
+    if (!projectId || !qUrl.trim()) return;
     createRun.mutate({
       project_id: projectId,
       target_vus: qVUs,
@@ -192,7 +270,7 @@ export default function LoadTestingPage() {
         { duration_s: Math.round(qDuration * 0.2), target_vus: 0, ramp_type: "linear" },
       ],
       cache_state: qCache,
-      ...(qUrl.trim() ? { url: qUrl.trim() } : {}),
+      url: qUrl.trim(),
       ...(qScriptId ? { script_id: qScriptId } : {}),
     });
     setShowQuickRun(false);
@@ -216,7 +294,13 @@ export default function LoadTestingPage() {
 
   const filteredRuns = useMemo(() => {
     const list = statusFilter === "all" ? loadRuns : loadRuns.filter((r: any) => r.status === statusFilter);
-    return [...list].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const activeStatuses = new Set(["queued", "warming", "running"]);
+    return [...list].sort((a: any, b: any) => {
+      const aActive = activeStatuses.has(a.status) ? 1 : 0;
+      const bActive = activeStatuses.has(b.status) ? 1 : 0;
+      if (aActive !== bActive) return bActive - aActive;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
   }, [loadRuns, statusFilter]);
 
   const completedRunMetrics = useMemo(() => {
@@ -272,14 +356,30 @@ export default function LoadTestingPage() {
         </div>
       </div>
 
+      {/* k6 Diagnostic Banner */}
+      {!k6Enabled && (
+        <div className="rounded-lg border border-yellow-800/50 bg-yellow-900/15 px-4 py-3 flex items-start gap-3">
+          <span className="mt-0.5 text-yellow-400 text-lg">⚠</span>
+          <div>
+            <p className="text-sm font-medium text-yellow-300">k6 Browser Engine is Disabled</p>
+            <p className="mt-0.5 text-xs text-yellow-400/80 leading-relaxed">
+              Load tests will fail because the k6 adapter is not enabled. Go to{" "}
+              <a href="/settings" className="underline text-yellow-300 hover:text-yellow-200">Settings</a>{" "}
+              and toggle <strong>k6 Browser Engine</strong> to Enabled, or set the <code className="bg-yellow-900/40 px-1 rounded text-[10px]">K6_BROWSER_ENABLED=true</code>{" "}
+              environment variable on the worker process.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Quick Run Form */}
       {showQuickRun && (
         <div className="rounded-lg border border-indigo-800/50 bg-indigo-900/20 p-4 space-y-3">
           <h3 className="text-sm font-medium text-indigo-300">Quick Run (Ramp Up → Steady → Ramp Down)</h3>
           <div className="grid grid-cols-5 gap-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Target URL</label>
-              <input type="url" placeholder="https://example.com" value={qUrl} onChange={(e) => setQUrl(e.target.value)}
+              <label className="block text-xs text-gray-400 mb-1">Target URL <span className="text-red-400">*</span></label>
+              <input type="url" placeholder="https://example.com" value={qUrl} onChange={(e) => setQUrl(e.target.value)} required
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
             <div>
@@ -320,7 +420,7 @@ export default function LoadTestingPage() {
           ]} />
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowQuickRun(false)} className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-800">Cancel</button>
-            <button onClick={handleQuickRun} disabled={createRun.isPending} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+            <button onClick={handleQuickRun} disabled={createRun.isPending || !qUrl.trim()} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
               {createRun.isPending ? "Launching..." : "Launch"}
             </button>
           </div>
@@ -426,10 +526,13 @@ export default function LoadTestingPage() {
                     {p.description && <p className="text-xs text-gray-500">{p.description}</p>}
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => createRun.mutate({ project_id: projectId, load_profile_id: p.id })}
-                      disabled={createRun.isPending}
+                    <button onClick={() => { setLaunchingProfileId(launchingProfileId === p.id ? null : p.id); setProfileLaunchUrl(""); }}
                       className="rounded bg-indigo-600 px-2.5 py-1 text-xs text-white hover:bg-indigo-500 disabled:opacity-50">
                       Launch
+                    </button>
+                    <button onClick={() => startEditing(p)}
+                      className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800">
+                      Edit
                     </button>
                     <button onClick={() => deleteProfile.mutate(p.id)}
                       className="rounded border border-gray-700 px-2 py-1 text-xs text-red-400 hover:bg-red-900/30">
@@ -440,6 +543,7 @@ export default function LoadTestingPage() {
                 <div className="flex gap-3 text-xs text-gray-500">
                   <span>{p.target_vus} VUs</span>
                   <span>{p.stages?.length ?? 0} stages</span>
+                  <span>{totalStageDuration(p.stages ?? [])}s total</span>
                   <span>{p.cache_state}</span>
                   <span>{p.device ?? "desktop"}</span>
                   {p.script_id && (
@@ -448,6 +552,115 @@ export default function LoadTestingPage() {
                     </span>
                   )}
                 </div>
+                {launchingProfileId === p.id && (
+                  <div className="flex items-end gap-2 pt-1 border-t border-gray-800">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Target URL <span className="text-red-400">*</span></label>
+                      <input type="url" placeholder="https://example.com" value={profileLaunchUrl}
+                        onChange={(e) => setProfileLaunchUrl(e.target.value)}
+                        className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                    </div>
+                    <button
+                      onClick={() => { createRun.mutate({ project_id: projectId, load_profile_id: p.id, url: profileLaunchUrl.trim() }); setLaunchingProfileId(null); }}
+                      disabled={createRun.isPending || !profileLaunchUrl.trim()}
+                      className="rounded bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-500 disabled:opacity-50">
+                      Go
+                    </button>
+                  </div>
+                )}
+                {/* Inline Edit Form */}
+                {editingProfileId === p.id && (
+                  <div className="mt-3 pt-3 border-t border-gray-700 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Name</label>
+                        <input value={eName} onChange={(e) => setEName(e.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Description</label>
+                        <input value={eDesc} onChange={(e) => setEDesc(e.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Target VUs</label>
+                        <input type="number" min={1} max={500} value={eVUs} onChange={(e) => setEVUs(Number(e.target.value))}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Cache State</label>
+                        <select value={eCache} onChange={(e) => setECache(e.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200">
+                          {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Journey Script</label>
+                        <select value={eScriptId} onChange={(e) => setEScriptId(e.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200">
+                          <option value="">No script</option>
+                          {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Total Duration (s)</label>
+                        <input type="number" min={10} max={7200} value={eTotalDuration}
+                          onChange={(e) => {
+                            const newTotal = Number(e.target.value);
+                            setETotalDuration(newTotal);
+                            if (eStages.length > 0) {
+                              const oldTotal = totalStageDuration(eStages);
+                              if (oldTotal > 0) {
+                                const ratio = newTotal / oldTotal;
+                                setEStages(eStages.map((s) => ({ ...s, duration_s: Math.max(1, Math.round(s.duration_s * ratio)) })));
+                              }
+                            }
+                          }}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] text-gray-500">Stages</label>
+                        <button onClick={addEStage} className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-800">+ Add</button>
+                      </div>
+                      <div className="space-y-1">
+                        {eStages.map((stage, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-6 text-[10px] text-gray-600">#{i + 1}</span>
+                            <input type="number" min={1} value={stage.duration_s} onChange={(e) => updateEStage(i, "duration_s", e.target.value)}
+                              className="w-20 rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-200" />
+                            <span className="text-[10px] text-gray-600">s</span>
+                            <input type="number" min={0} value={stage.target_vus} onChange={(e) => updateEStage(i, "target_vus", e.target.value)}
+                              className="w-16 rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-200" />
+                            <span className="text-[10px] text-gray-600">VUs</span>
+                            <select value={stage.ramp_type ?? "linear"} onChange={(e) => updateEStage(i, "ramp_type", e.target.value)}
+                              className="rounded border border-gray-700 bg-gray-800 px-1 py-0.5 text-[10px] text-gray-200">
+                              <option value="linear">Linear</option>
+                              <option value="step">Step</option>
+                            </select>
+                            <button onClick={() => removeEStage(i)} className="text-[10px] text-red-500 hover:text-red-400">x</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-1">
+                        <StagePreview stages={eStages} />
+                      </div>
+                    </div>
+                    {updateError && (
+                      <div className="rounded bg-red-900/20 border border-red-900/40 px-3 py-1.5 text-xs text-red-400">{updateError}</div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setEditingProfileId(null)} className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:bg-gray-800">Cancel</button>
+                      <button onClick={handleUpdateProfile} disabled={!eName.trim() || updateProfile.isPending}
+                        className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-500 disabled:opacity-50">
+                        {updateProfile.isPending ? "Saving..." : "Save Changes"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {p.stages && <StagePreview stages={p.stages} />}
               </div>
             ))}
@@ -468,7 +681,6 @@ export default function LoadTestingPage() {
             { label: "Completed", value: runStats.completed, color: "text-green-400" },
             { label: "Failed", value: runStats.failed, color: runStats.failed > 0 ? "text-red-400" : "text-gray-100" },
             { label: "Total VU-min", value: runStats.totalVUMin.toFixed(1), color: "text-indigo-400" },
-            { label: "Total Cost", value: `$${runStats.totalCost.toFixed(2)}`, color: "text-yellow-400" },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
               <p className="text-xs text-gray-500">{label}</p>
@@ -569,6 +781,61 @@ export default function LoadTestingPage() {
                     <span className="text-xs text-gray-600">{new Date(run.created_at).toLocaleString()}</span>
                   </div>
                 </div>
+
+                {run.error && (
+                  <div className="mt-2 rounded bg-red-900/20 border border-red-900/40 px-3 py-2">
+                    <p className="text-[10px] font-medium text-red-400 mb-0.5">Error</p>
+                    <pre className="text-xs text-red-300/90 whitespace-pre-wrap font-mono leading-relaxed">{run.error}</pre>
+                  </div>
+                )}
+
+                {/* Console / Activity Log */}
+                {(() => {
+                  const isActive = ["queued", "warming", "running"].includes(run.status);
+                  const isExpanded = isActive || expandedRunLogs.has(run.id);
+                  return (
+                <div className="mt-2">
+                  <button
+                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); if (!isActive) toggleRunLog(run.id); }}
+                    className={`text-[10px] flex items-center gap-1 ${isActive ? "text-blue-400" : "text-gray-500 hover:text-gray-300"}`}
+                  >
+                    <span className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                    Console Log {isActive && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-1 rounded bg-gray-950 border border-gray-800 px-3 py-2 font-mono text-[11px] leading-relaxed space-y-0.5 max-h-48 overflow-y-auto">
+                      <div className="text-gray-500">[{new Date(run.created_at).toLocaleTimeString()}] Run created — status: queued</div>
+                      {run.started_at && (
+                        <div className="text-blue-400">[{new Date(run.started_at).toLocaleTimeString()}] Worker claimed run — status: running</div>
+                      )}
+                      {run.started_at && (
+                        <div className="text-gray-400">[{new Date(run.started_at).toLocaleTimeString()}] Executing: {run.target_vus} VUs, engine={run.engine}, url={run.url}</div>
+                      )}
+                      {run.started_at && run.stages?.length > 0 && (
+                        <div className="text-gray-500">[{new Date(run.started_at).toLocaleTimeString()}] Stages: {run.stages.map((s: any, i: number) => `#${i + 1} ${s.duration_s}s→${s.target_vus}VUs`).join(", ")}</div>
+                      )}
+                      {["running", "warming"].includes(run.status) && (
+                        <div className="text-blue-300 animate-pulse">[{new Date().toLocaleTimeString()}] Running... ({Math.round((Date.now() - new Date(run.started_at ?? run.created_at).getTime()) / 1000)}s elapsed)</div>
+                      )}
+                      {run.error && (
+                        <div className="text-red-400">[{new Date(run.finished_at ?? run.updated_at ?? run.created_at).toLocaleTimeString()}] ERROR: {run.error}</div>
+                      )}
+                      {run.metrics_summary && Object.keys(run.metrics_summary).length > 0 && (
+                        <div className="text-green-400">[{new Date(run.finished_at ?? run.updated_at ?? run.created_at).toLocaleTimeString()}] Metrics: {Object.entries(run.metrics_summary).map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(1) : v}`).join(", ")}</div>
+                      )}
+                      {run.finished_at && (
+                        <div className={run.status === "completed" ? "text-green-400" : run.status === "failed" ? "text-red-400" : "text-gray-400"}>
+                          [{new Date(run.finished_at).toLocaleTimeString()}] Run {run.status}{run.vu_minutes ? ` — ${Number(run.vu_minutes).toFixed(1)} VU-min` : ""}{run.duration_s ? ` in ${run.duration_s}s` : ""}
+                        </div>
+                      )}
+                      {run.status === "queued" && (
+                        <div className="text-yellow-400 animate-pulse">[{new Date().toLocaleTimeString()}] Waiting for worker to claim run...</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                  );
+                })()}
 
                 {run.saturation_warnings?.length > 0 && (
                   <div className="mt-2 space-y-1">

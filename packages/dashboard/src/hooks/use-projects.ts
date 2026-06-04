@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 
 /**
@@ -14,6 +14,12 @@ export function useProjects() {
     queryKey: ["projects"],
     queryFn: () => api.projects.list(),
   });
+
+  useEffect(() => {
+    if (!projectId && projects.length > 0) {
+      setProjectId(projects[0].id);
+    }
+  }, [projects, projectId]);
 
   return { projects, projectId, setProjectId, isLoading };
 }

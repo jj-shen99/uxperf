@@ -49,9 +49,15 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/runs", label: "Runs", icon: Play },
       { href: "/scripts", label: "Scripts", icon: PenTool },
-      { href: "/author", label: "Author", icon: MessageSquare },
-      { href: "/load", label: "Load Test", icon: Zap },
+      { href: "/author", label: "Generate Scripts", icon: MessageSquare },
       { href: "/schedules", label: "Schedules", icon: Settings },
+    ],
+  },
+  {
+    label: "Load Testing",
+    items: [
+      { href: "/load", label: "Load Test", icon: Zap },
+      { href: "/load-results", label: "Load Results", icon: BarChart3 },
     ],
   },
   {

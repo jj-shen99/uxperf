@@ -7,3 +7,5 @@ coverage/
 .next/
 .turbo/
 *.tsbuildinfo
+artifacts/
+stdout

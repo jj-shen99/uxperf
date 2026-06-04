@@ -15,7 +15,7 @@ function hashPassword(password: string): string {
 }
 
 // Default password for demo accounts — override via DEMO_PASSWORD env var
-const DEFAULT_PASSWORD = process.env.DEMO_PASSWORD || "admin123!";
+const DEFAULT_PASSWORD = process.env.DEMO_PASSWORD || "changeme_dev!!";
 
 async function main() {
   const pool = new Pool({
@@ -45,7 +45,7 @@ async function main() {
     console.log(`  ✓ ${user.email}`);
   }
 
-  console.log(`\nDone. Default password: ${DEFAULT_PASSWORD}`);
+  console.log(`\nDone. ${rows.length} password(s) set.`);
   await pool.end();
 }
 

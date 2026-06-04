@@ -20,9 +20,18 @@ function startWorker() {
     API_URL: `http://localhost:${process.env.PORT || 4000}/api/v1`,
   };
 
-  // Pass K6_BROWSER_ENABLED from env if set
+  // Pass K6_BROWSER_ENABLED — auto-detect if k6 binary is on PATH
   if (process.env.K6_BROWSER_ENABLED) {
     env.K6_BROWSER_ENABLED = process.env.K6_BROWSER_ENABLED;
+  } else {
+    try {
+      const { execFileSync } = require("child_process");
+      execFileSync("k6", ["version"], { timeout: 3000, stdio: "ignore" });
+      env.K6_BROWSER_ENABLED = "true";
+      console.log("[api] k6 detected on PATH — auto-enabling K6_BROWSER_ENABLED for worker");
+    } catch {
+      // k6 not found — leave disabled
+    }
   }
 
   try {

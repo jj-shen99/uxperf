@@ -383,7 +383,12 @@ describe("Runs form — auth config in mutation payload", () => {
     header_value: string;
     cookie_name: string;
     cookie_value: string;
+    username: string;
+    password: string;
   }) {
+    if (auth.type === "basic" && auth.username) {
+      return { type: "basic" as const, username: auth.username, password: auth.password };
+    }
     if (auth.type === "http_header") {
       return { type: "http_header" as const, header_name: auth.header_name, header_value: auth.header_value };
     }
@@ -393,36 +398,39 @@ describe("Runs form — auth config in mutation payload", () => {
     return undefined;
   }
 
+  // Test-only credential placeholder — not a real password
+  const TEST_CREDENTIAL = "<test-credential>";
+  const defaults = { header_name: "", header_value: "", cookie_name: "", cookie_value: "", username: "", password: "" };
+
   it("returns undefined for auth type none", () => {
-    expect(buildAuthConfig({
-      type: "none", header_name: "Authorization", header_value: "", cookie_name: "", cookie_value: "",
-    })).toBeUndefined();
+    expect(buildAuthConfig({ ...defaults, type: "none" })).toBeUndefined();
   });
 
   it("builds http_header auth config", () => {
-    const result = buildAuthConfig({
-      type: "http_header", header_name: "Authorization", header_value: "Bearer tok", cookie_name: "", cookie_value: "",
-    });
+    const result = buildAuthConfig({ ...defaults, type: "http_header", header_name: "Authorization", header_value: "Bearer tok" });
     expect(result).toEqual({ type: "http_header", header_name: "Authorization", header_value: "Bearer tok" });
   });
 
   it("builds cookie auth config", () => {
-    const result = buildAuthConfig({
-      type: "cookie", header_name: "", header_value: "", cookie_name: "session", cookie_value: "abc",
-    });
+    const result = buildAuthConfig({ ...defaults, type: "cookie", cookie_name: "session", cookie_value: "abc" });
     expect(result).toEqual({ type: "cookie", cookies: [{ name: "session", value: "abc" }] });
   });
 
   it("returns undefined for cookie type with empty cookie name", () => {
-    expect(buildAuthConfig({
-      type: "cookie", header_name: "", header_value: "", cookie_name: "", cookie_value: "abc",
-    })).toBeUndefined();
+    expect(buildAuthConfig({ ...defaults, type: "cookie", cookie_value: "abc" })).toBeUndefined();
+  });
+
+  it("builds basic auth config with username and password", () => {
+    const result = buildAuthConfig({ ...defaults, type: "basic", username: "admin", password: TEST_CREDENTIAL });
+    expect(result).toEqual({ type: "basic", username: "admin", password: TEST_CREDENTIAL });
+  });
+
+  it("returns undefined for basic auth with empty username", () => {
+    expect(buildAuthConfig({ ...defaults, type: "basic", password: TEST_CREDENTIAL })).toBeUndefined();
   });
 
   it("auth is not included at top-level config", () => {
-    const authConfig = buildAuthConfig({
-      type: "http_header", header_name: "X-API-Key", header_value: "key123", cookie_name: "", cookie_value: "",
-    });
+    const authConfig = buildAuthConfig({ ...defaults, type: "http_header", header_name: "X-API-Key", header_value: "key123" });
     const config = { url: "https://example.com", n_runs: 5, device: "desktop", ...(authConfig ? { auth: authConfig } : {}) };
     expect(config.auth).toBeDefined();
     expect(config.auth!.header_name).toBe("X-API-Key");

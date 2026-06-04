@@ -151,8 +151,10 @@ export default function IntelligencePage() {
     for (const dbEnv of dbEnvironments) {
       envMap[dbEnv.slug] = [];
     }
+    const validSlugs = new Set(dbEnvironments.map((e) => e.slug));
     completed.forEach((r: any) => {
       const env = r.environment ?? "staging";
+      if (!validSlugs.has(env)) return; // skip unknown environments like "preview"
       if (!envMap[env]) envMap[env] = [];
       envMap[env].push(r);
     });

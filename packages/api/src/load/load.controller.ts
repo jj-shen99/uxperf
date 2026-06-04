@@ -13,6 +13,7 @@ import { LoadOrchestratorService } from "./load-orchestrator.service";
 import { ServerTelemetryService } from "./server-telemetry.service";
 import { LoadCorrelationService } from "./load-correlation.service";
 import { LoadGatesService } from "./load-gates.service";
+import { LoadResultsService } from "./load-results.service";
 import { Public } from "../auth/auth.guard";
 
 @Controller("load")
@@ -23,6 +24,7 @@ export class LoadController {
     private readonly telemetry: ServerTelemetryService,
     private readonly correlation: LoadCorrelationService,
     private readonly loadGates: LoadGatesService,
+    private readonly results: LoadResultsService,
   ) {}
 
   // -- Load Profiles --
@@ -151,6 +153,13 @@ export class LoadController {
   @Get("correlation/:loadRunId")
   getCorrelation(@Param("loadRunId") loadRunId: string) {
     return this.correlation.getCorrelation(loadRunId);
+  }
+
+  // -- Results Analysis --
+
+  @Get("results/analysis")
+  getResultsAnalysis(@Query("project_id") projectId: string) {
+    return this.results.analyse(projectId);
   }
 
   // -- Load Gates --

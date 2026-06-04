@@ -22,7 +22,7 @@ const SIDEBAR_NAV_ITEMS = [
   { href: "/knowledge", label: "Knowledge", group: "Overview" },
   { href: "/runs", label: "Runs", group: "Testing" },
   { href: "/scripts", label: "Scripts", group: "Testing" },
-  { href: "/author", label: "Author", group: "Testing" },
+  { href: "/author", label: "Generate Scripts", group: "Testing" },
   { href: "/load", label: "Load Test", group: "Testing" },
   { href: "/schedules", label: "Schedules", group: "Testing" },
   { href: "/gates", label: "Gates", group: "Analysis" },

@@ -310,6 +310,19 @@ export class PracticeReviewService {
   }
 
   /**
+   * Manually complete/save a review, computing the score from current responses.
+   */
+  completeReview(reviewId: string): PracticeReview | null {
+    const review = this.reviews.get(reviewId);
+    if (!review) return null;
+
+    review.status = "completed";
+    review.completed_at = new Date().toISOString();
+    review.score = this.computeScore(review.responses);
+    return review;
+  }
+
+  /**
    * Compute review score (0-100).
    */
   private computeScore(responses: ReviewResponse[]): number {

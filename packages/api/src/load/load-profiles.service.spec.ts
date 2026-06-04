@@ -94,8 +94,10 @@ describe("LoadProfilesService", () => {
       mockDb.query.mockResolvedValueOnce({ rows: [{ id: "lp-1", script_id: "sc-new" }] });
 
       const result = await service.update("lp-1", { script_id: "sc-new" });
+      const updateSql = mockDb.query.mock.calls[1][0];
       const updateParams = mockDb.query.mock.calls[1][1];
-      expect(updateParams[8]).toBe("sc-new"); // $9 = script_id
+      expect(updateSql).toContain("script_id =");
+      expect(updateParams).toContain("sc-new");
       expect(result.script_id).toBe("sc-new");
     });
   });

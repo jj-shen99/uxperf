@@ -52,6 +52,41 @@ describe("JwtService", () => {
   });
 });
 
+describe("CryptoService — production guard", () => {
+  it("throws if TOKEN_ENCRYPTION_KEY is missing in production", () => {
+    const origKey = process.env.TOKEN_ENCRYPTION_KEY;
+    const origEnv = process.env.NODE_ENV;
+    delete process.env.TOKEN_ENCRYPTION_KEY;
+    process.env.NODE_ENV = "production";
+    try {
+      // Re-require to pick up fresh env
+      jest.resetModules();
+      const { CryptoService: FreshCrypto } = require("./crypto.service");
+      expect(() => new FreshCrypto()).toThrow("TOKEN_ENCRYPTION_KEY must be set in production");
+    } finally {
+      if (origKey !== undefined) process.env.TOKEN_ENCRYPTION_KEY = origKey;
+      else delete process.env.TOKEN_ENCRYPTION_KEY;
+      process.env.NODE_ENV = origEnv;
+    }
+  });
+
+  it("does NOT throw in development when key is missing", () => {
+    const origKey = process.env.TOKEN_ENCRYPTION_KEY;
+    const origEnv = process.env.NODE_ENV;
+    delete process.env.TOKEN_ENCRYPTION_KEY;
+    process.env.NODE_ENV = "development";
+    try {
+      jest.resetModules();
+      const { CryptoService: FreshCrypto } = require("./crypto.service");
+      expect(() => new FreshCrypto()).not.toThrow();
+    } finally {
+      if (origKey !== undefined) process.env.TOKEN_ENCRYPTION_KEY = origKey;
+      else delete process.env.TOKEN_ENCRYPTION_KEY;
+      process.env.NODE_ENV = origEnv;
+    }
+  });
+});
+
 describe("CryptoService", () => {
   const crypto = new CryptoService();
 
@@ -163,6 +198,9 @@ describe("Session-upgrade hardening", () => {
   });
 });
 
+// Test-only credential constant — not a real password
+const TEST_PW = "T3st_P@ss_F4ke!";
+
 describe("Security policy checks", () => {
   it("reset token is not returned in production", async () => {
     const origEnv = process.env.NODE_ENV;
@@ -212,7 +250,7 @@ describe("Security policy checks", () => {
     mockDb.query
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ id: "u-1", email: "a@b.com", display_name: "A", role: "viewer" }] });
-    await svc.register({ email: "a@b.com", display_name: "A", password: "securepass1" });
+    await svc.register({ email: "a@b.com", display_name: "A", password: TEST_PW });
     const hash = mockDb.query.mock.calls[1][1][2];
 
     // Deactivated user login
@@ -220,7 +258,7 @@ describe("Security policy checks", () => {
       rows: [{ id: "u-1", email: "a@b.com", display_name: "A", role: "viewer", is_active: false, password_hash: hash }],
     });
     try {
-      await svc.login({ email: "a@b.com", password: "securepass1" });
+      await svc.login({ email: "a@b.com", password: TEST_PW });
       fail("Should have thrown");
     } catch (e: any) {
       // Should NOT say "deactivated" — same message as wrong password

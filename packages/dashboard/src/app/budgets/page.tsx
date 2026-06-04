@@ -163,6 +163,15 @@ export default function BudgetsPage() {
           <p className="text-sm text-gray-500 mt-1">
             Route-level budgets with ratcheting, variance tolerance, and device-class segmentation
           </p>
+          <div className="mt-3 rounded-md border border-gray-800 bg-gray-900/60 px-4 py-3 text-xs text-gray-400 leading-relaxed max-w-2xl">
+            <p className="font-medium text-gray-300 mb-1">How Ratchet Budgets Work</p>
+            <p>
+              A <span className="text-emerald-400 font-medium">ratchet budget</span> automatically tightens its threshold when your performance improves.
+              After each successful run, the threshold is reduced by the configured <span className="text-gray-200">Ratchet %</span>, ensuring
+              your performance never regresses beyond the new baseline. The <span className="text-gray-200">Original</span> column preserves
+              the initial threshold for reference.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -234,13 +243,13 @@ export default function BudgetsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-xs text-gray-500">
-                          <th className="px-4 py-2 text-left font-medium">Metric</th>
-                          <th className="px-4 py-2 text-left font-medium">Device</th>
-                          <th className="px-4 py-2 text-right font-medium">Threshold</th>
-                          <th className="px-4 py-2 text-right font-medium">Original</th>
-                          <th className="px-4 py-2 text-center font-medium">Policy</th>
-                          <th className="px-4 py-2 text-center font-medium">Variance</th>
-                          <th className="px-4 py-2 text-center font-medium">Ratchet</th>
+                          <th className="px-4 py-2 text-left font-medium" title="The performance metric being tracked (e.g. LCP, FCP, CLS)">Metric</th>
+                          <th className="px-4 py-2 text-left font-medium" title="Which device class this budget applies to: desktop, mobile, or all">Device</th>
+                          <th className="px-4 py-2 text-right font-medium" title="Current threshold — runs exceeding this value trigger the policy action. Lowered automatically when ratchet is on.">Threshold</th>
+                          <th className="px-4 py-2 text-right font-medium" title="The initial threshold when this budget was first created, before any ratcheting">Original</th>
+                          <th className="px-4 py-2 text-center font-medium" title="Action taken when a run exceeds the budget: Block (fail the gate), Warn (alert but pass), Info (log only)">Policy</th>
+                          <th className="px-4 py-2 text-center font-medium" title="Allowed standard-deviation multiplier above the threshold before triggering. 0 = strict, higher = more lenient to natural variance.">Variance</th>
+                          <th className="px-4 py-2 text-center font-medium" title="When enabled, the threshold is automatically tightened by the ratchet % after each passing run">Ratchet</th>
                           <th className="px-4 py-2 text-right font-medium"></th>
                         </tr>
                       </thead>

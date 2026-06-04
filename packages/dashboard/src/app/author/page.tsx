@@ -122,7 +122,7 @@ export default function AuthorPage() {
         <button
           onClick={() => generate.mutate()}
           disabled={!prompt || !projectId || generate.isPending}
-          className="rounded-md bg-primary px-6 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           {generate.isPending ? "Generating..." : "Generate Script"}
         </button>
@@ -146,7 +146,7 @@ export default function AuthorPage() {
           <div className="rounded-lg border bg-card p-4">
             <h3 className="text-sm font-semibold mb-3">Pipeline Stages</h3>
             <div className="space-y-2">
-              {result.pipeline_stages.map((stage: any) => (
+              {result.pipeline_stages?.map((stage: any) => (
                 <div key={stage.stage} className="flex items-center gap-3 text-sm">
                   <span className={`h-2 w-2 rounded-full ${
                     stage.status === "completed" ? "bg-green-500" : stage.status === "skipped" ? "bg-gray-400" : "bg-red-500"

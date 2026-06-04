@@ -83,9 +83,9 @@ export default function ReportsPage() {
 
   const completedRuns = useMemo(() =>
     allRuns
-      .filter((r: any) => r.status === "completed" && r.metrics)
+      .filter((r: any) => r.status === "completed" && r.metrics && (!projectId || r.project_id === projectId))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [allRuns]
+    [allRuns, projectId]
   );
 
   // Filter by date range
@@ -155,13 +155,13 @@ export default function ReportsPage() {
     const allInRange = allRuns.filter((r: any) => {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
-      return new Date(r.created_at) >= cutoff;
+      return new Date(r.created_at) >= cutoff && (!projectId || r.project_id === projectId);
     });
     const failed = allInRange.filter((r: any) => r.status === "failed").length;
     const total = allInRange.length;
     const passRate = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { completed, failed, total, passRate };
-  }, [filteredRuns, allRuns, days]);
+  }, [filteredRuns, allRuns, days, projectId]);
 
   return (
     <div className="space-y-6 p-6">
@@ -307,7 +307,7 @@ export default function ReportsPage() {
           {/* LCP/FCP Trend Sparkline */}
           {trendData.length > 1 && (
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-              <h3 className="mb-4 text-sm font-medium text-gray-300">Recent LCP & FCP Trend (last 20 runs)</h3>
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Recent LCP & FCP Trend (last 20 runs{projectId ? ` — ${projects.find((p: any) => p.id === projectId)?.name ?? "project"}` : ""})</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -328,7 +328,7 @@ export default function ReportsPage() {
           {/* Lighthouse Score Trend */}
           {trendData.some((d) => d.lh != null) && (
             <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-              <h3 className="mb-4 text-sm font-medium text-gray-300">Lighthouse Performance Score Trend</h3>
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Lighthouse Performance Score Trend{projectId ? ` — ${projects.find((p: any) => p.id === projectId)?.name ?? "project"}` : ""}</h3>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />

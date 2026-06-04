@@ -207,6 +207,9 @@ export const api = {
       summary: (loadRunId: string) => request<any[]>(`/load/telemetry/${loadRunId}/summary`),
     },
     correlation: (loadRunId: string) => request<any>(`/load/correlation/${loadRunId}`),
+    results: {
+      analysis: (projectId: string) => request<any>(`/load/results/analysis?project_id=${encodeURIComponent(projectId)}`),
+    },
     evaluateGates: (data: { load_run_id: string; actual_vus: number; metrics_summary: Record<string, number> }) =>
       request<any[]>("/load/gates/evaluate", { method: "POST", body: JSON.stringify(data) }),
   },
@@ -379,6 +382,8 @@ export const api = {
       request<any>(`/platform-health/reviews/${projectId}`, { method: "POST", body: JSON.stringify({ quarter }) }),
     respond: (reviewId: string, data: any) =>
       request<any>(`/platform-health/reviews/${reviewId}/respond`, { method: "POST", body: JSON.stringify(data) }),
+    complete: (reviewId: string) =>
+      request<any>(`/platform-health/reviews/${reviewId}/complete`, { method: "POST" }),
     summary: (reviewId: string) => request<any>(`/platform-health/reviews/${reviewId}/summary`),
     overdue: (projectIds: string[]) =>
       request<any[]>("/platform-health/reviews/overdue", { method: "POST", body: JSON.stringify({ project_ids: projectIds }) }),
