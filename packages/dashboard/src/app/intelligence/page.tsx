@@ -53,6 +53,7 @@ export default function IntelligencePage() {
   const { projects, projectId, setProjectId } = useProjects();
   const [tab, setTab] = useState<TabKey>("overview");
   const [forecastMetric, setForecastMetric] = useState("lcp_ms");
+  const [selectedRunId, setSelectedRunId] = useState<string>("");
 
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["runs"],
@@ -75,6 +76,41 @@ export default function IntelligencePage() {
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [runs, projectId]
   );
+
+  // Available completed runs for the run picker
+  const completedRunOptions = useMemo(() =>
+    completed.map((r: any) => ({
+      id: r.id,
+      label: `${r.config?.url ? new URL(r.config.url).hostname : "run"} — ${new Date(r.created_at).toLocaleDateString()} ${new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+    })),
+    [completed],
+  );
+
+  // Single-run analysis: compare the selected run's metrics to project averages
+  const runAnalysis = useMemo(() => {
+    if (!selectedRunId) return null;
+    const run = completed.find((r: any) => r.id === selectedRunId);
+    if (!run || !run.metrics) return null;
+    const projectRuns = completed.filter((r: any) => r.id !== selectedRunId);
+    const metrics = Object.entries(METRICS).map(([key, meta]) => {
+      const value = run.metrics?.[key] as number | undefined;
+      if (value == null) return null;
+      const projectVals = projectRuns.map((r: any) => r.metrics?.[key]).filter((v: any) => v != null) as number[];
+      const projectAvg = projectVals.length > 0 ? projectVals.reduce((a: number, b: number) => a + b, 0) / projectVals.length : null;
+      const delta = projectAvg != null ? value - projectAvg : null;
+      const deltaPct = projectAvg != null && projectAvg !== 0 ? ((value - projectAvg) / projectAvg) * 100 : null;
+      const rating = ratingFor(value, key);
+      return { key, ...meta, value, projectAvg, delta, deltaPct, rating };
+    }).filter(Boolean) as any[];
+    return {
+      run,
+      url: run.config?.url ?? "—",
+      createdAt: run.created_at,
+      environment: run.environment ?? "staging",
+      device: run.config?.device ?? run.config?.formFactor ?? "desktop",
+      metrics,
+    };
+  }, [selectedRunId, completed]);
 
   // Metric health overview: latest average per metric with rating
   const metricHealth = useMemo(() => {
@@ -326,16 +362,28 @@ export default function IntelligencePage() {
             Performance insights derived from your test runs
           </p>
         </div>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
-        >
-          <option value="">All projects</option>
-          {projects.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <select
+            value={projectId}
+            onChange={(e) => { setProjectId(e.target.value); setSelectedRunId(""); }}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+          >
+            <option value="">All projects</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <select
+            value={selectedRunId}
+            onChange={(e) => setSelectedRunId(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 max-w-[280px]"
+          >
+            <option value="">All runs (aggregate)</option>
+            {completedRunOptions.map((r) => (
+              <option key={r.id} value={r.id}>{r.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -411,41 +459,96 @@ export default function IntelligencePage() {
 
           {/* Overview Tab */}
           {tab === "overview" && (
-            <div className="space-y-4">
-              <h2 className="text-sm font-medium text-gray-400">Core Web Vitals &amp; Metric Health (last 20 runs)</h2>
-              <p className="text-xs text-gray-600 leading-relaxed">
-                Each card shows the average, min, and max of a Core Web Vital or Lighthouse metric across your most recent 20 runs.
-                <strong className="text-gray-500"> LCP</strong> (Largest Contentful Paint) measures when the main content is visible.
-                <strong className="text-gray-500"> FCP</strong> (First Contentful Paint) measures when the first element renders.
-                <strong className="text-gray-500"> CLS</strong> (Cumulative Layout Shift) measures visual stability.
-                <strong className="text-gray-500"> TTFB</strong> (Time to First Byte) measures server response time.
-                <strong className="text-gray-500"> INP</strong> (Interaction to Next Paint) measures input responsiveness.
-                <strong className="text-gray-500"> TBT</strong> (Total Blocking Time) measures main-thread blocking.
-                Ratings follow Google&apos;s thresholds: <span className="text-green-500">good</span> / <span className="text-yellow-500">needs work</span> / <span className="text-red-500">poor</span>.
-              </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {metricHealth.map((m: any) => (
-                  <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-200">{m.label}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ratingStyle[m.rating]}`}>
-                        {m.rating === "needs-improvement" ? "Needs Work" : m.rating}
-                      </span>
+            <div className="space-y-6">
+              {/* ── Single Run Analysis (when a run is selected) ── */}
+              {runAnalysis && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-medium text-gray-400">Run Analysis</h2>
+                    <button onClick={() => setSelectedRunId("")} className="text-xs text-gray-500 hover:text-gray-300">Clear selection</button>
+                  </div>
+                  <div className="rounded-lg border border-indigo-800/40 bg-indigo-900/10 p-4">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400 mb-4">
+                      <span className="text-gray-200 font-medium truncate max-w-[300px]">{runAnalysis.url}</span>
+                      <span>{new Date(runAnalysis.createdAt).toLocaleString()}</span>
+                      <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px]">{runAnalysis.environment}</span>
+                      <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px]">{runAnalysis.device}</span>
                     </div>
-                    <p className="text-2xl font-bold text-white">
-                      {fmt(m.avg, m.key)}<span className="ml-1 text-xs font-normal text-gray-500">{m.unit || (m.key.includes("score") ? "/100" : "")}</span>
-                    </p>
-                    <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-500">
-                      <span>Min: {fmt(m.min, m.key)}{m.unit}</span>
-                      <span>Max: {fmt(m.max, m.key)}{m.unit}</span>
-                      <span>{m.sampleCount} samples</span>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {runAnalysis.metrics.map((m: any) => (
+                        <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-200">{m.label}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ratingStyle[m.rating]}`}>
+                              {m.rating === "needs-improvement" ? "Needs Work" : m.rating}
+                            </span>
+                          </div>
+                          <p className="text-2xl font-bold text-white">
+                            {fmt(m.value, m.key)}<span className="ml-1 text-xs font-normal text-gray-500">{m.unit || (m.key.includes("score") ? "/100" : "")}</span>
+                          </p>
+                          <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-500">
+                            {m.projectAvg != null && (
+                              <>
+                                <span>Project avg: {fmt(m.projectAvg, m.key)}{m.unit}</span>
+                                <span className={m.deltaPct != null ? (
+                                  m.key.includes("score")
+                                    ? (m.deltaPct >= 0 ? "text-green-400" : "text-red-400")
+                                    : (m.deltaPct <= 0 ? "text-green-400" : m.deltaPct > 15 ? "text-red-400" : "text-yellow-400")
+                                ) : "text-gray-500"}>
+                                  {m.deltaPct != null ? `${m.deltaPct > 0 ? "+" : ""}${m.deltaPct.toFixed(1)}%` : ""}
+                                </span>
+                              </>
+                            )}
+                            {m.projectAvg == null && <span className="text-gray-600">No comparison data</span>}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
-              {metricHealth.length === 0 && (
-                <p className="text-sm text-gray-500">No metric data available in recent runs.</p>
+                </div>
               )}
+
+              {/* ── Aggregate Health (always shown) ── */}
+              <div className="space-y-4">
+                <h2 className="text-sm font-medium text-gray-400">
+                  {selectedRunId ? "Project Aggregate" : "Core Web Vitals & Metric Health"} (last 20 runs)
+                </h2>
+                {!selectedRunId && (
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Each card shows the average, min, and max of a Core Web Vital or Lighthouse metric across your most recent 20 runs.
+                    <strong className="text-gray-500"> LCP</strong> (Largest Contentful Paint) measures when the main content is visible.
+                    <strong className="text-gray-500"> FCP</strong> (First Contentful Paint) measures when the first element renders.
+                    <strong className="text-gray-500"> CLS</strong> (Cumulative Layout Shift) measures visual stability.
+                    <strong className="text-gray-500"> TTFB</strong> (Time to First Byte) measures server response time.
+                    <strong className="text-gray-500"> INP</strong> (Interaction to Next Paint) measures input responsiveness.
+                    <strong className="text-gray-500"> TBT</strong> (Total Blocking Time) measures main-thread blocking.
+                    Ratings follow Google&apos;s thresholds: <span className="text-green-500">good</span> / <span className="text-yellow-500">needs work</span> / <span className="text-red-500">poor</span>.
+                  </p>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {metricHealth.map((m: any) => (
+                    <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-200">{m.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ratingStyle[m.rating]}`}>
+                          {m.rating === "needs-improvement" ? "Needs Work" : m.rating}
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-white">
+                        {fmt(m.avg, m.key)}<span className="ml-1 text-xs font-normal text-gray-500">{m.unit || (m.key.includes("score") ? "/100" : "")}</span>
+                      </p>
+                      <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-500">
+                        <span>Min: {fmt(m.min, m.key)}{m.unit}</span>
+                        <span>Max: {fmt(m.max, m.key)}{m.unit}</span>
+                        <span>{m.sampleCount} samples</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {metricHealth.length === 0 && (
+                  <p className="text-sm text-gray-500">No metric data available in recent runs.</p>
+                )}
+              </div>
             </div>
           )}
 

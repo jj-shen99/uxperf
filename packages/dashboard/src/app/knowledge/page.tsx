@@ -123,10 +123,112 @@ const METRIC_CATEGORIES = [
   },
 ];
 
-type KnowledgeTab = "metrics" | "lighthouse" | "optimization" | "methodology" | "thresholds" | "network" | "gates" | "rendering";
+const FRAMEWORK_TERMINOLOGY: { term: string; abbr?: string; description: string; context: string }[] = [
+  {
+    term: "Exponentially Weighted Moving Average",
+    abbr: "EWMA",
+    description: "A smoothing technique that gives exponentially decreasing weight to older observations. The formula is: EWMA\u2C7C = \u03B1 \u00D7 x\u2C7C + (1 \u2212 \u03B1) \u00D7 EWMA\u2C7C\u208B\u2081, where x\u2C7C is the current observation and \u03B1 (0 < \u03B1 < 1) is the smoothing factor. Higher \u03B1 makes the average more responsive to recent values; lower \u03B1 produces a smoother curve that dampens noise. Unlike a simple moving average, EWMA does not require a fixed window size and naturally down-weights older data.",
+    context: "Used in our change-point detection service to compute dynamic baselines. An EWMA of metric values tracks the \"expected\" performance; when a new data point deviates beyond a z-score threshold from the EWMA, it triggers an anomaly alert on the /anomalies page.",
+  },
+  {
+    term: "Real User Monitoring",
+    abbr: "RUM",
+    description: "Collecting performance data from actual users\u2019 browsers in production. RUM captures real-world conditions: diverse devices, network speeds, geographic locations, and user behavior patterns that lab tests cannot replicate.",
+    context: "Our RUM SDK (packages/rum-sdk) instruments pages to report Core Web Vitals (LCP, FCP, CLS, INP, TTFB) back to the API. RUM data feeds into the Intelligence module for field-vs-lab comparisons and CrUX correlation.",
+  },
+  {
+    term: "Change-Point Detection",
+    description: "Statistical methods that identify moments in a time series where the underlying distribution shifts\u2014indicating a performance regression or improvement. Common approaches include CUSUM, Bayesian online detection, and EWMA-based z-score thresholds.",
+    context: "The analytics/change-point service uses EWMA-based z-scores to flag runs where metrics deviate significantly from the rolling baseline. These become anomalies visible on the /investigation and /anomalies pages.",
+  },
+  {
+    term: "Canary Analysis",
+    description: "A deployment strategy where a small percentage of traffic is routed to the new version (the \u201Ccanary\u201D) while the rest stays on the current version (the \u201Ccontrol\u201D). Performance metrics from both groups are compared statistically to decide whether the canary is safe to promote.",
+    context: "The canary-analysis service compares metric distributions between canary and control runs using a Mann-Whitney U test, producing a confidence score (pass/marginal/fail) for each metric.",
+  },
+  {
+    term: "Interquartile Range",
+    abbr: "IQR",
+    description: "The range between the 25th percentile (Q1) and 75th percentile (Q3) of a dataset. IQR = Q3 \u2212 Q1. Values below Q1 \u2212 1.5\u00D7IQR or above Q3 + 1.5\u00D7IQR are considered outliers. IQR is robust to extreme values unlike standard deviation.",
+    context: "Used in the dashboard\u2019s error-bar visualizations and in the stats module to identify and filter metric outliers before computing baselines.",
+  },
+  {
+    term: "Saturation Point",
+    description: "The load level (in VUs or requests/sec) at which a system\u2019s response time begins to degrade non-linearly. Below saturation, adding load has minimal impact; above it, queuing effects cause exponential latency growth.",
+    context: "The saturation-detector service monitors load test runs and flags when response times begin accelerating relative to VU count. This informs capacity estimates on the /load-results page.",
+  },
+  {
+    term: "Virtual User",
+    abbr: "VU",
+    description: "A simulated concurrent user in a load test. Each VU executes the test scenario independently, generating realistic concurrent browser sessions. Browser-based VUs are resource-intensive (~300\u2013500 MB RAM each for Chromium).",
+    context: "k6 browser adapter manages VU lifecycle. VUs are capped by MAX_BROWSER_VUS to prevent OOM. Load profiles define ramp stages that control VU count over time.",
+  },
+  {
+    term: "Ramp Stage",
+    description: "A phase in a load test profile that defines a target VU count and a duration. Stages are chained to form ramp-up, steady-state, and ramp-down patterns. The ramp_type (linear or step) controls how VUs transition between stages.",
+    context: "Load profiles on the /load page use stages to define VU curves. The k6 adapter translates these into k6 ramping-vus executor stages. Step ramps use a 1-second instant jump.",
+  },
+  {
+    term: "Percentile",
+    abbr: "p50 / p75 / p95 / p99",
+    description: "The value below which a given percentage of observations fall. p50 (median) is the typical case, p75 captures the upper-middle experience, p95 represents the near-worst case, and p99 catches the extreme tail. For user-facing metrics, p75 is the standard reporting threshold (Google uses p75 for CWV).",
+    context: "Baselines, gates, and the results page all use percentile-based analysis. k6\u2019s summaryTrendStats is configured to emit p50/p75/p90/p95/p99 for each metric.",
+  },
+  {
+    term: "Baseline",
+    description: "A statistical snapshot of normal performance for a specific metric, computed from a window of recent runs. Baselines include percentiles (p50, p75, p95), mean, standard deviation, and confidence intervals. They serve as the reference point for regression detection.",
+    context: "The baselines service computes and stores baselines per project/metric. Gates compare run results against baselines. Baselines auto-refresh when new runs complete.",
+  },
+  {
+    term: "Core Web Vitals",
+    abbr: "CWV",
+    description: "Google\u2019s three key metrics for user experience: LCP (loading), INP (interactivity), and CLS (visual stability). CWV thresholds are: LCP \u2264 2.5s, INP \u2264 200ms, CLS \u2264 0.1. Meeting all three at the 75th percentile of field data earns a \u201Cgood\u201D page experience.",
+    context: "CWV metrics are measured by both our synthetic runners (Lighthouse, k6 browser) and the RUM SDK. They are the primary metrics tracked across the framework.",
+  },
+  {
+    term: "Synthetic Monitoring",
+    description: "Running automated tests against a URL from controlled infrastructure on a schedule. Synthetic tests provide consistent, repeatable measurements but don\u2019t capture the diversity of real user conditions. They excel at regression detection and CI integration.",
+    context: "The core of this framework. Lighthouse runs, k6 browser tests, and WebPageTest integrations are all forms of synthetic monitoring. Scheduled runs provide continuous synthetic coverage.",
+  },
+  {
+    term: "Chrome UX Report",
+    abbr: "CrUX",
+    description: "Google\u2019s public dataset of real user experience metrics, aggregated from Chrome users who have opted into reporting. CrUX data is available per-origin and per-URL, updated monthly (with a 28-day rolling window).",
+    context: "The CrUX ingestion service pulls field data to compare against our synthetic measurements. The Intelligence module surfaces synthetic-vs-field gaps.",
+  },
+  {
+    term: "Quality Gate",
+    description: "An automated rule that evaluates a performance metric against a threshold or baseline. Gates can block CI merges (block policy), warn (warn policy), or notify (page policy). Multiple gate types exist: threshold, baseline-relative, statistical, VU-tiered, resource-floor, and capacity-floor.",
+    context: "Configured per-project on the /gates page. Gates are evaluated automatically after each run completes. The 3-of-5 quorum prevents flaky single-run failures from blocking CI.",
+  },
+  {
+    term: "Attribution Analysis",
+    description: "The process of identifying which specific resources, scripts, or rendering phases caused a metric regression. Attribution breaks down a metric change into contributing factors (e.g., which script added 500ms of TBT, which image delayed LCP).",
+    context: "The /investigation page\u2019s Attribution tab compares resource-level data between a baseline run and the regression run to pinpoint the root cause.",
+  },
+  {
+    term: "Confidence Interval",
+    abbr: "CI",
+    description: "A range of values that is likely to contain the true population parameter with a stated confidence level (typically 95%). For performance metrics, a CI around the p75 indicates how stable that percentile estimate is. Narrower CI = more reliable baseline.",
+    context: "Baselines include CI for p75. Gates with baseline-relative thresholds use CI to determine whether a regression is statistically significant vs. natural variance.",
+  },
+  {
+    term: "Mann-Whitney U Test",
+    description: "A non-parametric statistical test that compares two independent samples to determine if they come from the same distribution. Unlike a t-test, it doesn\u2019t assume normality\u2014important for performance data which is typically right-skewed.",
+    context: "Used in canary analysis to compare metric distributions between the canary and control groups. The test produces a p-value indicating whether the performance difference is statistically significant.",
+  },
+  {
+    term: "Capacity Planning",
+    description: "Estimating the maximum sustainable load a system can handle while maintaining acceptable performance. Involves correlating VU count with response time degradation to find the saturation point, then applying a safety margin (headroom).",
+    context: "The capacity-planning service analyzes load test results to estimate max sustainable VUs. The /load-results page shows capacity estimates with headroom calculations.",
+  },
+];
+
+type KnowledgeTab = "metrics" | "terminology" | "lighthouse" | "optimization" | "methodology" | "thresholds" | "network" | "gates" | "rendering";
 
 const TABS: { key: KnowledgeTab; label: string }[] = [
-  { key: "metrics", label: "Metrics & Glossary" },
+  { key: "metrics", label: "Metrics" },
+  { key: "terminology", label: "Terminology" },
   { key: "lighthouse", label: "Lighthouse Scores" },
   { key: "optimization", label: "Optimization" },
   { key: "methodology", label: "Testing Methodology" },
@@ -190,7 +292,13 @@ export default function KnowledgePage() {
             </div>
           </div>
 
-          {/* Full Glossary */}
+        </div>
+      )}
+
+      {/* ─── Terminology Tab ─── */}
+      {tab === "terminology" && (
+        <div className="space-y-6">
+          {/* Performance Metrics Glossary */}
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-medium text-gray-400">Performance Metrics Glossary</h2>
@@ -217,6 +325,32 @@ export default function KnowledgePage() {
                   </div>
                   <p className="mt-1.5 text-xs text-gray-400 leading-relaxed">{info.description}</p>
                   <p className="mt-1 text-[10px] text-gray-600">Good: {info.good} · Unit: {info.unit}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Framework Terminology */}
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+            <div className="mb-4">
+              <h2 className="text-sm font-medium text-gray-400">Framework Terminology</h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Key concepts, algorithms, and acronyms used throughout this performance testing framework
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {FRAMEWORK_TERMINOLOGY.map((entry) => (
+                <div key={entry.term} className="rounded-md border border-gray-800 bg-gray-800/30 p-4">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-sm font-semibold text-indigo-400">{entry.term}</h3>
+                    {entry.abbr && (
+                      <span className="rounded-full bg-indigo-900/40 px-2 py-0.5 text-[11px] font-mono text-indigo-300">{entry.abbr}</span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400 leading-relaxed">{entry.description}</p>
+                  <div className="mt-2 rounded-md bg-gray-800/50 p-2">
+                    <p className="text-[10px] text-gray-500"><span className="font-medium text-gray-400">Where used:</span> {entry.context}</p>
+                  </div>
                 </div>
               ))}
             </div>

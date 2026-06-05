@@ -7,8 +7,8 @@ const FRAMEWORK_TERMINOLOGY: { term: string; abbr?: string; description: string;
   {
     term: "Exponentially Weighted Moving Average",
     abbr: "EWMA",
-    description: "A smoothing technique that gives exponentially decreasing weight to older observations. Unlike a simple moving average, EWMA reacts faster to recent changes while still damping noise. The smoothing factor \u03B1 (0 < \u03B1 < 1) controls the trade-off: higher \u03B1 = more responsive, lower \u03B1 = smoother.",
-    context: "Used in our change-point detection service to compute dynamic baselines. An EWMA of metric values tracks the \"expected\" performance, and deviations beyond a threshold trigger anomaly alerts.",
+    description: "A smoothing technique that gives exponentially decreasing weight to older observations. The formula is: EWMA_t = \u03B1 \u00D7 x_t + (1 \u2212 \u03B1) \u00D7 EWMA_{t\u22121}, where x_t is the current observation and \u03B1 (0 < \u03B1 < 1) is the smoothing factor. Higher \u03B1 makes the average more responsive to recent values; lower \u03B1 produces a smoother curve that dampens noise. Unlike a simple moving average, EWMA does not require a fixed window size and naturally down-weights older data.",
+    context: "Used in our change-point detection service to compute dynamic baselines. An EWMA of metric values tracks the \"expected\" performance; when a new data point deviates beyond a z-score threshold from the EWMA, it triggers an anomaly alert on the /anomalies page.",
   },
   {
     term: "Real User Monitoring",
@@ -107,7 +107,7 @@ const FRAMEWORK_TERMINOLOGY: { term: string; abbr?: string; description: string;
 type KnowledgeTab = "metrics" | "terminology" | "lighthouse" | "optimization" | "methodology" | "thresholds" | "network" | "gates" | "rendering";
 
 const TABS: { key: KnowledgeTab; label: string }[] = [
-  { key: "metrics", label: "Metrics & Glossary" },
+  { key: "metrics", label: "Metrics" },
   { key: "terminology", label: "Terminology" },
   { key: "lighthouse", label: "Lighthouse Scores" },
   { key: "optimization", label: "Optimization" },
@@ -197,6 +197,11 @@ describe("Knowledge — TABS definition", () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
+  it("metrics tab is labeled 'Metrics' (not 'Metrics & Glossary')", () => {
+    const metricsTab = TABS.find((t) => t.key === "metrics")!;
+    expect(metricsTab.label).toBe("Metrics");
+  });
+
   it("every tab has a non-empty label", () => {
     for (const tab of TABS) {
       expect(tab.label.length).toBeGreaterThan(0);
@@ -212,10 +217,11 @@ describe("Knowledge — TABS definition", () => {
 });
 
 describe("Knowledge — specific terminology entries", () => {
-  it("EWMA entry mentions smoothing and alpha", () => {
+  it("EWMA entry includes formula and explains alpha", () => {
     const ewma = FRAMEWORK_TERMINOLOGY.find((e) => e.abbr === "EWMA")!;
     expect(ewma).toBeDefined();
     expect(ewma.description.toLowerCase()).toContain("smoothing");
+    expect(ewma.description.toLowerCase()).toContain("formula");
     expect(ewma.term).toBe("Exponentially Weighted Moving Average");
   });
 
