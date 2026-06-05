@@ -147,6 +147,123 @@ describe("Load Test — Quick Run Stages", () => {
   });
 });
 
+/* ─── buildLinearStages ─── */
+
+function buildLinearStages(vus: number, rampUp: number, duration: number): Stage[] {
+  const holdDuration = Math.max(duration - rampUp * 2, 0);
+  return [
+    { duration_s: rampUp, target_vus: vus, ramp_type: "linear" },
+    ...(holdDuration > 0 ? [{ duration_s: holdDuration, target_vus: vus, ramp_type: "linear" as const }] : []),
+    { duration_s: rampUp, target_vus: 0, ramp_type: "linear" },
+  ];
+}
+
+function stageMaxVUs(stages: Stage[]): number {
+  return Math.max(0, ...stages.map((s) => s.target_vus));
+}
+
+describe("Load Test — buildLinearStages", () => {
+  it("generates ramp-up, hold, ramp-down with correct durations", () => {
+    const stages = buildLinearStages(10, 30, 120);
+    expect(stages).toHaveLength(3);
+    expect(stages[0]).toEqual({ duration_s: 30, target_vus: 10, ramp_type: "linear" });
+    expect(stages[1]).toEqual({ duration_s: 60, target_vus: 10, ramp_type: "linear" });
+    expect(stages[2]).toEqual({ duration_s: 30, target_vus: 0, ramp_type: "linear" });
+  });
+
+  it("total duration matches the requested duration", () => {
+    const stages = buildLinearStages(20, 15, 90);
+    const total = stages.reduce((s, st) => s + st.duration_s, 0);
+    expect(total).toBe(90);
+  });
+
+  it("omits hold stage when rampUp*2 equals duration", () => {
+    const stages = buildLinearStages(5, 30, 60);
+    // rampUp (30) + rampDown (30) = 60 = duration, hold = 0
+    expect(stages).toHaveLength(2);
+    expect(stages[0]).toEqual({ duration_s: 30, target_vus: 5, ramp_type: "linear" });
+    expect(stages[1]).toEqual({ duration_s: 30, target_vus: 0, ramp_type: "linear" });
+  });
+
+  it("omits hold stage when rampUp*2 exceeds duration", () => {
+    const stages = buildLinearStages(5, 60, 60);
+    // rampUp (60) + rampDown (60) > 60, hold = 0
+    expect(stages).toHaveLength(2);
+    expect(stages[0].duration_s).toBe(60);
+    expect(stages[1].duration_s).toBe(60);
+  });
+
+  it("handles zero ramp-up (instant jump)", () => {
+    const stages = buildLinearStages(10, 0, 60);
+    expect(stages).toHaveLength(3);
+    expect(stages[0].duration_s).toBe(0);
+    expect(stages[1]).toEqual({ duration_s: 60, target_vus: 10, ramp_type: "linear" });
+    expect(stages[2].duration_s).toBe(0);
+  });
+
+  it("peak VU in stages matches the requested VUs", () => {
+    const stages = buildLinearStages(50, 10, 120);
+    expect(stageMaxVUs(stages)).toBe(50);
+  });
+
+  it("ramp-down always targets 0 VUs", () => {
+    const stages = buildLinearStages(100, 20, 200);
+    const lastStage = stages[stages.length - 1];
+    expect(lastStage.target_vus).toBe(0);
+  });
+
+  it("all stages have ramp_type linear", () => {
+    const stages = buildLinearStages(10, 30, 120);
+    for (const s of stages) {
+      expect(s.ramp_type).toBe("linear");
+    }
+  });
+});
+
+describe("Load Test — stageMaxVUs", () => {
+  it("returns the maximum target_vus across all stages", () => {
+    const stages: Stage[] = [
+      { duration_s: 30, target_vus: 5 },
+      { duration_s: 60, target_vus: 20 },
+      { duration_s: 30, target_vus: 0 },
+    ];
+    expect(stageMaxVUs(stages)).toBe(20);
+  });
+
+  it("returns 0 for empty stages", () => {
+    expect(stageMaxVUs([])).toBe(0);
+  });
+
+  it("returns 0 when all stages target 0", () => {
+    const stages: Stage[] = [
+      { duration_s: 30, target_vus: 0 },
+      { duration_s: 30, target_vus: 0 },
+    ];
+    expect(stageMaxVUs(stages)).toBe(0);
+  });
+
+  it("handles single stage", () => {
+    expect(stageMaxVUs([{ duration_s: 60, target_vus: 42 }])).toBe(42);
+  });
+
+  it("detects mismatch when peak differs from target_vus", () => {
+    const targetVus = 10;
+    const stages: Stage[] = [
+      { duration_s: 30, target_vus: 5 },
+      { duration_s: 60, target_vus: 5 },
+      { duration_s: 30, target_vus: 0 },
+    ];
+    // Peak is 5, but target_vus is 10 → mismatch
+    expect(stageMaxVUs(stages)).not.toBe(targetVus);
+  });
+
+  it("confirms match when peak equals target_vus", () => {
+    const targetVus = 10;
+    const stages = buildLinearStages(targetVus, 30, 120);
+    expect(stageMaxVUs(stages)).toBe(targetVus);
+  });
+});
+
 describe("Load Test — Correlation Bar Data", () => {
   it("maps positive direction to red fill", () => {
     const data = buildCorrelationBarData([

@@ -82,13 +82,16 @@ export default function LoadTestingPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Profile form state
+  const [profileMode, setProfileMode] = useState<"linear" | "custom">("linear");
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
   const [pVUs, setPVUs] = useState(10);
   const [pCache, setPCache] = useState<string>("warm");
   const [pEngine, setPEngine] = useState<string>("k6_browser");
+  const [pRampUp, setPRampUp] = useState(30);
+  const [pDuration, setPDuration] = useState(120);
   const [pStages, setPStages] = useState<Stage[]>([
-    { duration_s: 30, target_vus: 5, ramp_type: "linear" },
+    { duration_s: 30, target_vus: 10, ramp_type: "linear" },
     { duration_s: 60, target_vus: 10, ramp_type: "linear" },
     { duration_s: 30, target_vus: 0, ramp_type: "linear" },
   ]);
@@ -246,13 +249,25 @@ export default function LoadTestingPage() {
 
   const totalStageDuration = (stages: Stage[]) => stages.reduce((s, st) => s + st.duration_s, 0);
 
+  const buildLinearStages = (vus: number, rampUp: number, duration: number): Stage[] => {
+    const holdDuration = Math.max(duration - rampUp * 2, 0);
+    return [
+      { duration_s: rampUp, target_vus: vus, ramp_type: "linear" },
+      ...(holdDuration > 0 ? [{ duration_s: holdDuration, target_vus: vus, ramp_type: "linear" as const }] : []),
+      { duration_s: rampUp, target_vus: 0, ramp_type: "linear" },
+    ];
+  };
+
+  const stageMaxVUs = (stages: Stage[]) => Math.max(0, ...stages.map((s) => s.target_vus));
+
   const handleCreateProfile = () => {
     if (!pName.trim() || !projectId) return;
+    const stages = profileMode === "linear" ? buildLinearStages(pVUs, pRampUp, pDuration) : pStages;
     createProfile.mutate({
       project_id: projectId,
       name: pName,
       description: pDesc || undefined,
-      stages: pStages,
+      stages,
       target_vus: pVUs,
       cache_state: pCache,
       ...(pScriptId ? { script_id: pScriptId } : {}),
@@ -374,9 +389,9 @@ export default function LoadTestingPage() {
 
       {/* Quick Run Form */}
       {showQuickRun && (
-        <div className="rounded-lg border border-indigo-800/50 bg-indigo-900/20 p-4 space-y-3">
+        <div className="mx-auto w-full max-w-5xl rounded-lg border border-indigo-800/50 bg-indigo-900/20 p-5 space-y-3">
           <h3 className="text-sm font-medium text-indigo-300">Quick Run (Ramp Up → Steady → Ramp Down)</h3>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Target URL <span className="text-red-400">*</span></label>
               <input type="url" placeholder="https://example.com" value={qUrl} onChange={(e) => setQUrl(e.target.value)} required
@@ -429,8 +444,20 @@ export default function LoadTestingPage() {
 
       {/* Create Profile Form */}
       {showCreateProfile && (
-        <div className="rounded-lg border border-gray-700 bg-gray-900/80 p-5 space-y-4">
-          <h3 className="text-sm font-medium text-gray-200">Create Load Profile</h3>
+        <div className="mx-auto w-full max-w-5xl rounded-lg border border-gray-700 bg-gray-900/80 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-gray-200">Create Load Profile</h3>
+            <div className="flex rounded-md border border-gray-700 overflow-hidden">
+              <button onClick={() => setProfileMode("linear")}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${profileMode === "linear" ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:text-gray-200"}`}>
+                Linear
+              </button>
+              <button onClick={() => setProfileMode("custom")}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${profileMode === "custom" ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:text-gray-200"}`}>
+                Custom Stages
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Profile Name</label>
@@ -443,65 +470,117 @@ export default function LoadTestingPage() {
                 className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Target VUs</label>
-              <input type="number" min={1} max={500} value={pVUs} onChange={(e) => setPVUs(Number(e.target.value))}
-                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Cache State</label>
-              <select value={pCache} onChange={(e) => setPCache(e.target.value)}
-                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
-                {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Engine</label>
-              <select value={pEngine} onChange={(e) => setPEngine(e.target.value)}
-                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
-                {ENGINE_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Journey Script</label>
-              <select value={pScriptId} onChange={(e) => setPScriptId(e.target.value)}
-                className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
-                <option value="">Single URL (no script)</option>
-                {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-          </div>
 
-          {/* Stages Editor */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-400">Ramp Stages</label>
-              <button onClick={addStage} className="rounded border border-gray-700 px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-800">+ Add Stage</button>
-            </div>
-            <div className="space-y-2">
-              {pStages.map((stage, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="w-8 text-xs text-gray-600">#{i + 1}</span>
-                  <div className="flex-1 grid grid-cols-3 gap-2">
-                    <input type="number" min={1} value={stage.duration_s} onChange={(e) => updateStage(i, "duration_s", e.target.value)}
-                      placeholder="Duration (s)" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
-                    <input type="number" min={0} value={stage.target_vus} onChange={(e) => updateStage(i, "target_vus", e.target.value)}
-                      placeholder="VUs" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
-                    <select value={stage.ramp_type ?? "linear"} onChange={(e) => updateStage(i, "ramp_type", e.target.value)}
-                      className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200">
-                      <option value="linear">Linear</option>
-                      <option value="step">Step</option>
-                    </select>
-                  </div>
-                  <button onClick={() => removeStage(i)} className="text-xs text-red-500 hover:text-red-400">Remove</button>
+          {profileMode === "linear" ? (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Threads (VUs)</label>
+                  <input type="number" min={1} max={500} value={pVUs} onChange={(e) => setPVUs(Number(e.target.value))}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
                 </div>
-              ))}
-            </div>
-            <div className="mt-3">
-              <StagePreview stages={pStages} />
-            </div>
-          </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Ramp-Up (s)</label>
+                  <input type="number" min={0} max={3600} value={pRampUp} onChange={(e) => setPRampUp(Number(e.target.value))}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Test Duration (s)</label>
+                  <input type="number" min={1} max={7200} value={pDuration} onChange={(e) => setPDuration(Number(e.target.value))}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Cache State</label>
+                  <select value={pCache} onChange={(e) => setPCache(e.target.value)}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                    {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Journey Script</label>
+                  <select value={pScriptId} onChange={(e) => setPScriptId(e.target.value)}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                    <option value="">Single URL (no script)</option>
+                    {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              {pRampUp * 2 > pDuration && (
+                <p className="text-xs text-yellow-400">Ramp-up &times; 2 ({pRampUp * 2}s) exceeds total duration ({pDuration}s). There will be no steady-state hold phase.</p>
+              )}
+              <div className="rounded-md border border-gray-800 bg-gray-800/30 p-3">
+                <p className="text-[10px] text-gray-500 mb-1">Generated stages: ramp 0 → {pVUs} VUs over {pRampUp}s, hold {Math.max(pDuration - pRampUp * 2, 0)}s, ramp down {pRampUp}s</p>
+                <StagePreview stages={buildLinearStages(pVUs, pRampUp, pDuration)} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Target VUs</label>
+                  <input type="number" min={1} max={500} value={pVUs} onChange={(e) => setPVUs(Number(e.target.value))}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Cache State</label>
+                  <select value={pCache} onChange={(e) => setPCache(e.target.value)}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                    {CACHE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Engine</label>
+                  <select value={pEngine} onChange={(e) => setPEngine(e.target.value)}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                    {ENGINE_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Journey Script</label>
+                  <select value={pScriptId} onChange={(e) => setPScriptId(e.target.value)}
+                    className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200">
+                    <option value="">Single URL (no script)</option>
+                    {scripts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Stages Editor */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-400">Ramp Stages</label>
+                  <button onClick={addStage} className="rounded border border-gray-700 px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-800">+ Add Stage</button>
+                </div>
+                <div className="space-y-2">
+                  {pStages.map((stage, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="w-8 text-xs text-gray-600">#{i + 1}</span>
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                        <input type="number" min={1} value={stage.duration_s} onChange={(e) => updateStage(i, "duration_s", e.target.value)}
+                          placeholder="Duration (s)" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                        <input type="number" min={0} value={stage.target_vus} onChange={(e) => updateStage(i, "target_vus", e.target.value)}
+                          placeholder="VUs" className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
+                        <select value={stage.ramp_type ?? "linear"} onChange={(e) => updateStage(i, "ramp_type", e.target.value)}
+                          className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200">
+                          <option value="linear">Linear</option>
+                          <option value="step">Step</option>
+                        </select>
+                      </div>
+                      <button onClick={() => removeStage(i)} className="text-xs text-red-500 hover:text-red-400">Remove</button>
+                    </div>
+                  ))}
+                </div>
+                {pStages.length > 0 && stageMaxVUs(pStages) !== pVUs && (
+                  <p className="mt-2 text-xs text-yellow-400">
+                    Stage peak VUs ({stageMaxVUs(pStages)}) does not match Target VUs ({pVUs}). The peak stage should ramp to {pVUs} VUs.
+                  </p>
+                )}
+                <div className="mt-3">
+                  <StagePreview stages={pStages} />
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowCreateProfile(false)} className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-800">Cancel</button>
@@ -517,7 +596,7 @@ export default function LoadTestingPage() {
       <div>
         <h2 className="text-sm font-medium text-gray-300 mb-3">Load Profiles</h2>
         {profiles.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {profiles.map((p: any) => (
               <div key={p.id} className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-2">
                 <div className="flex items-start justify-between">
@@ -540,7 +619,7 @@ export default function LoadTestingPage() {
                     </button>
                   </div>
                 </div>
-                <div className="flex gap-3 text-xs text-gray-500">
+                <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                   <span>{p.target_vus} VUs</span>
                   <span>{p.stages?.length ?? 0} stages</span>
                   <span>{totalStageDuration(p.stages ?? [])}s total</span>
@@ -551,9 +630,12 @@ export default function LoadTestingPage() {
                       {scripts.find((s: any) => s.id === p.script_id)?.name ?? "script"}
                     </span>
                   )}
+                  {p.stages?.length > 0 && stageMaxVUs(p.stages) !== p.target_vus && (
+                    <span className="text-yellow-400">⚠ peak VU mismatch</span>
+                  )}
                 </div>
                 {launchingProfileId === p.id && (
-                  <div className="flex items-end gap-2 pt-1 border-t border-gray-800">
+                  <div className="flex items-end gap-2 pt-2 border-t border-gray-800">
                     <div className="flex-1">
                       <label className="block text-[10px] text-gray-500 mb-0.5">Target URL <span className="text-red-400">*</span></label>
                       <input type="url" placeholder="https://example.com" value={profileLaunchUrl}
@@ -571,7 +653,7 @@ export default function LoadTestingPage() {
                 {/* Inline Edit Form */}
                 {editingProfileId === p.id && (
                   <div className="mt-3 pt-3 border-t border-gray-700 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label className="block text-[10px] text-gray-500 mb-0.5">Name</label>
                         <input value={eName} onChange={(e) => setEName(e.target.value)}
@@ -583,7 +665,7 @@ export default function LoadTestingPage() {
                           className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       <div>
                         <label className="block text-[10px] text-gray-500 mb-0.5">Target VUs</label>
                         <input type="number" min={1} max={500} value={eVUs} onChange={(e) => setEVUs(Number(e.target.value))}
@@ -645,6 +727,11 @@ export default function LoadTestingPage() {
                           </div>
                         ))}
                       </div>
+                      {eStages.length > 0 && stageMaxVUs(eStages) !== eVUs && (
+                        <p className="mt-1 text-[10px] text-yellow-400">
+                          Stage peak VUs ({stageMaxVUs(eStages)}) does not match Target VUs ({eVUs}).
+                        </p>
+                      )}
                       <div className="mt-1">
                         <StagePreview stages={eStages} />
                       </div>
