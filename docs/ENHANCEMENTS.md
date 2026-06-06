@@ -94,11 +94,11 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 
 | # | Enhancement | Status | Notes |
 |---|-------------|--------|-------|
-| E-81 | **Script-level intelligence API queries** — filter SHAP/forecast/RUM/CrUX/capacity by script | Not Started | API-backed tabs (Attribution, Forecast, RUM, CrUX, Capacity) fetch by `projectId` only; script filter not forwarded to API calls. |
-| E-82 | **RUM SDK distribution** — npm-publishable `@uxperf/rum-sdk` package | Not Started | SDK exists but has no `package.json` build pipeline or npm publish workflow. |
-| E-83 | **Pluggable engine adapter protocol** — typed interface + adapter registry | Scaffold | Adapters exist as files but don't share a formal `EngineAdapter` interface. Need typed protocol + registration. |
-| E-84 | **Load test correlation tests** — Pearson correlation accuracy tests | Not Started | Tests for Pearson correlation between VU ramp and server metrics, saturation point detection accuracy. |
-| E-85 | **E2E Playwright tests for dashboard** — browser-based integration tests | Not Started | No Playwright E2E tests for the dashboard; only unit/logic tests exist. |
+| E-81 | **Script-level intelligence API queries** — filter SHAP/forecast/RUM/CrUX/capacity by script | Done | API client methods accept optional `scriptId` parameter. All intelligence useQuery hooks forward `selectedScriptId` as query key and API param. |
+| E-82 | **RUM SDK distribution** — npm-publishable `@uxperf/rum-sdk` package | Done | Renamed to `@uxperf/rum-sdk`. Added exports map, sideEffects, peerDependencies, keywords, license, repository, jest config, prepublishOnly build step, README with full API docs. |
+| E-83 | **Pluggable engine adapter protocol** — typed interface + adapter registry | Done | `EngineAdapter` interface with metadata, lifecycle hooks (onRegister/onDestroy), validateRequest. `EngineAdapterRegistry` with register/unregister/resolve/listAvailable/destroyAll. Exported from engine index. 24 tests. |
+| E-84 | **Load test correlation tests** — Pearson correlation accuracy tests | Done | 15 accuracy tests: perfect/negative/zero correlation, noisy data, large datasets, VU-CPU ramp, cache hit rate. Saturation detection with CPU >80% threshold. Stage annotation for single/multi/staircase/empty profiles. |
+| E-85 | **E2E Playwright tests for dashboard** — browser-based integration tests | Done | Playwright config + 15 E2E smoke tests: login, register, forgot-password, authenticated nav (dashboard, runs, scripts, trends, knowledge, intelligence, gates, budgets, anomalies, reports, settings), sidebar link navigation. |
 | E-86 | **Dark/light theme toggle** — user-selectable theme | Not Started | Dashboard is dark-only; no theme toggle or system preference detection. |
 | E-87 | **Export reports as PDF** — executive report PDF generation | Not Started | Reports page shows data in HTML only; no PDF export capability. |
 | E-88 | **Webhook retry with backoff** — notification delivery reliability | Not Started | Webhook notifications fire once with no retry on failure. |
@@ -107,4 +107,4 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 
 ---
 
-_Last updated: 2026-06-05. 80 enhancements implemented (E-01–E-80). 88 API suites (1094 tests), 29 dashboard suites (1153 tests), 10 worker suites (222 tests), 1 shared suite (135 tests) — **2604 tests total**._
+_Last updated: 2026-06-05. 85 enhancements implemented (E-01–E-85). 89 API suites, 29 dashboard suites, 11 worker suites, 1 shared suite + 15 E2E tests._

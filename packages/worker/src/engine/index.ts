@@ -3,6 +3,10 @@ export { median, aggregateResults } from "./stats";
 export { registry, TestRunnerRegistry } from "./test-runner";
 export type { TestRunner } from "./test-runner";
 
+// E-83: Pluggable engine adapter protocol
+export { adapterRegistry, EngineAdapterRegistry } from "./engine-adapter";
+export type { EngineAdapter, EngineAdapterMetadata } from "./engine-adapter";
+
 // Journey engine (E-01 through E-05)
 export { parseJourney, parseYaml, compileSteps, executeJourney } from "./journey";
 

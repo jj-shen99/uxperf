@@ -1,14 +1,33 @@
 {
-  "name": "@perf-platform/rum-sdk",
+  "name": "@uxperf/rum-sdk",
   "version": "0.1.0",
-  "description": "Lightweight RUM SDK for collecting Core Web Vitals and custom metrics via sendBeacon",
+  "description": "Lightweight Real User Monitoring SDK — collects Core Web Vitals (LCP, FCP, INP, CLS, TTFB), navigation timings, and custom journey metrics via sendBeacon",
   "main": "dist/rum.js",
   "module": "dist/rum.mjs",
   "types": "dist/rum.d.ts",
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "import": "./dist/rum.mjs",
+      "require": "./dist/rum.js",
+      "types": "./dist/rum.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
   "scripts": {
-    "build": "tsup src/rum.ts --format cjs,esm --dts",
-    "test": "jest --no-coverage"
+    "build": "tsup src/rum.ts --format cjs,esm --dts --clean",
+    "test": "jest --no-coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["rum", "web-vitals", "performance", "monitoring", "lcp", "fcp", "inp", "cls", "ttfb", "sendbeacon"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jj-shen99/uxperf.git",
+    "directory": "packages/rum-sdk"
+  },
+  "peerDependencies": {
+    "web-vitals": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
     "web-vitals": "^3.5.0"
@@ -19,5 +38,10 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.1.0",
     "@types/jest": "^29.5.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/src"]
   }
 }

@@ -318,43 +318,43 @@ export default function IntelligencePage() {
   // ── API-backed intelligence data (only fetched when project selected) ──
 
   const { data: attributions = [] } = useQuery({
-    queryKey: ["intelligence-attribution", projectId],
-    queryFn: () => api.intelligence.attribution.list(projectId),
+    queryKey: ["intelligence-attribution", projectId, selectedScriptId],
+    queryFn: () => api.intelligence.attribution.list(projectId, selectedScriptId || undefined),
     enabled: !!projectId,
   });
 
   const { data: forecasts = [] } = useQuery({
-    queryKey: ["intelligence-forecast", projectId],
-    queryFn: () => api.intelligence.forecast.list(projectId),
+    queryKey: ["intelligence-forecast", projectId, selectedScriptId],
+    queryFn: () => api.intelligence.forecast.list(projectId, undefined, selectedScriptId || undefined),
     enabled: !!projectId,
   });
 
   const forecastMut = useMutation({
     mutationFn: (data: any) => api.intelligence.forecast.generate(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-forecast", projectId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-forecast", projectId, selectedScriptId] }),
   });
 
   const { data: rumSummary = [] } = useQuery({
-    queryKey: ["intelligence-rum", projectId],
-    queryFn: () => api.intelligence.rum.summary(projectId),
+    queryKey: ["intelligence-rum", projectId, selectedScriptId],
+    queryFn: () => api.intelligence.rum.summary(projectId, undefined, undefined, selectedScriptId || undefined),
     enabled: !!projectId,
   });
 
   const { data: cruxSnapshots = [] } = useQuery({
-    queryKey: ["intelligence-crux", projectId],
-    queryFn: () => api.intelligence.crux.list(projectId),
+    queryKey: ["intelligence-crux", projectId, selectedScriptId],
+    queryFn: () => api.intelligence.crux.list(projectId, undefined, selectedScriptId || undefined),
     enabled: !!projectId,
   });
 
   const { data: capacityReports = [] } = useQuery({
-    queryKey: ["intelligence-capacity", projectId],
-    queryFn: () => api.intelligence.capacity.listReports(projectId),
+    queryKey: ["intelligence-capacity", projectId, selectedScriptId],
+    queryFn: () => api.intelligence.capacity.listReports(projectId, selectedScriptId || undefined),
     enabled: !!projectId,
   });
 
   const capacityMut = useMutation({
     mutationFn: () => api.intelligence.capacity.generateReport({ project_id: projectId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-capacity", projectId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["intelligence-capacity", projectId, selectedScriptId] }),
   });
 
   const tabs = [

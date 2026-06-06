@@ -216,20 +216,20 @@ export const api = {
   intelligence: {
     attribution: {
       compute: (data: any) => request<any>("/intelligence/attribution", { method: "POST", body: JSON.stringify(data) }),
-      list: (projectId: string) => request<any[]>(`/intelligence/attribution?project_id=${encodeURIComponent(projectId)}`),
+      list: (projectId: string, scriptId?: string) => request<any[]>(`/intelligence/attribution?project_id=${encodeURIComponent(projectId)}${scriptId ? `&script_id=${encodeURIComponent(scriptId)}` : ""}`),
       get: (id: string) => request<any>(`/intelligence/attribution/${id}`),
     },
     forecast: {
       generate: (data: any) => request<any>("/intelligence/forecast", { method: "POST", body: JSON.stringify(data) }),
-      list: (projectId: string, metric?: string) =>
-        request<any[]>(`/intelligence/forecast?project_id=${encodeURIComponent(projectId)}${metric ? `&metric=${encodeURIComponent(metric)}` : ""}`),
+      list: (projectId: string, metric?: string, scriptId?: string) =>
+        request<any[]>(`/intelligence/forecast?project_id=${encodeURIComponent(projectId)}${metric ? `&metric=${encodeURIComponent(metric)}` : ""}${scriptId ? `&script_id=${encodeURIComponent(scriptId)}` : ""}`),
     },
     rum: {
       ingest: (data: any) => request<any>("/intelligence/rum/ingest", { method: "POST", body: JSON.stringify(data) }),
       ingestBatch: (events: any[]) =>
         request<any>("/intelligence/rum/ingest/batch", { method: "POST", body: JSON.stringify({ events }) }),
-      summary: (projectId: string, days?: number, origin?: string) =>
-        request<any[]>(`/intelligence/rum/summary?project_id=${encodeURIComponent(projectId)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
+      summary: (projectId: string, days?: number, origin?: string, scriptId?: string) =>
+        request<any[]>(`/intelligence/rum/summary?project_id=${encodeURIComponent(projectId)}${days ? `&days=${days}` : ""}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}${scriptId ? `&script_id=${encodeURIComponent(scriptId)}` : ""}`),
       trend: (projectId: string, metric: string, days?: number) =>
         request<any[]>(`/intelligence/rum/trend?project_id=${encodeURIComponent(projectId)}&metric=${encodeURIComponent(metric)}${days ? `&days=${days}` : ""}`),
       aggregate: (projectId: string, hoursBack?: number) =>
@@ -243,13 +243,13 @@ export const api = {
     },
     crux: {
       fetch: (data: any) => request<any>("/intelligence/crux/fetch", { method: "POST", body: JSON.stringify(data) }),
-      list: (projectId: string, origin?: string) =>
-        request<any[]>(`/intelligence/crux?project_id=${encodeURIComponent(projectId)}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`),
+      list: (projectId: string, origin?: string, scriptId?: string) =>
+        request<any[]>(`/intelligence/crux?project_id=${encodeURIComponent(projectId)}${origin ? `&origin=${encodeURIComponent(origin)}` : ""}${scriptId ? `&script_id=${encodeURIComponent(scriptId)}` : ""}`),
     },
     capacity: {
       generateReport: (data: { project_id: string; horizon_days?: number }) =>
         request<any>("/intelligence/capacity/report", { method: "POST", body: JSON.stringify(data) }),
-      listReports: (projectId: string) => request<any[]>(`/intelligence/capacity/reports?project_id=${encodeURIComponent(projectId)}`),
+      listReports: (projectId: string, scriptId?: string) => request<any[]>(`/intelligence/capacity/reports?project_id=${encodeURIComponent(projectId)}${scriptId ? `&script_id=${encodeURIComponent(scriptId)}` : ""}`),
       evaluateResourceFloor: (data: any) =>
         request<any>("/intelligence/capacity/resource-floor", { method: "POST", body: JSON.stringify(data) }),
     },
