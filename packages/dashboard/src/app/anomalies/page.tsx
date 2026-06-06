@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useProjects } from "@/hooks/use-projects";
 
 const METRIC_THRESHOLDS: Record<string, { good: number; poor: number; label: string; unit: string }> = {
@@ -43,12 +43,19 @@ function fmt(v: number, metric: string): string {
 
 export default function AnomaliesPage() {
   const { projects, projectId, setProjectId } = useProjects();
+  const qc = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [metricFilter, setMetricFilter] = useState<string>("all");
   const [daysFilter, setDaysFilter] = useState<number>(30);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const { data: runs = [], isLoading } = useQuery({
+  // Server-side anomalies
+  const { data: serverAnomalies = [], isLoading: serverLoading } = useQuery({
+    queryKey: ["anomalies", projectId],
+    queryFn: () => api.analytics.anomalies(projectId || undefined),
+  });
+
+  const { data: runs = [], isLoading: runsLoading } = useQuery({
     queryKey: ["runs"],
     queryFn: () => api.runs.list(),
   });
@@ -58,7 +65,30 @@ export default function AnomaliesPage() {
     queryFn: () => api.scripts.list(),
   });
 
-  const anomalies = useMemo(() => {
+  // Trigger server-side detection when project selected and no server anomalies
+  const detectMut = useMutation({
+    mutationFn: (pid: string) => api.analytics.detect({ project_id: pid }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["anomalies"] }),
+  });
+
+  const autoDetectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      projectId &&
+      !serverLoading &&
+      serverAnomalies.length === 0 &&
+      !detectMut.isPending &&
+      autoDetectedRef.current !== projectId
+    ) {
+      autoDetectedRef.current = projectId;
+      detectMut.mutate(projectId);
+    }
+  }, [projectId, serverLoading, serverAnomalies.length, detectMut.isPending]);
+
+  const isLoading = serverLoading || runsLoading;
+
+  // Client-side anomaly detection (fallback)
+  const clientAnomalies = useMemo(() => {
     const now = Date.now();
     const cutoff = daysFilter > 0 ? now - daysFilter * 86400000 : 0;
 
@@ -120,6 +150,44 @@ export default function AnomaliesPage() {
     return detected.sort((a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime());
   }, [runs, projectId, daysFilter]);
 
+  // Merge server-side anomalies with client-side fallback
+  const anomalies: DetectedAnomaly[] = useMemo(() => {
+    const now = Date.now();
+    const cutoff = daysFilter > 0 ? now - daysFilter * 86400000 : 0;
+
+    const fromServer: DetectedAnomaly[] = serverAnomalies.map((a: any) => {
+      const th = METRIC_THRESHOLDS[a.metric];
+      const value = a.details?.value ?? 0;
+      const baseline = a.details?.baseline ?? 0;
+      const changePct = a.details?.change_percent ?? (baseline > 0 ? ((value - baseline) / baseline) * 100 : 0);
+      return {
+        id: a.id,
+        metric: a.metric,
+        metricLabel: th?.label ?? a.metric,
+        severity: a.severity ?? "info",
+        value,
+        baseline,
+        changePercent: changePct,
+        runId: a.run_id ?? "",
+        url: a.url ?? "—",
+        detectedAt: a.detected_at ?? a.created_at ?? "",
+        description: a.description ?? `${th?.label ?? a.metric} anomaly detected`,
+        unit: th?.unit ?? "ms",
+      } as DetectedAnomaly;
+    }).filter((a) => {
+      if (cutoff > 0 && new Date(a.detectedAt).getTime() < cutoff) return false;
+      return true;
+    });
+
+    if (fromServer.length > 0) {
+      const serverIds = new Set(fromServer.map((a) => a.id));
+      const extra = clientAnomalies.filter((a) => !serverIds.has(a.id));
+      return [...fromServer, ...extra].sort((a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime());
+    }
+
+    return clientAnomalies;
+  }, [serverAnomalies, clientAnomalies, daysFilter]);
+
   const filtered = useMemo(() => {
     let list = anomalies;
     if (severityFilter !== "all") list = list.filter((a) => a.severity === severityFilter);
@@ -172,16 +240,27 @@ export default function AnomaliesPage() {
             Performance regressions detected by comparing each run against its rolling baseline
           </p>
         </div>
-        <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
-        >
-          <option value="">All projects</option>
-          {projects.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
+          >
+            <option value="">All projects</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {projectId && (
+            <button
+              onClick={() => detectMut.mutate(projectId)}
+              disabled={detectMut.isPending}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {detectMut.isPending ? "Detecting…" : "Detect"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}

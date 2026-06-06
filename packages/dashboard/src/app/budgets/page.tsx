@@ -82,24 +82,48 @@ export default function BudgetsPage() {
     ratchet_pct: 5,
   });
 
-  const load = useCallback(async () => {
+  const loadBudgets = useCallback(async (projectId?: string) => {
     setLoading(true);
     try {
-      const [p, b] = await Promise.all([
-        api.projects.list(),
-        api.budgets.list(selectedProject || undefined),
-      ]);
-      setProjects(p);
+      const b = await api.budgets.list(projectId || undefined);
       setBudgets(b);
-      if (!selectedProject && p.length > 0) setSelectedProject(p[0].id);
     } catch (e) {
       console.error("Failed to load budgets:", e);
     } finally {
       setLoading(false);
     }
-  }, [selectedProject]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Initial load: fetch projects and auto-select the first one
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      try {
+        const p = await api.projects.list();
+        if (cancelled) return;
+        setProjects(p);
+        const first = p.length > 0 ? p[0].id : "";
+        setSelectedProject(first);
+        const b = await api.budgets.list(first || undefined);
+        if (cancelled) return;
+        setBudgets(b);
+      } catch (e) {
+        console.error("Failed to load budgets:", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    init();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Reload budgets when user changes project
+  const handleProjectChange = useCallback((projectId: string) => {
+    setSelectedProject(projectId);
+    loadBudgets(projectId);
+  }, [loadBudgets]);
+
+  const load = useCallback(() => loadBudgets(selectedProject), [loadBudgets, selectedProject]);
 
   const handleCreate = async () => {
     if (!selectedProject) return;
@@ -197,7 +221,7 @@ export default function BudgetsPage() {
         <label className="text-sm text-gray-400">Project:</label>
         <select
           value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
+          onChange={(e) => handleProjectChange(e.target.value)}
           className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-300"
         >
           {projects.map((p) => (

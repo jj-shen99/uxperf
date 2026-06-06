@@ -9,3 +9,5 @@ coverage/
 *.tsbuildinfo
 artifacts/
 stdout
+*.pptx
+.DS_Store

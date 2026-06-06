@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useState } from "react";
 import { useProjects } from "@/hooks/use-projects";
@@ -13,6 +13,7 @@ export default function AuthorPage() {
   const [result, setResult] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [scriptTab, setScriptTab] = useState<"playwright" | "json">("playwright");
+  const [autoSavePending, setAutoSavePending] = useState(false);
   const queryClient = useQueryClient();
   const { projects, projectId, setProjectId } = useProjects();
 
@@ -24,7 +25,7 @@ export default function AuthorPage() {
         target_url: targetUrl || undefined,
         device,
       }),
-    onSuccess: (data) => { setResult(data); setSaved(false); },
+    onSuccess: (data) => { setResult(data); setSaved(false); setAutoSavePending(true); },
   });
 
   const saveScript = useMutation({
@@ -42,11 +43,11 @@ export default function AuthorPage() {
     },
   });
 
-  const { data: logs = [] } = useQuery({
-    queryKey: ["authoring-logs", projectId],
-    queryFn: () => api.authoring.logs(projectId),
-    enabled: !!projectId,
-  });
+  // Auto-save the script after generation
+  if (autoSavePending && result?.generated_script && !saved && !saveScript.isPending) {
+    setAutoSavePending(false);
+    saveScript.mutate();
+  }
 
   return (
     <div className="space-y-6">
@@ -255,27 +256,6 @@ export default function AuthorPage() {
         </div>
       )}
 
-      {/* Previous generations */}
-      {logs.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2">Previous Generations</h3>
-          <div className="space-y-2">
-            {logs.slice(0, 10).map((log: any) => (
-              <div key={log.id} className="flex items-center justify-between rounded border bg-card px-4 py-2 text-sm">
-                <span className="truncate max-w-md">{log.prompt}</span>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded px-2 py-0.5 text-xs ${
-                    log.status === "validated" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
-                  }`}>
-                    {log.status}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{log.generation_time_ms} ms</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

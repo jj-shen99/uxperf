@@ -140,27 +140,31 @@ Click the **Logout** button at the bottom of the sidebar. This clears your sessi
 
 ## Dashboard Overview
 
-The sidebar organizes 18 pages into four groups:
+The sidebar organizes 23 pages into five groups:
 
 ### Overview
 - **Dashboard** — Home with overview counters, Core Web Vitals, active runs, KPI averages, script/run statistics
 - **Results** — Detailed run results with Lighthouse scores and metric breakdowns
 - **Trends** — Time-series charts with environment filtering
 - **Reports** — Executive performance summaries (7/30/90-day)
-- **Knowledge** — Tabbed knowledge base: Metrics & Glossary, Lighthouse Score Breakdown, Optimization Guide, Testing Methodology, Thresholds, Network Fundamentals
+- **Knowledge** — Tabbed knowledge base: Metrics, Terminology, Lighthouse Scores, Optimization Guide, Testing Methodology, Thresholds, Network Fundamentals, Quality Gates, Browser Rendering
 
 ### Testing
 - **Runs** — Run list, manual launcher, run detail with gate results
 - **Scripts** — Script CRUD with template creation
 - **Author** — Natural-language test authoring with pipeline visualization
-- **Load Test** — Load profiles, summary stats, status filtering, completed-run metrics
 - **Schedules** — Cron-based schedule management
+
+### Load Testing
+- **Load Test** — Load profiles, summary stats, status filtering, completed-run metrics
+- **Load Results** — Detailed load test results with VU ramp visualization and telemetry
 
 ### Analysis
 - **Gates** — Quality gate configuration (threshold, baseline, statistical, VU-tiered) with on-demand "Check Against Run" evaluation
+- **Budgets** — Route-level performance budgets with ratchet-on-improvement and device-class thresholds
 - **Compare** — Side-by-side run comparison with bar charts and diff table
 - **Anomalies** — Anomaly feed with filters (project, time range, metric), trend charts, resolution actions
-- **Intelligence** — SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning, mobile-vs-desktop, multi-geo
+- **Intelligence** — Script-level analysis, SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning, decisions, mobile-vs-desktop, multi-geo
 - **Investigation** — Regression timeline, attribution panel, gate status, baseline comparison
 - **Audit** — Interactive Appendix C checklist with auto-evaluation and KPI reference guide
 
@@ -416,15 +420,26 @@ The **Anomalies** page shows detected performance regressions:
 - **Workflow** — open → acknowledged → resolved
 - **Trend chart** — visual anomaly trend over time
 
-### Intelligence page (tabbed)
+### Intelligence page (tabbed, script-level filtering)
+
+The Intelligence page supports **script-level analysis**: select a script from the dropdown to filter all tabs by that script's runs.
 
 | Tab | Feature |
 |-----|---------|
-| **Attribution** | SHAP-based feature importance for regression root-cause |
-| **Forecasting** | Prophet-style time-series decomposition with prediction intervals |
+| **Health Overview** | Core Web Vitals health cards with script-level filtering and analysis |
+| **Trends** | Metric trends across last 30 runs with regression/improvement detection |
+| **Slowest Pages** | Top 10 slowest pages by LCP with per-URL aggregation |
+| **Environments** | Environment-segmented performance comparison |
+| **Score Distribution** | Lighthouse score histogram with avg/median/p90 |
+| **Recommendations** | Auto-generated optimization recommendations based on metric health |
+| **SHAP Attribution** | SHAP-based feature importance for regression root-cause |
+| **Forecast** | Prophet-style time-series decomposition with prediction intervals |
 | **RUM** | Real User Monitoring p75 summary and trends |
 | **CrUX** | Chrome UX Report snapshots with CWV rating |
 | **Capacity** | Saturation detection, headroom estimation, infrastructure recommendations |
+| **Decisions** | Executive decision-driving dashboard with metric deltas and team KPIs |
+| **Mobile vs Desktop** | Device-segmented comparison with mobile-aware thresholds |
+| **Multi-Geo** | Cross-region performance comparison with TTFB physics-floor matrix |
 
 ### Executive reports
 

@@ -300,14 +300,14 @@ contentSlide("Intelligence Features", [
 // ════════════════════════════════════════════════════════════════
 // SLIDE — Dashboard Pages
 // ════════════════════════════════════════════════════════════════
-sectionDivider("Dashboard", "20 pages organized into 4 navigation groups");
+sectionDivider("Dashboard", "23 pages organized into 5 navigation groups");
 
 tableSlide("Overview Pages", ["Page", "Description"], [
   ["Dashboard", "Home view — overview counters, recent runs, KPI averages, metric relationship diagram"],
   ["Results", "Per-run detail — Lighthouse scores, CWV gauges, radar chart, time waterfall, score breakdown"],
   ["Trends", "Time-series charts of performance metrics with environment filtering"],
   ["Reports", "Executive reports (7/30/90-day summaries), CWV p75, pass rates, anomaly counts"],
-  ["Knowledge", "Metrics glossary, optimization guide, testing methodology, threshold reference"],
+  ["Knowledge", "Metrics, Terminology, Lighthouse Scores, Optimization, Methodology, Thresholds, Network, Gates, Rendering"],
 ], { colW: [2.0, 9.7] });
 
 tableSlide("Testing & Analysis Pages", ["Page", "Description"], [
@@ -319,7 +319,7 @@ tableSlide("Testing & Analysis Pages", ["Page", "Description"], [
   ["Gates", "Quality gate configuration (threshold, baseline, statistical, VU-tiered)"],
   ["Compare", "Side-by-side run comparison with bar charts, diff table, waterfall/filmstrip"],
   ["Anomalies", "Anomaly feed with filters, trend chart, severity badges, resolution actions"],
-  ["Intelligence", "SHAP, Prophet forecasting, RUM, CrUX, capacity, mobile-vs-desktop, multi-geo"],
+  ["Intelligence", "Script-level analysis, SHAP, forecasting, RUM, CrUX, capacity, decisions, mobile-vs-desktop, multi-geo"],
   ["Investigation", "Regression timeline, attribution panel, gate status, baseline comparison"],
   ["Audit", "Interactive Appendix C checklist with auto-evaluation and KPI reference guide"],
 ], { colW: [2.0, 9.7] });
@@ -379,11 +379,11 @@ tableSlide("API Endpoint Summary", ["Resource Group", "Endpoints", "Key Operatio
 // SLIDE — Testing
 // ════════════════════════════════════════════════════════════════
 contentSlide("Testing & Quality", [
-  "API: Jest — 87 suites, 1050 tests (controllers, services, guards, security)",
-  "Dashboard: Jest — 24 suites, 771 tests (page logic, anomalies, trends, auth)",
-  "Worker: Vitest — 10 suites, 205 tests (engine, stats, adapters, journey)",
+  "API: Jest — 88 suites, 1094 tests (controllers, services, guards, security)",
+  "Dashboard: Jest — 29 suites, 1153 tests (page logic, anomalies, trends, auth)",
+  "Worker: Vitest — 10 suites, 222 tests (engine, stats, adapters, journey)",
   "Shared: Vitest — 1 suite, 135 tests (validators, shared utilities)",
-  "Total: 122 suites, 2161 tests across all packages",
+  "Total: 128 suites, 2604 tests across all packages",
   "CI: GitHub Actions — test → lint → build → DB migration verification",
   "Security audit: session-upgrade hardened, startup warnings, UUID validation, parameterized SQL",
 ]);

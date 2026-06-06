@@ -109,14 +109,14 @@ graph TB
 ```mermaid
 graph LR
     subgraph "packages/dashboard"
-        Pages["18 Pages"]
+        Pages["23 Pages"]
         Components["UI Components"]
         Hooks["React Hooks"]
         API_Client["API Client (lib/api.ts)"]
     end
 
     subgraph "packages/api"
-        Controllers["REST Controllers (26 modules)"]
+        Controllers["REST Controllers (28 modules)"]
         Services["Business Logic Services"]
         DB_Layer["Database Layer (pg)"]
     end
@@ -129,7 +129,7 @@ graph LR
     end
 
     subgraph "packages/db"
-        Migrations["7 Migration Sets<br/>(14 files)"]
+        Migrations["14 Migration Sets<br/>(28 files)"]
     end
 
     subgraph "packages/shared"
@@ -282,6 +282,10 @@ src/
 │   ├── knowledge/           Knowledge base
 │   ├── users/               User management (admin-only)
 │   ├── settings/            Project, channel, environment, profile settings
+│   ├── audit/               Appendix C audit checklist
+│   ├── budgets/             Performance budget management
+│   ├── load-results/        Load test results detail
+│   ├── platform-health/     Platform self-monitoring + on-call
 │   ├── login/               Login page
 │   ├── register/            Registration page
 │   ├── forgot-password/     Password recovery
@@ -302,7 +306,7 @@ src/
 ├── lib/
 │   └── api.ts               API client with typed endpoints
 │
-└── __tests__/               24 test suites (Jest)
+└── __tests__/               29 test suites (Jest)
 ```
 
 ### `packages/worker` — Test Execution Engine
@@ -340,10 +344,13 @@ migrations/
 ├── 005_phase35_load          Load profiles, load runs, telemetry, load gates
 ├── 006_phase4_ga_scale       RUM events, CrUX snapshots, API keys, audit log, forecasts
 ├── 007_auth_password         Password hashing fields
-├── 008–009                   Budgets, gate overrides, capacity, canary analysis
-├── 010–011                   Gate overrides audit trail, deploy watches
+├── 008                       Performance budgets
+├── 009                       Gate overrides, capacity, canary analysis
+├── 010                       Gate overrides audit trail
+├── 011                       Deploy watches
 ├── 012                       RUM hourly aggregates, custom metrics
-└── 013–014                   Seasonal baselines, bundle-size checks
+├── 013                       Seasonal baselines
+└── 014                       Bundle-size checks, deploy watches
 ```
 
 ---

@@ -64,9 +64,9 @@ npm run dev:dashboard    # Terminal 2 → http://localhost:4200
 npm test
 
 # Individual packages
-npm test --workspace=packages/api         # Jest (87 suites, 1050 tests)
-npm test --workspace=packages/dashboard   # Jest (24 suites, 771 tests)
-npm test --workspace=packages/worker      # Vitest (10 suites, 205 tests)
+npm test --workspace=packages/api         # Jest (88 suites, 1094 tests)
+npm test --workspace=packages/dashboard   # Jest (29 suites, 1153 tests)
+npm test --workspace=packages/worker      # Vitest (10 suites, 222 tests)
 npm test --workspace=packages/shared      # Vitest (1 suite, 135 tests)
 ```
 

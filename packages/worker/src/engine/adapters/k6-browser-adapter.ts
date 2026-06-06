@@ -192,17 +192,32 @@ export class K6BrowserAdapter implements TestRunner {
   }
 
   /**
-   * Generate a single-URL k6 browser script.
+   * Expand stages for k6: "step" ramp_type becomes an instant jump (1s) then
+   * a hold, while "linear" (default) maps 1:1 to a k6 ramping-vus stage.
    */
+  private expandStagesForK6(stages: K6Stage[], maxVUs: number): { duration: string; target: number }[] {
+    const out: { duration: string; target: number }[] = [];
+    for (const s of stages) {
+      const cappedVUs = Math.min(s.target_vus, maxVUs);
+      if (s.ramp_type === "step") {
+        // Instant jump to target, then hold for the remainder
+        out.push({ duration: "1s", target: cappedVUs });
+        if (s.duration_s > 1) {
+          out.push({ duration: `${s.duration_s - 1}s`, target: cappedVUs });
+        }
+      } else {
+        out.push({ duration: `${s.duration_s}s`, target: cappedVUs });
+      }
+    }
+    return out;
+  }
+
   private generateSingleUrlK6Script(request: EngineRunRequest, profile: K6LoadProfile): string {
     // Cap concurrent browser VUs — each Chromium takes ~300-500MB RAM
     const maxBrowserVUs = parseInt(process.env.MAX_BROWSER_VUS || "2", 10);
-    const cappedStages = profile.stages.map((s) => ({
-      ...s,
-      target_vus: Math.min(s.target_vus, maxBrowserVUs),
-    }));
-    const stages = cappedStages.map(
-      (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
+    const expanded = this.expandStagesForK6(profile.stages, maxBrowserVUs);
+    const stages = expanded.map(
+      (s) => `{ duration: '${s.duration}', target: ${s.target} }`,
     ).join(",\n      ");
 
     const viewport = request.viewport ?? { width: 1920, height: 1080 };
@@ -271,12 +286,9 @@ export default async function () {
   ): string {
     // Cap concurrent browser VUs — each Chromium takes ~300-500MB RAM
     const maxBrowserVUs = parseInt(process.env.MAX_BROWSER_VUS || "2", 10);
-    const cappedStages = profile.stages.map((s) => ({
-      ...s,
-      target_vus: Math.min(s.target_vus, maxBrowserVUs),
-    }));
-    const stages = cappedStages.map(
-      (s) => `{ duration: '${s.duration_s}s', target: ${s.target_vus} }`,
+    const expanded = this.expandStagesForK6(profile.stages, maxBrowserVUs);
+    const stages = expanded.map(
+      (s) => `{ duration: '${s.duration}', target: ${s.target} }`,
     ).join(",\n      ");
 
     const viewport = request.viewport ?? { width: 1920, height: 1080 };

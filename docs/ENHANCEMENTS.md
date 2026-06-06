@@ -78,6 +78,33 @@ These are the highest-impact gaps between the book's prescriptions and the curre
 | E-26 | CI pipeline (GitHub Actions) | � | Enabled push/PR triggers, split into parallel jobs (test-api, test-worker, test-dashboard, test-shared, lint-and-build, db-migration-test), concurrency control, migration idempotency check. 14 infra tests. |
 | E-27 | Database migrations versioning | � | All 11 migrations made idempotent (IF NOT EXISTS for tables/indexes/types/columns, DROP IF EXISTS guards for triggers). 56 idempotency verification tests scanning every .up.sql and .down.sql file. |
 
+## Priority 7 — Recent Enhancements (E-74–E-80)
+
+| # | Enhancement | Status | Notes |
+|---|-------------|--------|-------|
+| E-74 | **Knowledge tab restructure** — Glossary moved to Terminology tab | Done | Renamed "Metrics & Glossary" tab to "Metrics". Performance Metrics Glossary section relocated to the Terminology tab with filtering. Tests updated. |
+| E-75 | **EWMA terminology fix** — formula and detailed explanation | Done | EWMA entry now includes the formula EWMA_t = alpha * x_t + (1 - alpha) * EWMA_{t-1} and explains z-score anomaly triggering. |
+| E-76 | **Script-level intelligence** — per-script analysis across all tabs | Done | Script picker dropdown on `/intelligence`. Filters `completed` runs by `script_id` so all tabs (overview, trends, slowest pages, environments, scores, recommendations, decisions, mobile vs desktop) show script-filtered data. Script Analysis panel with aggregated metrics vs project average. |
+| E-77 | **Budgets page** — route-level budget management UI | Done | `/budgets` page with project selector, create/delete budgets, route grouping, ratchet-on-improvement action. Wired to budgets API. |
+| E-78 | **Load Results page** — separate page for load test results | Done | `/load-results` page with detailed load run results, VU ramp visualization, telemetry data. |
+| E-79 | **Audit checklist page** — interactive Appendix C audit | Done | `/audit` page with 7 audit categories, auto-evaluation, per-item status tracking, weighted scoring, KPI reference guide. |
+| E-80 | **Platform Health page** — self-monitoring and on-call | Done | `/platform-health` page with platform self-monitoring, on-call rotation management, quarterly practice reviews. |
+
+## Backlog — Not Yet Started
+
+| # | Enhancement | Status | Notes |
+|---|-------------|--------|-------|
+| E-81 | **Script-level intelligence API queries** — filter SHAP/forecast/RUM/CrUX/capacity by script | Not Started | API-backed tabs (Attribution, Forecast, RUM, CrUX, Capacity) fetch by `projectId` only; script filter not forwarded to API calls. |
+| E-82 | **RUM SDK distribution** — npm-publishable `@uxperf/rum-sdk` package | Not Started | SDK exists but has no `package.json` build pipeline or npm publish workflow. |
+| E-83 | **Pluggable engine adapter protocol** — typed interface + adapter registry | Scaffold | Adapters exist as files but don't share a formal `EngineAdapter` interface. Need typed protocol + registration. |
+| E-84 | **Load test correlation tests** — Pearson correlation accuracy tests | Not Started | Tests for Pearson correlation between VU ramp and server metrics, saturation point detection accuracy. |
+| E-85 | **E2E Playwright tests for dashboard** — browser-based integration tests | Not Started | No Playwright E2E tests for the dashboard; only unit/logic tests exist. |
+| E-86 | **Dark/light theme toggle** — user-selectable theme | Not Started | Dashboard is dark-only; no theme toggle or system preference detection. |
+| E-87 | **Export reports as PDF** — executive report PDF generation | Not Started | Reports page shows data in HTML only; no PDF export capability. |
+| E-88 | **Webhook retry with backoff** — notification delivery reliability | Not Started | Webhook notifications fire once with no retry on failure. |
+| E-89 | **Run artifact viewer** — view screenshots, HAR, Lighthouse JSON in-app | Scaffold | Artifacts are stored on disk; no in-app viewer beyond raw JSON links. |
+| E-90 | **Script version diffing** — visual diff between script versions | Not Started | Script versioning exists but no diff UI between versions. |
+
 ---
 
-_Last updated: 2026-05-30 (E-01–E-07, E-11–E-13, E-18–E-27, E-28–E-37 implemented)_
+_Last updated: 2026-06-05. 80 enhancements implemented (E-01–E-80). 88 API suites (1094 tests), 29 dashboard suites (1153 tests), 10 worker suites (222 tests), 1 shared suite (135 tests) — **2604 tests total**._

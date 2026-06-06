@@ -236,6 +236,74 @@ describe("K6BrowserAdapter", () => {
     });
   });
 
+  describe("ramp_type step vs linear", () => {
+    it("linear ramp produces a single k6 stage per input stage", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [
+            { duration_s: 30, target_vus: 2, ramp_type: "linear" },
+            { duration_s: 30, target_vus: 0, ramp_type: "linear" },
+          ],
+          target_vus: 2,
+          cache_state: "warm",
+        },
+      );
+      expect(script).toContain("duration: '30s', target: 2");
+      expect(script).toContain("duration: '30s', target: 0");
+    });
+
+    it("step ramp splits into 1s jump + hold", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [
+            { duration_s: 60, target_vus: 2, ramp_type: "step" },
+            { duration_s: 30, target_vus: 0, ramp_type: "linear" },
+          ],
+          target_vus: 2,
+          cache_state: "warm",
+        },
+      );
+      // Step stage: instant jump in 1s then hold for remaining 59s
+      expect(script).toContain("duration: '1s', target: 2");
+      expect(script).toContain("duration: '59s', target: 2");
+      // Linear ramp-down stays as-is
+      expect(script).toContain("duration: '30s', target: 0");
+    });
+
+    it("step ramp with 1s duration produces only the jump stage", () => {
+      const script = adapter.generateK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [{ duration_s: 1, target_vus: 2, ramp_type: "step" }],
+          target_vus: 2,
+          cache_state: "warm",
+        },
+      );
+      expect(script).toContain("duration: '1s', target: 2");
+      // Should NOT have a 0s hold stage
+      expect(script).not.toContain("duration: '0s'");
+    });
+
+    it("step ramp works in journey scripts too", () => {
+      const steps = [
+        { intent: 'measure: "home"', action: "measure" as const, target: "measure", label: 'measure: "home"' },
+      ];
+      const script = adapter.generateJourneyK6Script(
+        { url: "https://example.com", n_runs: 1, device: "desktop" },
+        {
+          stages: [{ duration_s: 60, target_vus: 2, ramp_type: "step" }],
+          target_vus: 2,
+          cache_state: "warm",
+        },
+        steps,
+      );
+      expect(script).toContain("duration: '1s', target: 2");
+      expect(script).toContain("duration: '59s', target: 2");
+    });
+  });
+
   describe("summaryTrendStats", () => {
     it("includes summaryTrendStats in single-URL script", () => {
       const script = adapter.generateK6Script(

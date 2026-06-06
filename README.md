@@ -177,7 +177,7 @@ After `npm run db:seed`, these accounts are available (local dev only — overri
 
 ## Dashboard Pages
 
-20 pages organized into four navigation groups:
+23 pages organized into five navigation groups:
 
 ### Overview
 | Page | Description |
@@ -186,7 +186,7 @@ After `npm run db:seed`, these accounts are available (local dev only — overri
 | **Results** | Run results with Lighthouse scores, metric breakdowns, "no metrics" diagnostics |
 | **Trends** | Time-series metric charts with IQR error bands and environment filtering |
 | **Reports** | Executive summaries (7/30/90-day: CWV p75, pass rates, anomaly counts, trends) |
-| **Knowledge** | Tabbed knowledge base: Metrics Glossary, Lighthouse Scores, Optimization Guide, Testing Methodology, Thresholds, Network Fundamentals |
+| **Knowledge** | Tabbed knowledge base: Metrics, Terminology, Lighthouse Scores, Optimization Guide, Testing Methodology, Thresholds, Network Fundamentals, Quality Gates, Browser Rendering |
 
 ### Testing
 | Page | Description |
@@ -195,15 +195,17 @@ After `npm run db:seed`, these accounts are available (local dev only — overri
 | **Scripts** | Script CRUD with template creation (Lighthouse Audit, Multi-Page Flow, SPA Navigation, etc.) |
 | **Author** | Natural-language test authoring with pipeline visualization |
 | **Load Test** | Load profiles, summary stats, status filter, completed-run metrics |
+| **Load Results** | Detailed load test results with VU ramp visualization and telemetry |
 | **Schedules** | Cron-based schedule management with enable/disable toggles |
 
 ### Analysis
 | Page | Description |
 |------|-------------|
 | **Gates** | Gate configuration (threshold, baseline, statistical, VU-tiered) with on-demand evaluation |
+| **Budgets** | Route-level performance budgets with ratchet-on-improvement and device-class-specific thresholds |
 | **Compare** | Side-by-side run comparison with bar charts and diff table |
 | **Anomalies** | Anomaly feed with filters, trend charts, severity badges, resolution workflow |
-| **Intelligence** | SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning, mobile-vs-desktop, multi-geo |
+| **Intelligence** | Script-level analysis, SHAP attribution, forecasting, RUM summary, CrUX snapshots, capacity planning, decisions, mobile-vs-desktop, multi-geo |
 | **Investigation** | Regression timeline, attribution panel, gate status, baseline comparison |
 | **Audit** | Interactive Appendix C checklist with auto-evaluation and KPI reference guide |
 
@@ -265,18 +267,18 @@ Gates support **configurable quorum** (default: 3-of-5) with per-severity defaul
 npm test
 
 # API unit tests (Jest)
-npm test --workspace=packages/api       # 87 suites, 1050 tests
+npm test --workspace=packages/api       # 88 suites, 1094 tests
 
 # Dashboard logic tests (Jest)
-npm test --workspace=packages/dashboard  # 24 suites, 771 tests
+npm test --workspace=packages/dashboard  # 29 suites, 1153 tests
 
 # Worker engine + stats (Vitest)
-npm test --workspace=packages/worker     # 10 suites, 205 tests
+npm test --workspace=packages/worker     # 10 suites, 222 tests
 
 # Shared validators (Vitest)
 npm test --workspace=packages/shared     # 1 suite, 135 tests
 
-# Total: 122 suites, 2161 tests
+# Total: 128 suites, 2604 tests
 ```
 
 ---
@@ -437,9 +439,10 @@ All endpoints are prefixed with `/api/v1`. Authentication required unless noted.
 | [Architecture](docs/ARCHITECTURE.md) | System architecture, component diagrams, data flow |
 | [User Guide](docs/USER_GUIDE.md) | Setup, configuration, and day-to-day usage |
 | [Engine Guide](docs/ENGINE_GUIDE.md) | When to use each testing engine |
-| [Enhancements](docs/ENHANCEMENTS.md) | Enhancement backlog v1 (E-01 to E-37) |
+| [Enhancements](docs/ENHANCEMENTS.md) | Enhancement backlog v1 (E-01 to E-37, E-74 to E-90) |
 | [Enhancements V2](docs/ENHANCEMENTS_V2.md) | Enhancement backlog v2 (E-38 to E-73) |
 | [Contributing](docs/CONTRIBUTING.md) | Development workflow and guidelines |
+| [Presentation](docs/UI_Performance_Framework_Presentation.md) | Framework overview slides (Markdown) |
 
 ---
 
