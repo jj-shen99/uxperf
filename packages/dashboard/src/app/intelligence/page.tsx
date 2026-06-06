@@ -53,7 +53,7 @@ export default function IntelligencePage() {
   const { projects, projectId, setProjectId } = useProjects();
   const [tab, setTab] = useState<TabKey>("overview");
   const [forecastMetric, setForecastMetric] = useState("lcp_ms");
-  const [selectedRunId, setSelectedRunId] = useState<string>("");
+  const [selectedScriptId, setSelectedScriptId] = useState<string>("");
 
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["runs"],
@@ -70,49 +70,54 @@ export default function IntelligencePage() {
     queryFn: () => api.environments.list(),
   });
 
-  const completed = useMemo(() =>
+  // All completed runs for the selected project
+  const allProjectCompleted = useMemo(() =>
     runs
       .filter((r: any) => r.status === "completed" && r.metrics && (!projectId || r.project_id === projectId))
       .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [runs, projectId]
   );
 
-  // Available completed runs for the run picker
-  const completedRunOptions = useMemo(() =>
-    completed.map((r: any) => ({
-      id: r.id,
-      label: `${r.config?.url ? new URL(r.config.url).hostname : "run"} — ${new Date(r.created_at).toLocaleDateString()} ${new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-    })),
-    [completed],
+  // When a script is selected, filter completed runs to only those from that script
+  const completed = useMemo(() =>
+    selectedScriptId
+      ? allProjectCompleted.filter((r: any) => r.script_id === selectedScriptId)
+      : allProjectCompleted,
+    [allProjectCompleted, selectedScriptId]
   );
 
-  // Single-run analysis: compare the selected run's metrics to project averages
-  const runAnalysis = useMemo(() => {
-    if (!selectedRunId) return null;
-    const run = completed.find((r: any) => r.id === selectedRunId);
-    if (!run || !run.metrics) return null;
-    const projectRuns = completed.filter((r: any) => r.id !== selectedRunId);
+  // Script options for the picker — only scripts that have at least one completed run
+  const scriptOptions = useMemo(() => {
+    const scriptIds = new Set(allProjectCompleted.map((r: any) => r.script_id).filter(Boolean));
+    return (scripts as any[])
+      .filter((s: any) => scriptIds.has(s.id))
+      .map((s: any) => ({ id: s.id, label: s.name || s.canonical_json?.target_url || s.id }));
+  }, [allProjectCompleted, scripts]);
+
+  // Script-level analysis: aggregate metrics for the selected script vs project overall
+  const scriptAnalysis = useMemo(() => {
+    if (!selectedScriptId || completed.length === 0) return null;
+    const script = (scripts as any[]).find((s: any) => s.id === selectedScriptId);
+    const otherRuns = allProjectCompleted.filter((r: any) => r.script_id !== selectedScriptId);
     const metrics = Object.entries(METRICS).map(([key, meta]) => {
-      const value = run.metrics?.[key] as number | undefined;
-      if (value == null) return null;
-      const projectVals = projectRuns.map((r: any) => r.metrics?.[key]).filter((v: any) => v != null) as number[];
-      const projectAvg = projectVals.length > 0 ? projectVals.reduce((a: number, b: number) => a + b, 0) / projectVals.length : null;
-      const delta = projectAvg != null ? value - projectAvg : null;
-      const deltaPct = projectAvg != null && projectAvg !== 0 ? ((value - projectAvg) / projectAvg) * 100 : null;
-      const rating = ratingFor(value, key);
-      return { key, ...meta, value, projectAvg, delta, deltaPct, rating };
+      const vals = completed.map((r: any) => r.metrics?.[key]).filter((v: any) => v != null) as number[];
+      if (vals.length === 0) return null;
+      const avg = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+      const otherVals = otherRuns.map((r: any) => r.metrics?.[key]).filter((v: any) => v != null) as number[];
+      const projectAvg = otherVals.length > 0 ? otherVals.reduce((a: number, b: number) => a + b, 0) / otherVals.length : null;
+      const deltaPct = projectAvg != null && projectAvg !== 0 ? ((avg - projectAvg) / projectAvg) * 100 : null;
+      const rating = ratingFor(avg, key);
+      return { key, ...meta, avg, min: Math.min(...vals), max: Math.max(...vals), sampleCount: vals.length, projectAvg, deltaPct, rating };
     }).filter(Boolean) as any[];
     return {
-      run,
-      url: run.config?.url ?? "—",
-      createdAt: run.created_at,
-      environment: run.environment ?? "staging",
-      device: run.config?.device ?? run.config?.formFactor ?? "desktop",
+      scriptName: script?.name ?? selectedScriptId,
+      targetUrl: script?.canonical_json?.target_url ?? completed[0]?.config?.url ?? "—",
+      runCount: completed.length,
       metrics,
     };
-  }, [selectedRunId, completed]);
+  }, [selectedScriptId, completed, allProjectCompleted, scripts]);
 
-  // Metric health overview: latest average per metric with rating
+  // Metric health overview: latest average per metric with rating (respects script filter)
   const metricHealth = useMemo(() => {
     const recent = completed.slice(-20);
     if (recent.length === 0) return [];
@@ -126,6 +131,22 @@ export default function IntelligencePage() {
       return { key, ...meta, avg, min, max, rating, sampleCount: vals.length };
     }).filter(Boolean);
   }, [completed]);
+
+  // Project-level metric health (ignores script filter, used for comparison)
+  const projectMetricHealth = useMemo(() => {
+    if (!selectedScriptId) return metricHealth; // no script selected → same as metricHealth
+    const recent = allProjectCompleted.slice(-20);
+    if (recent.length === 0) return [];
+    return Object.entries(METRICS).map(([key, meta]) => {
+      const vals = recent.map((r: any) => r.metrics?.[key]).filter((v: any) => v != null) as number[];
+      if (vals.length === 0) return null;
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const rating = ratingFor(avg, key);
+      return { key, ...meta, avg, min, max, rating, sampleCount: vals.length };
+    }).filter(Boolean);
+  }, [selectedScriptId, allProjectCompleted, metricHealth]);
 
   // Trend: metric values over last N runs
   const trendData = useMemo(() => {
@@ -257,7 +278,7 @@ export default function IntelligencePage() {
     }
 
     // Check for high failure rate
-    const allRecent = runs.filter((r: any) => !projectId || r.project_id === projectId).slice(-20);
+    const allRecent = runs.filter((r: any) => (!projectId || r.project_id === projectId) && (!selectedScriptId || r.script_id === selectedScriptId)).slice(-20);
     const failed = allRecent.filter((r: any) => r.status === "failed").length;
     if (allRecent.length > 0 && failed / allRecent.length > 0.2) {
       recs.push({
@@ -292,7 +313,7 @@ export default function IntelligencePage() {
     // Sort by priority
     const order = { critical: 0, warning: 1, info: 2 };
     return recs.sort((a, b) => order[a.priority] - order[b.priority]);
-  }, [completed, runs, projectId, trendData]);
+  }, [completed, runs, projectId, selectedScriptId, trendData]);
 
   // ── API-backed intelligence data (only fetched when project selected) ──
 
@@ -365,7 +386,7 @@ export default function IntelligencePage() {
         <div className="flex items-center gap-3">
           <select
             value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setSelectedRunId(""); }}
+            onChange={(e) => { setProjectId(e.target.value); setSelectedScriptId(""); }}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
           >
             <option value="">All projects</option>
@@ -374,13 +395,13 @@ export default function IntelligencePage() {
             ))}
           </select>
           <select
-            value={selectedRunId}
-            onChange={(e) => setSelectedRunId(e.target.value)}
+            value={selectedScriptId}
+            onChange={(e) => setSelectedScriptId(e.target.value)}
             className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 max-w-[280px]"
           >
-            <option value="">All runs (aggregate)</option>
-            {completedRunOptions.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
+            <option value="">All scripts (aggregate)</option>
+            {scriptOptions.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
         </div>
@@ -408,9 +429,13 @@ export default function IntelligencePage() {
 
       {isLoading ? (
         <div className="text-gray-400">Loading data...</div>
-      ) : completed.length === 0 ? (
+      ) : completed.length === 0 && allProjectCompleted.length === 0 ? (
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
           No completed runs with metrics found. Run some performance tests to see intelligence data.
+        </div>
+      ) : completed.length === 0 && selectedScriptId ? (
+        <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
+          No completed runs found for this script. Select a different script or clear the filter.
         </div>
       ) : (
         <>
@@ -427,7 +452,7 @@ export default function IntelligencePage() {
                 Use this tab in weekly/bi-weekly performance syncs to quickly answer: &quot;Are we getting better or worse?&quot;
               </p>
               <DecisionDashboard
-                runs={runs}
+                runs={selectedScriptId ? runs.filter((r: any) => r.script_id === selectedScriptId) : runs}
                 projects={projects}
                 projectId={projectId}
               />
@@ -444,7 +469,7 @@ export default function IntelligencePage() {
                 To produce mobile data, create a run with <code className="text-gray-400">device: &quot;mobile&quot;</code> in the config — either via the API
                 or by setting the device/form-factor in your test script.
               </p>
-              <MobileSegmentView runs={projectId ? runs.filter((r: any) => r.project_id === projectId) : runs} />
+              <MobileSegmentView runs={(() => { let filtered = projectId ? runs.filter((r: any) => r.project_id === projectId) : runs; if (selectedScriptId) filtered = filtered.filter((r: any) => r.script_id === selectedScriptId); return filtered; })()} />
             </div>
           )}
 
@@ -460,22 +485,21 @@ export default function IntelligencePage() {
           {/* Overview Tab */}
           {tab === "overview" && (
             <div className="space-y-6">
-              {/* ── Single Run Analysis (when a run is selected) ── */}
-              {runAnalysis && (
+              {/* ── Script Analysis (when a script is selected) ── */}
+              {scriptAnalysis && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-medium text-gray-400">Run Analysis</h2>
-                    <button onClick={() => setSelectedRunId("")} className="text-xs text-gray-500 hover:text-gray-300">Clear selection</button>
+                    <h2 className="text-sm font-medium text-gray-400">Script Analysis</h2>
+                    <button onClick={() => setSelectedScriptId("")} className="text-xs text-gray-500 hover:text-gray-300">Clear selection</button>
                   </div>
                   <div className="rounded-lg border border-indigo-800/40 bg-indigo-900/10 p-4">
                     <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400 mb-4">
-                      <span className="text-gray-200 font-medium truncate max-w-[300px]">{runAnalysis.url}</span>
-                      <span>{new Date(runAnalysis.createdAt).toLocaleString()}</span>
-                      <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px]">{runAnalysis.environment}</span>
-                      <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px]">{runAnalysis.device}</span>
+                      <span className="text-gray-200 font-medium">{scriptAnalysis.scriptName}</span>
+                      <span className="truncate max-w-[300px]">{scriptAnalysis.targetUrl}</span>
+                      <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px]">{scriptAnalysis.runCount} runs</span>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {runAnalysis.metrics.map((m: any) => (
+                      {scriptAnalysis.metrics.map((m: any) => (
                         <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-200">{m.label}</span>
@@ -484,9 +508,13 @@ export default function IntelligencePage() {
                             </span>
                           </div>
                           <p className="text-2xl font-bold text-white">
-                            {fmt(m.value, m.key)}<span className="ml-1 text-xs font-normal text-gray-500">{m.unit || (m.key.includes("score") ? "/100" : "")}</span>
+                            {fmt(m.avg, m.key)}<span className="ml-1 text-xs font-normal text-gray-500">{m.unit || (m.key.includes("score") ? "/100" : "")}</span>
                           </p>
                           <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-500">
+                            <span>Min: {fmt(m.min, m.key)}{m.unit} · Max: {fmt(m.max, m.key)}{m.unit}</span>
+                            <span>{m.sampleCount} samples</span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-3 text-[10px] text-gray-500">
                             {m.projectAvg != null && (
                               <>
                                 <span>Project avg: {fmt(m.projectAvg, m.key)}{m.unit}</span>
@@ -495,7 +523,7 @@ export default function IntelligencePage() {
                                     ? (m.deltaPct >= 0 ? "text-green-400" : "text-red-400")
                                     : (m.deltaPct <= 0 ? "text-green-400" : m.deltaPct > 15 ? "text-red-400" : "text-yellow-400")
                                 ) : "text-gray-500"}>
-                                  {m.deltaPct != null ? `${m.deltaPct > 0 ? "+" : ""}${m.deltaPct.toFixed(1)}%` : ""}
+                                  {m.deltaPct != null ? `${m.deltaPct > 0 ? "+" : ""}${m.deltaPct.toFixed(1)}% vs project` : ""}
                                 </span>
                               </>
                             )}
@@ -511,9 +539,9 @@ export default function IntelligencePage() {
               {/* ── Aggregate Health (always shown) ── */}
               <div className="space-y-4">
                 <h2 className="text-sm font-medium text-gray-400">
-                  {selectedRunId ? "Project Aggregate" : "Core Web Vitals & Metric Health"} (last 20 runs)
+                  {selectedScriptId ? "Project Aggregate (all scripts)" : "Core Web Vitals & Metric Health"} (last 20 runs)
                 </h2>
-                {!selectedRunId && (
+                {!selectedScriptId && (
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Each card shows the average, min, and max of a Core Web Vital or Lighthouse metric across your most recent 20 runs.
                     <strong className="text-gray-500"> LCP</strong> (Largest Contentful Paint) measures when the main content is visible.
@@ -526,7 +554,7 @@ export default function IntelligencePage() {
                   </p>
                 )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {metricHealth.map((m: any) => (
+                  {(selectedScriptId ? projectMetricHealth : metricHealth).map((m: any) => (
                     <div key={m.key} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-gray-200">{m.label}</span>
@@ -545,7 +573,7 @@ export default function IntelligencePage() {
                     </div>
                   ))}
                 </div>
-                {metricHealth.length === 0 && (
+                {(selectedScriptId ? projectMetricHealth : metricHealth).length === 0 && (
                   <p className="text-sm text-gray-500">No metric data available in recent runs.</p>
                 )}
               </div>
