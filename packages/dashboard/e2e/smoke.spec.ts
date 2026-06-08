@@ -36,10 +36,12 @@ test.describe("Dashboard Smoke Tests", () => {
 
 test.describe("Authenticated Navigation", () => {
   test.beforeEach(async ({ page }) => {
-    // Login with demo admin credentials
+    // Login with demo admin credentials — override via E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD env vars
+    const email = process.env.E2E_ADMIN_EMAIL ?? "admin@perftest.io";
+    const password = process.env.E2E_ADMIN_PASSWORD ?? "changeme_dev!!";
     await page.goto("/login");
-    await page.fill('input[type="email"], input[name="email"]', "admin@test.com");
-    await page.fill('input[type="password"]', "admin123!");
+    await page.fill('input[type="email"], input[name="email"]', email);
+    await page.fill('input[type="password"]', password);
     await page.click('button[type="submit"]');
     // Wait for redirect to dashboard
     await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 10_000 });
